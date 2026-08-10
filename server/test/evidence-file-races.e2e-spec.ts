@@ -17,6 +17,7 @@ import {
   DeliveryStatus,
   ProofOfDeliveryType,
 } from '../src/riders/entities/delivery-assignment.entity';
+import { hashDeliveryOtp } from '../src/riders/riders.service';
 import { RiderProfile } from '../src/riders/entities/rider-profile.entity';
 import { StorageService } from '../src/storage/storage.service';
 import { User, UserRole } from '../src/users/entities/user.entity';
@@ -111,7 +112,7 @@ describe('Evidence file deletion races (e2e)', () => {
         email: `evidence-customer-${runId}@example.test`,
         passwordHash: 'not-used',
         fullName: 'Evidence Customer',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
         isBetaUser: true,
         betaCompletedAt: new Date(),
@@ -484,12 +485,13 @@ describe('Evidence file deletion races (e2e)', () => {
         paymentMethod: 'cash',
         paymentStatus: 'paid',
         deliveryOption: 'delivery',
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         assignedRiderId: rider.id,
         batchOrderId: batch.id,
         destinationId: destination.id,
       }),
     );
+    const deliveryOtpCode = '654321';
     const assignment = await assignmentsRepo.save(
       assignmentsRepo.create({
         orderId: order.id,
@@ -500,6 +502,8 @@ describe('Evidence file deletion races (e2e)', () => {
         pickedUpAt: new Date(),
         onTheWayAt: new Date(),
         arrivedAt: new Date(),
+        deliveryOtpCode,
+        deliveryOtpHash: hashDeliveryOtp(deliveryOtpCode),
       }),
     );
     const activePlan = await dispatchPlanService.getActivePlanForRider(
@@ -551,7 +555,7 @@ describe('Evidence file deletion races (e2e)', () => {
         paymentMethod: 'cash',
         paymentStatus: 'paid',
         deliveryOption: 'pickup',
-        orderStatus: OrderStatus.COMPLETED_PICKUP,
+        orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER,
       }),
     );
     const item = await orderItemsRepo.save(
@@ -584,6 +588,7 @@ describe('Evidence file deletion races (e2e)', () => {
       .set('Authorization', `Bearer ${sign(rider)}`)
       .send({
         status: DeliveryStatus.DELIVERED,
+        otp: '654321',
         proof: { type: ProofOfDeliveryType.PHOTO, fileId },
       })
       .then((response) => response);

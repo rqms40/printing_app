@@ -1,20 +1,66 @@
-export type UserRole = "customer" | "rider" | "admin";
+export type UserRole =
+  | "client"
+  | "supplier"
+  | "rider"
+  | "ops_admin"
+  | "super_admin"
+  /** @deprecated legacy — accept until clients fully cut over */
+  | "customer"
+  | "admin";
+
+/** Marketplace client metadata only — not an auth role. */
+export type ClientAccountType = "business" | "organization" | "teacher";
+
+/** Ops Admin + Super Admin (and legacy `admin`) may use the admin panel. */
+export function isAdminCapableRole(role: string | null | undefined): boolean {
+  return (
+    role === "ops_admin" ||
+    role === "super_admin" ||
+    role === "admin"
+  );
+}
+
+/**
+ * Roles allowed to log into the Refine admin app.
+ * Suppliers get the supplier portal section only (not ops nav).
+ */
+export function isAdminAppLoginRole(role: string | null | undefined): boolean {
+  return isAdminCapableRole(role) || role === "supplier";
+}
+
+export function isSupplierRole(role: string | null | undefined): boolean {
+  return role === "supplier";
+}
+
+/** Super Admin governance surfaces (zones, verification, audit, finance). */
+export function isSuperAdminRole(role: string | null | undefined): boolean {
+  return role === "super_admin";
+}
 
 export type OrderStatus =
-  | "order_placed"
-  | "file_verified"
-  | "file_declined"
-  | "printing_in_progress"
-  | "finishing_mounting"
-  | "quality_checked"
+  | "draft"
+  | "submitted"
+  | "needs_qa"
+  | "client_correction"
+  | "proof_approval"
+  | "approved_for_matching"
+  | "supplier_assigned"
+  | "supplier_accepted"
+  | "awaiting_payment"
+  | "payment_authorized"
+  | "production"
+  | "supplier_self_qc"
   | "ready_for_dispatch"
   | "rider_assigned"
   | "picked_up"
-  | "on_the_way"
-  | "arrived_at_destination"
+  | "out_for_delivery"
   | "delivered"
-  | "completed_pickup"
-  | "cancelled";
+  | "delivery_failed"
+  | "collected_by_customer"
+  | "issue_window_open"
+  | "completed"
+  | "cancelled"
+  | "file_rejected";
 
 export type DeliveryStatus =
   | "assigned"
@@ -40,18 +86,27 @@ export type Material3D = "pla" | "abs" | "petg";
 export type FileFormat3D = "stl" | "obj" | "three_mf" | "glb" | "gltf";
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  order_placed: "Order Placed",
-  file_verified: "File Verified",
-  file_declined: "File Declined",
-  printing_in_progress: "Printing",
-  finishing_mounting: "Finishing",
-  quality_checked: "Quality Checked",
+  draft: "Draft",
+  submitted: "Submitted",
+  needs_qa: "Under Review",
+  client_correction: "Needs Client Update",
+  proof_approval: "Proof Approval",
+  approved_for_matching: "Approved for Matching",
+  supplier_assigned: "Supplier Assigned",
+  supplier_accepted: "Supplier Accepted",
+  awaiting_payment: "Awaiting Ops Payment Auth",
+  payment_authorized: "Payment Authorized",
+  production: "In Production",
+  supplier_self_qc: "Supplier Quality Check",
   ready_for_dispatch: "Ready for Dispatch",
   rider_assigned: "Rider Assigned",
   picked_up: "Picked Up",
-  on_the_way: "On the Way",
-  arrived_at_destination: "Arrived",
+  out_for_delivery: "Out for Delivery",
   delivered: "Delivered",
-  completed_pickup: "Picked Up (Customer)",
+  delivery_failed: "Delivery Failed",
+  collected_by_customer: "Collected by Customer",
+  issue_window_open: "Issue Window Open",
+  completed: "Completed",
   cancelled: "Cancelled",
+  file_rejected: "File Rejected",
 };

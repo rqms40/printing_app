@@ -69,7 +69,7 @@ export function normalizePromoCard(raw: Record<string, unknown>): PromoCard {
 const CTA_PRESETS = [
   { label: "Start printing", value: "/customer/order/new" },
   { label: "The Data Grid (uploads)", value: "/customer/uploads" },
-  { label: "Top up credits", value: "/customer/profile/top-up" },
+  { label: "Pilot Credits", value: "/customer/profile/credits" },
   { label: "Custom route or URL…", value: "custom" },
 ] as const;
 

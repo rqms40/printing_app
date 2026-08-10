@@ -14,6 +14,13 @@ export function LoginPage() {
   const onFinish = (values: { email: string; password: string }) => {
     setError(null);
     login(values, {
+      // Refine may resolve success:false without calling onError — surface both.
+      onSuccess: (data) => {
+        if (data && typeof data === "object" && "success" in data && !data.success) {
+          const err = (data as { error?: { message?: string } }).error;
+          setError(err?.message ?? "Login failed");
+        }
+      },
       onError: (err) => {
         setError(err?.message ?? "Login failed");
       },
@@ -71,11 +78,23 @@ export function LoginPage() {
               display: "block",
               color: "#A0A0A0",
               fontSize: 13,
+              marginBottom: 12,
+            }}
+          >
+            Ops / Super Admin / Supplier only. Clients and riders use the mobile
+            app.
+          </Text>
+          {/* <Text
+            style={{
+              display: "block",
+              color: "#808080",
+              fontSize: 12,
               marginBottom: 32,
             }}
           >
-            Enter your credentials to continue
-          </Text>
+            Pilot: admin@ / superadmin@ / supplier@ gridgo.ph (seed password from
+            server/.env)
+          </Text> */}
 
           <Form
             layout="vertical"

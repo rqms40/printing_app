@@ -40,6 +40,12 @@ import {
   CreateDispatchPlanDto,
   ReoptimizeDispatchPlanDto,
 } from '../riders/dto/create-dispatch-plan.dto';
+import { SuppliersService } from '../suppliers/suppliers.service';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../matching/entities/supplier-assignment.entity';
+import { UpdateAdminRiderDto } from './dto/update-admin-rider.dto';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -63,7 +69,7 @@ const MONTH_LABELS = [
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles('ops_admin', 'super_admin')
 @Controller('admin')
 export class AdminController {
   private readonly logger = new Logger(AdminController.name);
@@ -74,6 +80,7 @@ export class AdminController {
     private creditsService: CreditsService,
     private ordersGateway: OrdersGateway,
     private notificationsService: NotificationsService,
+    private suppliersService: SuppliersService,
     @InjectRepository(Order)
     private ordersRepo: Repository<Order>,
     @InjectRepository(User)
@@ -84,6 +91,8 @@ export class AdminController {
     private tamSurveySettingsRepo: Repository<TamSurveySettings>,
     @InjectRepository(DeliveryAssignment)
     private deliveryAssignmentsRepo: Repository<DeliveryAssignment>,
+    @InjectRepository(SupplierAssignment)
+    private supplierAssignmentsRepo: Repository<SupplierAssignment>,
   ) {}
 
   @Patch('tam-surveys/settings')
@@ -224,7 +233,7 @@ export class AdminController {
         if (
           order.paymentStatus !== 'paid' ||
           order.orderStatus === OrderStatus.CANCELLED ||
-          order.orderStatus === OrderStatus.FILE_DECLINED
+          order.orderStatus === OrderStatus.FILE_REJECTED
         ) {
           continue;
         }
@@ -258,7 +267,7 @@ export class AdminController {
       if (
         order.createdAt < earliestBucket ||
         order.orderStatus === OrderStatus.CANCELLED ||
-        order.orderStatus === OrderStatus.FILE_DECLINED
+        order.orderStatus === OrderStatus.FILE_REJECTED
       ) {
         continue;
       }
@@ -452,12 +461,55 @@ export class AdminController {
     };
   }
 
+  private assignedSupplierContact(order: Order) {
+    const contact = (
+      order as Order & {
+        assignedSupplierContact?: {
+          supplierId?: number;
+          businessName?: string;
+          decision?: string;
+          acceptanceDeadline?: Date | string | null;
+          assignmentId?: number;
+          logoUrl?: string | null;
+          address?: string | null;
+          broadAddress?: string | null;
+          selfQcEvidenceUrls?: string[];
+          selfQcEvidenceFileIds?: number[];
+        } | null;
+      }
+    ).assignedSupplierContact;
+    if (!contact) return null;
+    return {
+      supplier_id: contact.supplierId ?? null,
+      business_name: contact.businessName ?? null,
+      decision: contact.decision ?? null,
+      acceptance_deadline: contact.acceptanceDeadline ?? null,
+      assignment_id: contact.assignmentId ?? null,
+      logo_url: contact.logoUrl ?? null,
+      address: contact.address ?? null,
+      broad_address: contact.broadAddress ?? null,
+      self_qc_evidence_urls: contact.selfQcEvidenceUrls ?? [],
+      self_qc_evidence_file_ids: contact.selfQcEvidenceFileIds ?? [],
+    };
+  }
+
   private assignedRiderContactFromAssignment(
     assignment: DeliveryAssignment | undefined,
   ) {
     if (!assignment?.rider) return null;
     const rider = assignment.rider;
     const user = rider.user;
+    // Reveal pickup OTP to ops until verified so they can share it with the rider.
+    const pickupOtp =
+      !assignment.pickupOtpVerifiedAt && assignment.pickupOtpCode
+        ? assignment.pickupOtpCode
+        : null;
+    const deliveryOtp =
+      assignment.pickupOtpVerifiedAt &&
+      !assignment.deliveryOtpVerifiedAt &&
+      assignment.deliveryOtpCode
+        ? assignment.deliveryOtpCode
+        : null;
     return {
       user_id: rider.userId,
       rider_profile_id: rider.id,
@@ -469,6 +521,8 @@ export class AdminController {
       plate_number: rider.plateNumber ?? null,
       delivery_assignment_id: assignment.id,
       delivery_status: assignment.status,
+      pickup_otp: pickupOtp,
+      delivery_otp: deliveryOtp,
       proof: this.deliveryProofFromAssignment(assignment),
     };
   }
@@ -505,8 +559,34 @@ export class AdminController {
       }
     }
 
+    const supplierAssignments = await this.supplierAssignmentsRepo.find({
+      where: {
+        orderId: In(orderIds),
+        decision: In([
+          SupplierAssignmentDecision.PENDING,
+          SupplierAssignmentDecision.ACCEPTED,
+        ]),
+      },
+      relations: { supplier: true },
+      order: { id: 'DESC' },
+    });
+    const supplierByOrderId = new Map<number, SupplierAssignment>();
+    for (const sa of supplierAssignments) {
+      if (!supplierByOrderId.has(sa.orderId)) {
+        supplierByOrderId.set(sa.orderId, sa);
+      }
+    }
+
+    // Prefer OrdersService enrichment when available (logo + self-QC URLs).
+    // Fallback: local attachment without signed media.
     return orders.map((order) => {
       const assignment = assignmentByOrderId.get(order.id);
+      const supplierAssignment = supplierByOrderId.get(order.id);
+      const existing = (
+        order as Order & {
+          assignedSupplierContact?: Record<string, unknown> | null;
+        }
+      ).assignedSupplierContact;
       return Object.assign(order, {
         assignedRiderContact:
           this.assignedRiderContactFromAssignment(assignment) ??
@@ -515,6 +595,26 @@ export class AdminController {
               assignedRiderContact?: Record<string, unknown> | null;
             }
           ).assignedRiderContact,
+        assignedSupplierContact:
+          existing ??
+          (supplierAssignment
+            ? {
+                supplierId: supplierAssignment.supplierId,
+                businessName:
+                  supplierAssignment.supplier?.businessName?.trim() ||
+                  `Supplier #${supplierAssignment.supplierId}`,
+                decision: supplierAssignment.decision,
+                acceptanceDeadline:
+                  supplierAssignment.acceptanceDeadline ?? null,
+                assignmentId: supplierAssignment.id,
+                logoUrl: null,
+                address: supplierAssignment.supplier?.address ?? null,
+                broadAddress: null,
+                selfQcEvidenceUrls: [],
+                selfQcEvidenceFileIds:
+                  supplierAssignment.selfQcEvidenceFileIds ?? [],
+              }
+            : null),
         deliveryProof: this.deliveryProofFromAssignment(assignment),
       });
     });
@@ -594,6 +694,7 @@ export class AdminController {
       estimated_completion_at: o.estimatedCompletionAt ?? null,
       assigned_rider_id: o.assignedRiderId ?? null,
       assigned_rider_contact: this.assignedRiderContact(o),
+      assigned_supplier_contact: this.assignedSupplierContact(o),
       delivery_proof: this.deliveryProof(o),
       created_at: o.createdAt,
       updated_at: o.updatedAt,
@@ -642,15 +743,18 @@ export class AdminController {
 
     const newOrders = orders.filter(
       (o) =>
-        o.orderStatus === OrderStatus.ORDER_PLACED ||
-        o.orderStatus === OrderStatus.FILE_VERIFIED,
+        o.orderStatus === OrderStatus.SUBMITTED ||
+        o.orderStatus === OrderStatus.NEEDS_QA ||
+        o.orderStatus === OrderStatus.CLIENT_CORRECTION ||
+        o.orderStatus === OrderStatus.PROOF_APPROVAL ||
+        o.orderStatus === OrderStatus.APPROVED_FOR_MATCHING,
     ).length;
 
     const inProduction = orders.filter(
       (o) =>
-        o.orderStatus === OrderStatus.PRINTING_IN_PROGRESS ||
-        o.orderStatus === OrderStatus.FINISHING_MOUNTING ||
-        o.orderStatus === OrderStatus.QUALITY_CHECKED,
+        o.orderStatus === OrderStatus.PAYMENT_AUTHORIZED ||
+        o.orderStatus === OrderStatus.PRODUCTION ||
+        o.orderStatus === OrderStatus.SUPPLIER_SELF_QC,
     ).length;
 
     const readyForPickup = orders.filter(
@@ -660,7 +764,7 @@ export class AdminController {
     const delivered = orders.filter(
       (o) =>
         o.orderStatus === OrderStatus.DELIVERED ||
-        o.orderStatus === OrderStatus.COMPLETED_PICKUP,
+        o.orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER,
     ).length;
 
     const monthlyRevenue = orders
@@ -681,7 +785,11 @@ export class AdminController {
   async getBadgeCounts() {
     const newOrders = await this.ordersRepo.count({
       where: {
-        orderStatus: In([OrderStatus.ORDER_PLACED, OrderStatus.FILE_VERIFIED]),
+        orderStatus: In([
+          OrderStatus.SUBMITTED,
+          OrderStatus.NEEDS_QA,
+          OrderStatus.APPROVED_FOR_MATCHING,
+        ]),
       },
     });
     const pendingTopUps = await this.creditsService.getPendingCount();
@@ -699,6 +807,8 @@ export class AdminController {
         'items',
         'items.destination',
         'items.specValues',
+        // Include logistics/marketplace transitions for progress timelines.
+        'statusHistory',
         'user',
         'assignedRider',
       ],
@@ -724,6 +834,22 @@ export class AdminController {
       ],
     });
     const [enriched] = await this.attachDeliveryAssignmentDetails([order]);
+    // Pull signed logo + self-QC evidence URLs from OrdersService enrichment.
+    try {
+      const withMedia = await this.ordersService.findById(id);
+      if (withMedia) {
+        const media = withMedia as Order & {
+          assignedSupplierContact?: Record<string, unknown> | null;
+        };
+        if (media.assignedSupplierContact) {
+          Object.assign(enriched, {
+            assignedSupplierContact: media.assignedSupplierContact,
+          });
+        }
+      }
+    } catch {
+      /* non-fatal — fall back to basic supplier contact */
+    }
     return this.mapOrder(enriched);
   }
 
@@ -749,6 +875,7 @@ export class AdminController {
       {},
       {
         actorUserId: req.user.sub,
+        actorRole: req.user.role ?? null,
         reason: dto.notes?.trim() || 'Admin status update',
       },
     );
@@ -775,7 +902,12 @@ export class AdminController {
       order,
       assignment: savedAssignment,
       riderProfile,
-    } = await this.ridersService.assignOrderToRider(id, riderId, req.user.sub);
+    } = await this.ridersService.assignOrderToRider(
+      id,
+      riderId,
+      req.user.sub,
+      req.user.role ?? null,
+    );
 
     try {
       await Promise.resolve(
@@ -818,6 +950,23 @@ export class AdminController {
   @Get('riders')
   async getAllRiders() {
     return this.ridersService.getAllRidersWithUser();
+  }
+
+  @Patch('riders/:id')
+  async updateRider(
+    @Param('id', ParseIntPipe) riderId: number,
+    @Body() dto: UpdateAdminRiderDto,
+  ) {
+    return this.ridersService.updateRiderAdmin(riderId, dto);
+  }
+
+  @Patch('riders/:id/verify')
+  async verifyRider(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: RequestWithUser,
+  ) {
+    await this.ridersService.verifyRider(id, req.user.sub);
+    return { success: true };
   }
 
   @Post('riders/:id/dispatch-plan')
@@ -888,7 +1037,14 @@ export class AdminController {
       order: { createdAt: 'DESC' },
     });
 
-    return buildAdminUserDetailPayload(user, orders);
+    // Soft-load supplier shop profile so self-edited shop details appear on
+    // admin/super user detail whenever a supplier_profiles row exists.
+    const profile = await this.suppliersService.findByUserIdOrNull(id);
+    const supplierProfile = profile
+      ? this.suppliersService.toAdminSupplierSnapshot(profile)
+      : null;
+
+    return buildAdminUserDetailPayload(user, orders, supplierProfile);
   }
 
   // Sales analytics for admin web dashboard

@@ -65,7 +65,8 @@ class DeliveriesState {
       .where(
         (v) =>
             v.status == DeliveryStatus.delivered ||
-            v.status == DeliveryStatus.declined,
+            v.status == DeliveryStatus.declined ||
+            v.status == DeliveryStatus.failed,
       )
       .toList();
 
@@ -357,15 +358,22 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
 
     final nextStatus = switch (current.status) {
       DeliveryStatus.assigned => DeliveryStatus.accepted,
-      DeliveryStatus.accepted => DeliveryStatus.pickedUp,
+      DeliveryStatus.accepted => null, // needs pickup OTP + photo
       DeliveryStatus.pickedUp => DeliveryStatus.onTheWay,
       DeliveryStatus.onTheWay => DeliveryStatus.arrived,
       DeliveryStatus.arrived => null,
-      DeliveryStatus.delivered || DeliveryStatus.declined => null,
+      DeliveryStatus.delivered ||
+      DeliveryStatus.declined ||
+      DeliveryStatus.failed => null,
     };
 
     if (nextStatus != null) {
       await _patchStatus(assignmentId, nextStatus);
+    } else if (current.status == DeliveryStatus.accepted) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Pickup OTP and photo proof are required before pickup',
+      );
     } else if (current.status == DeliveryStatus.arrived) {
       state = state.copyWith(
         errorMessage: () =>
@@ -374,29 +382,188 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     }
   }
 
-  Future<void> completeDeliveryWithProof(
+  /// Returns true when pickup status was accepted by the server.
+  Future<bool> completePickupWithProof(
     String assignmentId,
-    Map<String, dynamic> proof,
+    Map<String, dynamic> proofPayload,
   ) async {
     final current = state.viewById(assignmentId)?.assignment;
-    if (current == null || current.status != DeliveryStatus.arrived) return;
-
-    final proofType = proof['type']?.toString();
-    if (proofType == null || proofType.isEmpty) {
+    if (current == null || current.status != DeliveryStatus.accepted) {
       state = state.copyWith(
         errorMessage: () =>
-            'Proof of delivery is required before completing this stop',
+            'Accept the assignment before submitting pickup proof',
       );
-      return;
+      return false;
     }
 
-    await _patchStatus(assignmentId, DeliveryStatus.delivered, proof: proof);
+    final proofType = proofPayload['type']?.toString();
+    final otp = proofPayload['otp']?.toString().trim();
+    final fileId = proofPayload['fileId'];
+    if (proofType != 'photo' || otp == null || otp.isEmpty) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Pickup OTP and photo proof are required before pickup',
+      );
+      return false;
+    }
+    if (fileId == null) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Photo upload failed — retake the photo and try again',
+      );
+      return false;
+    }
+
+    final proof = Map<String, dynamic>.from(proofPayload)..remove('otp');
+    // Ensure numeric fileId for class-validator @IsInt on the server.
+    final rawId = proof['fileId'];
+    if (rawId is String) {
+      proof['fileId'] = int.tryParse(rawId) ?? rawId;
+    }
+    return _patchStatus(
+      assignmentId,
+      DeliveryStatus.pickedUp,
+      proof: proof,
+      otp: otp,
+    );
   }
 
-  Future<void> _patchStatus(
+  /// Returns true when delivery status was accepted by the server.
+  Future<bool> completeDeliveryWithProof(
+    String assignmentId,
+    Map<String, dynamic> proofPayload,
+  ) async {
+    final current = state.viewById(assignmentId)?.assignment;
+    if (current == null || current.status != DeliveryStatus.arrived) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Mark arrived before submitting proof of delivery',
+      );
+      return false;
+    }
+
+    final proofType = proofPayload['type']?.toString();
+    final otp = proofPayload['otp']?.toString().trim();
+    if (proofType == null || proofType.isEmpty || otp == null || otp.isEmpty) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Delivery OTP and proof are required before completing this stop',
+      );
+      return false;
+    }
+
+    final proof = Map<String, dynamic>.from(proofPayload)..remove('otp');
+    final rawId = proof['fileId'];
+    if (rawId is String) {
+      proof['fileId'] = int.tryParse(rawId) ?? rawId;
+    }
+    return _patchStatus(
+      assignmentId,
+      DeliveryStatus.delivered,
+      proof: proof,
+      otp: otp,
+    );
+  }
+
+  /// Failed delivery + return path (evidence + reason required).
+  Future<bool> markFailedDelivery(
+    String assignmentId, {
+    required String reason,
+    required Map<String, dynamic> proof,
+  }) async {
+    final view = state.viewById(assignmentId);
+    if (view == null || !view.canMarkFailed) return false;
+    if (reason.trim().isEmpty) {
+      state = state.copyWith(
+        errorMessage: () => 'Failed delivery requires a reason',
+      );
+      return false;
+    }
+    if (proof['type']?.toString() != 'photo' || proof['fileId'] == null) {
+      state = state.copyWith(
+        errorMessage: () => 'Failed delivery requires photo evidence',
+      );
+      return false;
+    }
+
+    try {
+      await ApiClient.instance.patch(
+        '/riders/assignments/$assignmentId/status',
+        data: {
+          'status': serverDeliveryStatus(DeliveryStatus.failed),
+          'declineReason': reason.trim(),
+          'proof': proof,
+        },
+      );
+    } catch (_) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        errorMessage: () => 'Unable to record failed delivery',
+      );
+      return false;
+    }
+    if (!mounted) return false;
+    await refreshAssignments();
+    return true;
+  }
+
+  /// COD cash collect via payments API (exact amount is server-side).
+  Future<bool> collectCod({
+    required String orderInternalId,
+    required int photoFileId,
+    String? otpRef,
+  }) async {
+    try {
+      await ApiClient.instance.post(
+        '/payments/cod/$orderInternalId/collect',
+        data: {
+          'photoFileId': photoFileId,
+          if (otpRef != null && otpRef.isNotEmpty) 'otpRef': otpRef,
+        },
+      );
+      if (!mounted) return true;
+      await refreshAssignments();
+      return true;
+    } catch (_) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        errorMessage: () => 'Unable to record COD collection',
+      );
+      return false;
+    }
+  }
+
+  /// COD cash collection failure path.
+  Future<bool> failCodCollection({
+    required String orderInternalId,
+    required String returnReason,
+    int? photoFileId,
+  }) async {
+    try {
+      await ApiClient.instance.post(
+        '/payments/cod/$orderInternalId/fail',
+        data: {
+          'returnReason': returnReason.trim(),
+          if (photoFileId != null) 'photoFileId': photoFileId,
+        },
+      );
+      if (!mounted) return true;
+      await refreshAssignments();
+      return true;
+    } catch (_) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        errorMessage: () => 'Unable to record COD failure',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> _patchStatus(
     String assignmentId,
     DeliveryStatus nextStatus, {
     Map<String, dynamic>? proof,
+    String? otp,
   }) async {
     try {
       final data = <String, dynamic>{
@@ -405,23 +572,42 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       if (proof != null) {
         data['proof'] = proof;
       }
+      if (otp != null && otp.isNotEmpty) {
+        data['otp'] = otp;
+      }
       await ApiClient.instance.patch(
         '/riders/assignments/$assignmentId/status',
         data: data,
       );
+    } on DioException catch (e) {
+      if (!mounted) return false;
+      final raw = e.response?.data;
+      Object? msg;
+      if (raw is Map) {
+        msg = raw['message'] ?? raw['error'];
+      }
+      msg ??= 'Unable to update delivery status';
+      state = state.copyWith(
+        errorMessage: () => msg is List ? msg.join(', ') : msg.toString(),
+      );
+      return false;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       state = state.copyWith(
         errorMessage: () => 'Unable to update delivery status',
       );
-      return;
+      return false;
     }
 
-    if (!mounted) return;
+    if (!mounted) return false;
+    state = state.copyWith(errorMessage: () => null);
 
-    if (realFlow && nextStatus == DeliveryStatus.delivered) {
+    if (realFlow &&
+        (nextStatus == DeliveryStatus.delivered ||
+            nextStatus == DeliveryStatus.failed ||
+            nextStatus == DeliveryStatus.pickedUp)) {
       await refreshAssignments();
-      return;
+      return true;
     }
 
     _updateAssignment(assignmentId, (a) {
@@ -443,18 +629,37 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
             updatedAt: now,
           );
         case DeliveryStatus.pickedUp:
+          if (nextStatus == DeliveryStatus.failed) {
+            return a.copyWith(
+              status: DeliveryStatus.failed,
+              declineReason: null,
+              updatedAt: now,
+            );
+          }
           return a.copyWith(
             status: DeliveryStatus.onTheWay,
             onTheWayAt: now,
             updatedAt: now,
           );
         case DeliveryStatus.onTheWay:
+          if (nextStatus == DeliveryStatus.failed) {
+            return a.copyWith(
+              status: DeliveryStatus.failed,
+              updatedAt: now,
+            );
+          }
           return a.copyWith(
             status: DeliveryStatus.arrived,
             arrivedAt: now,
             updatedAt: now,
           );
         case DeliveryStatus.arrived:
+          if (nextStatus == DeliveryStatus.failed) {
+            return a.copyWith(
+              status: DeliveryStatus.failed,
+              updatedAt: now,
+            );
+          }
           final capturedAt = now;
           return a.copyWith(
             status: DeliveryStatus.delivered,
@@ -473,9 +678,11 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
           );
         case DeliveryStatus.delivered:
         case DeliveryStatus.declined:
+        case DeliveryStatus.failed:
           return a;
       }
     });
+    return true;
   }
 
   Future<void> reset() => refreshAssignments();

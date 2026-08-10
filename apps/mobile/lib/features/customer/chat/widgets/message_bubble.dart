@@ -53,7 +53,7 @@ class MessageBubble extends ConsumerWidget {
   }
 
   String _senderLabel() => switch (message.senderRole) {
-    SenderRole.customer => 'Customer',
+    SenderRole.customer => 'Client',
     SenderRole.admin => 'Human Support',
     SenderRole.rider => 'Rider',
     SenderRole.bot => 'GridBot AI',

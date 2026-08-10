@@ -29,28 +29,28 @@ export class SupportTicketsController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   findAll() {
     return this.supportTicketsService.findAll();
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   findOne(@Param('id') id: string) {
     return this.supportTicketsService.findOne(id);
   }
 
   @Patch(':id/reply')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   reply(@Param('id') id: string, @Body() replyDto: ReplySupportTicketDto) {
     return this.supportTicketsService.reply(id, replyDto);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   remove(@Param('id') id: string) {
     return this.supportTicketsService.remove(id);
   }

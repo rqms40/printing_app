@@ -28,20 +28,24 @@ describe('JwtStrategy account status enforcement', () => {
     usersService.findById.mockResolvedValue({
       id: 1,
       email: 'current@test.com',
-      role: 'admin',
+      role: 'ops_admin',
       isActive: true,
     });
 
     await expect(
-      strategy.validate({ sub: 1, email: 'a@test.com', role: 'customer' }),
-    ).resolves.toEqual({ sub: 1, email: 'current@test.com', role: 'admin' });
+      strategy.validate({ sub: 1, email: 'a@test.com', role: 'client' }),
+    ).resolves.toEqual({
+      sub: 1,
+      email: 'current@test.com',
+      role: 'ops_admin',
+    });
   });
 
   it('rejects inactive users with existing tokens', async () => {
     usersService.findById.mockResolvedValue({ id: 1, isActive: false });
 
     await expect(
-      strategy.validate({ sub: 1, email: 'a@test.com', role: 'customer' }),
+      strategy.validate({ sub: 1, email: 'a@test.com', role: 'client' }),
     ).rejects.toThrow(UnauthorizedException);
   });
 
@@ -49,7 +53,7 @@ describe('JwtStrategy account status enforcement', () => {
     usersService.findById.mockResolvedValue({
       id: 1,
       email: 'held@test.com',
-      role: 'customer',
+      role: 'client',
       isActive: false,
       isBetaUser: true,
       isBetaSurveyExempt: false,
@@ -57,20 +61,20 @@ describe('JwtStrategy account status enforcement', () => {
     });
 
     await expect(
-      strategy.validate({ sub: 1, email: 'held@test.com', role: 'customer' }),
+      strategy.validate({ sub: 1, email: 'held@test.com', role: 'client' }),
     ).resolves.toEqual({
       sub: 1,
       email: 'held@test.com',
-      role: 'customer',
+      role: 'client',
       betaTestimonialPending: true,
     });
   });
 
   it.each([
     { role: 'rider', isBetaUser: true, isBetaSurveyExempt: false },
-    { role: 'admin', isBetaUser: true, isBetaSurveyExempt: false },
-    { role: 'customer', isBetaUser: false, isBetaSurveyExempt: false },
-    { role: 'customer', isBetaUser: true, isBetaSurveyExempt: true },
+    { role: 'ops_admin', isBetaUser: true, isBetaSurveyExempt: false },
+    { role: 'client', isBetaUser: false, isBetaSurveyExempt: false },
+    { role: 'client', isBetaUser: true, isBetaSurveyExempt: true },
   ])('rejects an invalid held identity %#', async (identity) => {
     usersService.findById.mockResolvedValue({
       id: 1,
@@ -81,7 +85,7 @@ describe('JwtStrategy account status enforcement', () => {
     });
 
     await expect(
-      strategy.validate({ sub: 1, email: 'held@test.com', role: 'customer' }),
+      strategy.validate({ sub: 1, email: 'held@test.com', role: 'client' }),
     ).rejects.toThrow(UnauthorizedException);
   });
 
@@ -89,7 +93,7 @@ describe('JwtStrategy account status enforcement', () => {
     usersService.findById.mockResolvedValue(null);
 
     await expect(
-      strategy.validate({ sub: 1, email: 'a@test.com', role: 'customer' }),
+      strategy.validate({ sub: 1, email: 'a@test.com', role: 'client' }),
     ).rejects.toThrow(UnauthorizedException);
   });
 });

@@ -94,7 +94,7 @@ describe('production migration lifecycle (e2e)', () => {
     try {
       const [user] = await dataSource.query<Array<{ id: number }>>(
         `INSERT INTO users (email, password_hash, role, is_beta_user)
-         VALUES ($1, 'not-used', 'customer', true)
+         VALUES ($1, 'not-used', 'client', true)
          RETURNING id`,
         [`pending-adoption-${database}@example.test`],
       );
@@ -334,7 +334,7 @@ describe('production migration lifecycle (e2e)', () => {
            (email, password_hash, role, beta_photo_file_id,
             beta_photo_uploaded_at, beta_shared_on_social)
          VALUES
-           ($1, 'not-used', 'customer', 900001, NOW(), true),
+           ($1, 'not-used', 'client', 900001, NOW(), true),
            ($2, 'not-used', 'rider', NULL, NULL, false)
          RETURNING id`,
         [
@@ -349,7 +349,7 @@ describe('production migration lifecycle (e2e)', () => {
             delivery_option, order_status)
          VALUES
            ($1, $2, 'paper', 'https://audit/order', 'order-audit.pdf',
-            900002, 10, 0, 'cash', 'delivery', 'arrived_at_destination')
+            900002, 10, 0, 'cash', 'delivery', 'out_for_delivery')
          RETURNING id`,
         [`EVIDENCE-${database}`, users[0].id],
       );
@@ -772,7 +772,7 @@ describe('production migration lifecycle (e2e)', () => {
       const users = await dataSource.query<Array<{ id: number }>>(
         `INSERT INTO users (email, password_hash, role, is_active)
          VALUES
-           ($1, 'not-used', 'customer', true),
+           ($1, 'not-used', 'client', true),
            ($2, 'not-used', 'rider', true),
            ($3, 'not-used', 'rider', true),
            ($4, 'not-used', 'rider', true)
@@ -886,7 +886,7 @@ describe('production migration lifecycle (e2e)', () => {
       const users = await dataSource.query<Array<{ id: number }>>(
         `INSERT INTO users (email, password_hash, role, is_active)
          VALUES
-           ($1, 'not-used', 'customer', true),
+           ($1, 'not-used', 'client', true),
            ($2, 'not-used', 'rider', true),
            ($3, 'not-used', 'rider', true),
            ($4, 'not-used', 'rider', true)
@@ -957,15 +957,19 @@ describe('production migration lifecycle (e2e)', () => {
       const orderIds = {
         ready: await insertOrder('STATE-READY', 'ready_for_dispatch'),
         cancelled: await insertOrder('STATE-CANCELLED', 'cancelled'),
-        declined: await insertOrder('STATE-DECLINED', 'file_declined'),
-        pickup: await insertOrder('STATE-PICKUP', 'completed_pickup'),
+        declined: await insertOrder('STATE-DECLINED', 'file_rejected'),
+        pickup: await insertOrder('STATE-PICKUP', 'collected_by_customer'),
         delivered: await insertOrder('STATE-DELIVERED', 'delivered'),
         compatible: await insertOrder(
           'STATE-COMPATIBLE',
           'picked_up',
           users[1].id,
         ),
-        exact: await insertOrder('STATE-EXACT', 'on_the_way', users[3].id),
+        exact: await insertOrder(
+          'STATE-EXACT',
+          'out_for_delivery',
+          users[3].id,
+        ),
       };
 
       await insertAssignment(
@@ -1359,9 +1363,9 @@ describe('production migration lifecycle (e2e)', () => {
            delivery_option
          ) VALUES
            ('ORD-LEGACY-MIGRATION-I', $1, NULL, 'paper', 40, 20,
-            'gridCredits', 'paid', 'order_placed', 'pickup'),
+            'gridCredits', 'paid', 'submitted', 'pickup'),
            ('ORD-LEGACY-MIGRATION-B', $1, $2, 'paper', 40, 20,
-            'gridCredits', 'paid', 'order_placed', 'pickup')`,
+            'gridCredits', 'paid', 'submitted', 'pickup')`,
         [user.id, batch.id],
       );
       const inserted = await dataSource.query<

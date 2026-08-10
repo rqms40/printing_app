@@ -68,7 +68,7 @@ export function ConversationList({ conversations, activeId, onSelect }: Props) {
       {conversations.map((conv) => {
         const isActive = conv.id === activeId;
         const isHovered = conv.id === hoveredId && !isActive;
-        const customerName = conv.customer?.name ?? `Customer #${conv.customerId}`;
+        const customerName = conv.customer?.name ?? conv.customer?.fullName ?? conv.customer?.nickname ?? (conv.type === 'rider' ? `Rider #${conv.customerId}` : `Customer #${conv.customerId}`);
         const dotColor = STATUS_DOT[conv.status] ?? token.colorTextSecondary;
         const typeColors = TYPE_COLORS[conv.type];
 

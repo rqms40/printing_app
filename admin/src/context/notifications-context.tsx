@@ -36,21 +36,27 @@ export function NotificationsProvider({
   });
 
   const refreshBadges = useCallback(async () => {
-    const res = await apiClient.get<BadgeCounts>("/admin/badge-counts");
-    setBadgeCounts(res.data);
+    try {
+      const res = await apiClient.get<BadgeCounts>("/admin/badge-counts");
+      setBadgeCounts(res.data);
+    } catch {
+      // Supplier / non-ops roles may not have badge access — keep zeros.
+    }
   }, []);
 
-  // Initial fetch
+  // Initial fetch (soft-fail: suppliers use this shell without ops badges)
   useEffect(() => {
     apiClient
       .get<Notification[]>("/notifications")
-      .then((res) => setNotifications(res.data));
+      .then((res) => setNotifications(res.data))
+      .catch(() => undefined);
 
     apiClient
       .get<number>("/notifications/unread-count")
-      .then((res) => setUnreadCount(res.data));
+      .then((res) => setUnreadCount(res.data))
+      .catch(() => undefined);
 
-    refreshBadges();
+    void refreshBadges();
   }, [refreshBadges]);
 
   // WS subscription

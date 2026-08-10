@@ -49,11 +49,12 @@ import 'package:printing_app/features/customer/profile/screens/account_details_s
 import 'package:printing_app/features/customer/profile/screens/support_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/terms_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/privacy_screen.dart';
-import 'package:printing_app/features/customer/profile/screens/top_up_screen.dart';
+import 'package:printing_app/features/customer/profile/screens/credits_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/required_tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
 import 'package:printing_app/features/customer/uploads/screens/my_uploads_screen.dart';
+import 'package:printing_app/features/customer/order/screens/product_preview_screen.dart';
 import 'package:printing_app/features/customer/chat/models/chat_message.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_list_screen.dart';
@@ -63,12 +64,25 @@ import 'package:printing_app/features/customer/chat/screens/conversation_screen.
 // ---------------------------------------------------------------------------
 // Rider screens
 // ---------------------------------------------------------------------------
+import 'package:printing_app/features/rider/chat/screens/rider_chat_list_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/deliveries_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/delivery_detail_screen.dart';
 import 'package:printing_app/features/rider/active_delivery/screens/active_delivery_screen.dart';
 import 'package:printing_app/features/rider/history/screens/delivery_history_screen.dart';
 import 'package:printing_app/features/rider/home/screens/rider_home_screen.dart';
 import 'package:printing_app/features/rider/profile/screens/rider_profile_screen.dart';
+
+// ---------------------------------------------------------------------------
+// Supplier screens
+// ---------------------------------------------------------------------------
+import 'package:printing_app/features/supplier/providers/supplier_access_provider.dart';
+import 'package:printing_app/features/supplier/screens/supplier_job_detail_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_jobs_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_pending_verification_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_payouts_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_profile_edit_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_profile_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_service_focus_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Admin screens
@@ -106,19 +120,26 @@ class _AuthChangeNotifier extends ChangeNotifier {
     _ref.listen(authProvider, (_, _) => notifyListeners());
     _ref.listen(accountStateProvider, (_, _) => notifyListeners());
     _ref.listen(betaStatusProvider, (_, _) => notifyListeners());
+    _ref.listen(supplierAccessProvider, (_, _) => notifyListeners());
   }
   final Ref _ref;
 }
 
-String _roleHome(String? role) => switch (role) {
+String _roleHome(String? role) => switch (_effectiveRole(role)) {
   'rider' => '/rider/home',
+  // Unverified suppliers are redirected to /supplier/pending by router logic.
+  'supplier' => '/supplier/jobs',
   'admin' => '/admin/dashboard',
   _ => '/customer/home',
 };
 
+/// Map marketplace + legacy API role strings onto shell buckets.
 String _effectiveRole(String? role) => switch (role) {
   'rider' => 'rider',
-  'admin' => 'admin',
+  'supplier' => 'supplier',
+  'admin' || 'ops_admin' || 'super_admin' => 'admin',
+  // clients (and legacy customers) use the customer shell.
+  'client' || 'customer' => 'customer',
   _ => 'customer',
 };
 
@@ -126,6 +147,7 @@ bool _isProtectedPathOwnedByRole(String path, String? role) {
   final owner = switch (path) {
     final value when value.startsWith('/customer/') => 'customer',
     final value when value.startsWith('/rider/') => 'rider',
+    final value when value.startsWith('/supplier/') => 'supplier',
     final value when value.startsWith('/admin/') => 'admin',
     _ => null,
   };
@@ -142,9 +164,10 @@ bool _isSafeRoleDeepLink(String? rawLocation, String? role) {
       path == '/customer/survey/required') {
     return false;
   }
-  return switch (role) {
+  return switch (_effectiveRole(role)) {
     'customer' => path.startsWith('/customer/'),
     'rider' => path.startsWith('/rider/'),
+    'supplier' => path.startsWith('/supplier/'),
     'admin' => path.startsWith('/admin/'),
     _ => false,
   };
@@ -159,6 +182,7 @@ bool _isPotentialProtectedDeepLink(Uri uri) {
   }
   return path.startsWith('/customer/') ||
       path.startsWith('/rider/') ||
+      path.startsWith('/supplier/') ||
       path.startsWith('/admin/');
 }
 
@@ -277,13 +301,46 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
       final betaGloballyEnabled =
           ref.read(betaStatusProvider).valueOrNull?.globallyEnabled ?? false;
-      return resolveAppRedirect(
+      final baseRedirect = resolveAppRedirect(
         uri: state.uri,
         authState: authState,
         accountState: accountState,
         seenOnboarding: seenOnboarding,
         betaGloballyEnabled: betaGloballyEnabled,
       );
+      if (baseRedirect != null) return baseRedirect;
+
+      // Supplier access + service-focus onboarding gate.
+      if (authState.status == AuthStatus.authenticated &&
+          _effectiveRole(authState.user?.role) == 'supplier') {
+        final access = ref.read(supplierAccessProvider);
+        final path = state.uri.path;
+        final onPending = path == '/supplier/pending';
+        final onServiceFocus = path == '/supplier/service-focus';
+        final onOnboarding = path == '/onboarding';
+        if (access.isLoading) {
+          if (!onPending &&
+              !access.canAccess &&
+              !onServiceFocus &&
+              !onOnboarding) {
+            return '/supplier/pending';
+          }
+          return null;
+        }
+        // Service-focus ranking is allowed even while pending verification.
+        if (access.needsServiceFocusSetup &&
+            !onServiceFocus &&
+            !onOnboarding) {
+          return '/supplier/service-focus?setup=1';
+        }
+        if (!access.canAccess && !onPending && !onServiceFocus) {
+          return '/supplier/pending';
+        }
+        if (access.canAccess && onPending) {
+          return '/supplier/jobs';
+        }
+      }
+      return null;
     },
     routes: [
       // -----------------------------------------------------------------------
@@ -521,6 +578,27 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideUpTransition(const CheckoutScreen(), state),
       ),
       GoRoute(
+        path: '/customer/order/preview',
+        pageBuilder: (_, state) {
+          final extra = (state.extra as Map?) ?? const {};
+          final artworkFileId =
+              (extra['artworkFileId'] as num?)?.toInt() ?? 0;
+          final productType =
+              (extra['productType'] as String?) ?? 'flyer';
+          final orderId = (extra['orderId'] as num?)?.toInt();
+          final categoryHint = extra['categoryHint'] as String?;
+          return slideUpTransition(
+            ProductPreviewScreen(
+              artworkFileId: artworkFileId,
+              productType: productType,
+              orderId: orderId,
+              categoryHint: categoryHint,
+            ),
+            state,
+          );
+        },
+      ),
+      GoRoute(
         path: '/customer/order/success',
         pageBuilder: (_, state) {
           return slideUpTransition(
@@ -582,8 +660,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideTransition(const PrivacyScreen(), state),
       ),
       GoRoute(
+        path: '/customer/profile/credits',
+        pageBuilder: (_, state) =>
+            slideTransition(const CreditsScreen(), state),
+      ),
+      // Legacy top-up path redirects to Pilot Credits balance/history.
+      GoRoute(
         path: '/customer/profile/top-up',
-        pageBuilder: (_, state) => slideTransition(const TopUpScreen(), state),
+        redirect: (_, __) => '/customer/profile/credits',
       ),
       GoRoute(
         path: '/customer/profile/survey',
@@ -725,6 +809,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Rider stack routes
       // -----------------------------------------------------------------------
       GoRoute(
+        path: '/rider/chat',
+        pageBuilder: (_, state) =>
+            slideTransition(const RiderChatListScreen(), state),
+      ),
+      GoRoute(
         path: '/rider/deliveries/:id',
         pageBuilder: (_, state) => slideTransition(
           DeliveryDetailScreen(assignmentId: state.pathParameters['id']!),
@@ -762,9 +851,94 @@ final routerProvider = Provider<GoRouter>((ref) {
               titleOverride: orderRef == null ? null : 'Order $orderRef',
               subtitleOverride: orderStatus == null
                   ? null
-                  : 'Customer · $orderStatus',
+                  : 'Client · $orderStatus',
               backFallback: '/rider/home',
             ),
+            state,
+          );
+        },
+      ),
+
+      // -----------------------------------------------------------------------
+      // Supplier shell (Jobs + Profile)
+      // -----------------------------------------------------------------------
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) => ScaffoldWithNav(
+          currentIndex: navigationShell.currentIndex,
+          showFab: false,
+          onTap: (i) => navigationShell.goBranch(
+            i,
+            initialLocation: i == navigationShell.currentIndex,
+          ),
+          items: const [
+            NavItem(
+              icon: HugeIcons.strokeRoundedPackage,
+              activeIcon: HugeIcons.strokeRoundedPackage,
+              label: 'Jobs',
+            ),
+            NavItem(
+              icon: HugeIcons.strokeRoundedUser,
+              activeIcon: HugeIcons.strokeRoundedUser,
+              label: 'Profile',
+            ),
+          ],
+          child: navigationShell,
+        ),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/supplier/jobs',
+                builder: (_, _) => const SupplierJobsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/supplier/profile',
+                builder: (_, _) => const SupplierProfileScreen(),
+              ),
+            ],
+          ),
+        ],
+      ),
+
+      // -----------------------------------------------------------------------
+      // Supplier stack routes
+      // -----------------------------------------------------------------------
+      GoRoute(
+        path: '/supplier/pending',
+        pageBuilder: (_, state) =>
+            fadeTransition(const SupplierPendingVerificationScreen(), state),
+      ),
+      GoRoute(
+        path: '/supplier/jobs/:id',
+        pageBuilder: (_, state) {
+          final raw = state.pathParameters['id'] ?? '';
+          final jobId = int.tryParse(raw) ?? 0;
+          return slideTransition(
+            SupplierJobDetailScreen(jobId: jobId),
+            state,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/supplier/payouts',
+        pageBuilder: (_, state) =>
+            slideTransition(const SupplierPayoutsScreen(), state),
+      ),
+      GoRoute(
+        path: '/supplier/profile/edit',
+        pageBuilder: (_, state) =>
+            slideTransition(const SupplierProfileEditScreen(), state),
+      ),
+      GoRoute(
+        path: '/supplier/service-focus',
+        pageBuilder: (_, state) {
+          final setup = state.uri.queryParameters['setup'] == '1';
+          return slideTransition(
+            SupplierServiceFocusScreen(requiredSetup: setup),
             state,
           );
         },

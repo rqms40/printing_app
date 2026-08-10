@@ -27,28 +27,28 @@ export class BetaModeController {
   constructor(private readonly service: BetaModeService) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Get('settings')
   getSettings() {
     return this.service.getSettings();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('settings')
   updateSettings(@Body() dto: UpdateBetaModeSettingsDto) {
     return this.service.updateSettings(dto.isEnabled);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Get('users')
   getBetaUsers() {
     return this.service.getBetaUsers();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Post('users/:userId/enroll')
   @HttpCode(204)
   enrollUser(@Param('userId', ParseIntPipe) userId: number) {
@@ -56,7 +56,7 @@ export class BetaModeController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Delete('users/:userId/enroll')
   @HttpCode(204)
   unenrollUser(@Param('userId', ParseIntPipe) userId: number) {
@@ -64,7 +64,7 @@ export class BetaModeController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Get('members')
   searchMembers(
     @Query('search') search?: string,
@@ -79,7 +79,7 @@ export class BetaModeController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('users/:userId/survey-exempt')
   setSurveyExempt(
     @Param('userId', ParseIntPipe) userId: number,
@@ -89,7 +89,7 @@ export class BetaModeController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Post('users/:userId/reset-order-limit')
   resetOrderLimit(@Param('userId', ParseIntPipe) userId: number) {
     return this.service.resetOrderLimit(userId);

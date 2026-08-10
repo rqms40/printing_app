@@ -253,8 +253,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
 
         final canShowLiveMap =
             state.status == LiveMapStatus.active &&
-            (state.orderStatus == OrderStatus.onTheWay ||
-                state.orderStatus == OrderStatus.arrivedAtDestination) &&
+            state.orderStatus == OrderStatus.outForDelivery &&
             state.canTrackDelivery &&
             state.deliveryAssignmentId != null &&
             state.planVersion != null;
@@ -367,8 +366,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
 
   bool get _hasActiveDelivery =>
       liveState?.status == LiveMapStatus.active &&
-      (liveState?.orderStatus == OrderStatus.onTheWay ||
-          liveState?.orderStatus == OrderStatus.arrivedAtDestination);
+      liveState?.orderStatus == OrderStatus.outForDelivery;
 
   bool get _isQueued =>
       _hasActiveDelivery && liveState?.canTrackDelivery == false;
@@ -1324,13 +1322,10 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               colors: colors,
               icon: Icons.electric_moped_rounded,
               title: 'Rider is on the way',
-              subtitle: switch (locationHealth) {
-                LocationHealth.live => 'Live · location updating',
-                LocationHealth.stale => 'Paused · last known shown',
-                LocationHealth.offline when hasLiveRiderPoint =>
-                  'Offline · last known shown',
-                LocationHealth.offline => 'Waiting for rider GPS',
-              },
+              subtitle: locationHealthMessage(
+                locationHealth,
+                hasLastKnown: hasLiveRiderPoint,
+              ),
               outlined: true,
             ),
             if (liveState.routingHealth != RoutingHealth.current) ...[

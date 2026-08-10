@@ -4,11 +4,12 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
-import { User, UserRole } from './entities/user.entity';
+import { DataSource, In, Repository } from 'typeorm';
+import { ADMIN_ROLES, User, UserRole } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
   AgeRange,
+  ClientAccountType,
   isProfileComplete,
   PrintingPreference,
   ProfileCategory,
@@ -26,6 +27,7 @@ type UserProfilingInput = {
   profileField?: ProfileField;
   course?: string;
   organization?: string;
+  clientAccountType?: ClientAccountType;
   printingPreferences?: PrintingPreference[];
 };
 
@@ -68,7 +70,7 @@ export class UsersService {
     email: string,
     password: string,
     profile: UserProfilingInput = {},
-    role = 'customer',
+    role = 'client',
   ): Promise<User> {
     const existing = await this.findByEmail(email);
     if (existing) throw new ConflictException('Email already registered');
@@ -83,6 +85,17 @@ export class UsersService {
       isProfileComplete: isProfileComplete(normalizedProfile),
     });
     return this.usersRepo.save(user);
+  }
+
+  async updateUserStatus(
+    userId: number,
+    isActive: boolean,
+    accountHoldReason: string | null,
+  ): Promise<void> {
+    await this.usersRepo.update(
+      { id: userId },
+      { isActive, accountHoldReason },
+    );
   }
 
   async updateFcmToken(userId: number, token: string): Promise<void> {
@@ -146,6 +159,11 @@ export class UsersService {
 
   async findAllByRole(role: string): Promise<User[]> {
     return this.usersRepo.find({ where: { role: role as UserRole } });
+  }
+
+  /** Ops Admin + Super Admin accounts (former single `admin` role). */
+  async findAdminUsers(): Promise<User[]> {
+    return this.usersRepo.find({ where: { role: In([...ADMIN_ROLES]) } });
   }
 
   async findAll(): Promise<User[]> {
@@ -224,6 +242,10 @@ export class UsersService {
 
     if (data.organization !== undefined) {
       normalized.organization = data.organization?.trim() || null;
+    }
+
+    if (data.clientAccountType !== undefined) {
+      normalized.clientAccountType = data.clientAccountType ?? null;
     }
 
     if (data.printingPreferences !== undefined) {

@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -17,16 +18,29 @@ import {
   BETA_ORDER_LIMIT_MESSAGE,
   BETA_ORDER_LIMIT_REACHED,
 } from './dto/beta-order-limit.error';
-import { Order, OrderStatus } from './entities/order.entity';
+import {
+  Order,
+  OrderStatus,
+  PaymentAuthorizationStatus,
+} from './entities/order.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { BatchOrder } from './entities/batch-order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import {
+  freezeAuthorizationSnapshotOnOrder,
+  pesosToMinor,
+  type FreezeAuthorizationInput,
+} from './order-authorization-snapshot';
+import {
   DeliveryAssignment,
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../matching/entities/supplier-assignment.entity';
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
@@ -35,6 +49,8 @@ import {
   CreditMutationResult,
   CreditsService,
 } from '../credits/credits.service';
+import { PaymentsService } from '../payments/payments.service';
+import { isCodPaymentMethod } from '../payments/cod-eligibility';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
@@ -52,8 +68,10 @@ import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-booking.entity';
 import {
   CancellationClosedException,
+  ServiceAreaMismatchException,
   SlotFullException,
 } from '../delivery-slots/exceptions';
+import { GeoZonesService } from '../geo-zones/geo-zones.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
@@ -68,6 +86,9 @@ import {
   assertOrderStatusTransition,
   parseOrderStatus,
 } from './order-status-transition';
+import { AuditService } from '../audit/audit.service';
+import { PayoutsService } from '../payouts/payouts.service';
+import { IssuesService } from '../issues/issues.service';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -79,8 +100,7 @@ const SERVICE_FEE = 2;
 const RIDER_ASSIGNMENT_WORKFLOW_STATUSES = new Set<OrderStatus>([
   OrderStatus.RIDER_ASSIGNED,
   OrderStatus.PICKED_UP,
-  OrderStatus.ON_THE_WAY,
-  OrderStatus.ARRIVED_AT_DESTINATION,
+  OrderStatus.OUT_FOR_DELIVERY,
   OrderStatus.DELIVERED,
 ]);
 
@@ -183,11 +203,15 @@ export type ChargeComponents = {
 export type OrderStatusChangeContext = {
   actorUserId: number;
   reason: string;
+  /** Role at time of change (client, ops_admin, system, …). */
+  actorRole?: string | null;
 };
 
 export type OrderCompletionTransactionResult = {
   previous: Order;
   surveyRequirement: TamSurveyRequirement | null;
+  /** Status string used for client notification copy (may differ from intermediate steps). */
+  publishedStatus?: OrderStatus | string;
 };
 
 function numericChargeComponent(
@@ -218,6 +242,37 @@ export function calculateChargeTotal(components: ChargeComponents): number {
   );
 }
 
+/**
+ * Marketplace money/authorization defaults for new orders.
+ * Snapshot stays null until freezeAuthorizationSnapshot (payment module).
+ */
+export function applyMarketplacePaymentDefaults(
+  order: Partial<Order>,
+): Partial<Order> {
+  const deliveryFee = Number(order.deliveryFee ?? 0);
+  const totalPrice = Number(order.totalPrice ?? 0);
+  const finalMajor = calculateChargeTotal({
+    totalPrice,
+    deliveryFee,
+  });
+
+  return {
+    ...order,
+    deliveryFeeMinor:
+      order.deliveryFeeMinor != null && order.deliveryFeeMinor !== ''
+        ? order.deliveryFeeMinor
+        : pesosToMinor(deliveryFee),
+    finalTotalMinor:
+      order.finalTotalMinor != null && order.finalTotalMinor !== ''
+        ? order.finalTotalMinor
+        : pesosToMinor(finalMajor),
+    paymentAuthorizationStatus:
+      order.paymentAuthorizationStatus ?? PaymentAuthorizationStatus.NONE,
+    codEligible: order.codEligible ?? false,
+    authorizationSnapshot: order.authorizationSnapshot ?? null,
+  };
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -227,6 +282,8 @@ export class OrdersService {
     'items',
     'items.destination',
     'items.specValues',
+    // Logistics + marketplace status transitions for client/admin timelines.
+    'statusHistory',
   ];
 
   constructor(
@@ -237,6 +294,8 @@ export class OrdersService {
     private orderItemSpecValueRepo: Repository<OrderItemSpecValue>,
     @InjectRepository(DeliveryAssignment)
     private deliveryAssignmentRepo: Repository<DeliveryAssignment>,
+    @InjectRepository(SupplierAssignment)
+    private supplierAssignmentRepo: Repository<SupplierAssignment>,
     @InjectRepository(Address)
     private addressRepo: Repository<Address>,
     @InjectRepository(DeliveryDestination)
@@ -247,6 +306,7 @@ export class OrdersService {
     private firebaseService: FirebaseService,
     private usersService: UsersService,
     private creditsService: CreditsService,
+    private paymentsService: PaymentsService,
     private notificationsService: NotificationsService,
     private filesService: FilesService,
     private tamSurveysService: TamSurveysService,
@@ -260,6 +320,10 @@ export class OrdersService {
     private readonly fileMetadataRepo: Repository<FileMetadata>,
     @InjectRepository(DispatchPlan)
     private readonly dispatchPlanRepo: Repository<DispatchPlan>,
+    private readonly auditService: AuditService,
+    @Optional() private readonly geoZonesService?: GeoZonesService,
+    @Optional() private readonly payoutsService?: PayoutsService,
+    @Optional() private readonly issuesService?: IssuesService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -332,6 +396,25 @@ export class OrdersService {
       }
     }
 
+    // Latest non-cancelled supplier assignment per order (pending/accepted).
+    const supplierAssignments = await this.supplierAssignmentRepo.find({
+      where: {
+        orderId: In(orderIds),
+        decision: In([
+          SupplierAssignmentDecision.PENDING,
+          SupplierAssignmentDecision.ACCEPTED,
+        ]),
+      },
+      relations: { supplier: true },
+      order: { id: 'DESC' },
+    });
+    const supplierByOrderId = new Map<number, SupplierAssignment>();
+    for (const sa of supplierAssignments ?? []) {
+      if (!supplierByOrderId.has(sa.orderId)) {
+        supplierByOrderId.set(sa.orderId, sa);
+      }
+    }
+
     const riderIds = [
       ...new Set(
         (assignments ?? [])
@@ -351,63 +434,255 @@ export class OrdersService {
           });
     const planByRiderId = new Map(plans.map((plan) => [plan.riderId, plan]));
 
-    return orders.map((order) => {
-      const assignment = assignmentByOrderId.get(order.id);
-      const plan = assignment?.riderId
-        ? planByRiderId.get(assignment.riderId)
-        : undefined;
-      const remainingStops = (plan?.stops ?? [])
-        .filter((stop) => stop.status === DispatchStopStatus.PENDING)
-        .sort((left, right) => left.sequence - right.sequence);
-      const plannedStop = assignment
-        ? plan?.stops?.find(
-            (candidate) => candidate.assignmentId === assignment.id,
-          )
-        : undefined;
-      const routeIndex = assignment
-        ? remainingStops.findIndex(
-            (candidate) => candidate.assignmentId === assignment.id,
-          )
-        : -1;
-      const queuePosition = routeIndex >= 0 ? routeIndex + 1 : null;
-      const currentStop = routeIndex === 0 ? remainingStops[0] : null;
-      const canTrackDelivery =
-        queuePosition === 1 &&
-        assignment != null &&
-        [DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED].includes(
-          assignment.status,
-        );
+    const claimsByOrderId =
+      this.issuesService != null
+        ? await this.issuesService.listSummariesByOrderIds(orderIds)
+        : new Map();
 
-      return Object.assign(order, {
-        deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
-        deliveryQueuePosition: queuePosition,
-        deliveryQueueSize:
-          routeIndex >= 0 ? remainingStops.length || null : null,
-        deliveryPlanState: plannedStop ? 'planned' : 'unplanned',
-        deliveryPlanVersion: plannedStop ? (plan?.version ?? null) : null,
-        deliveryRouteGeometry: canTrackDelivery
-          ? (currentStop?.legGeometry ?? null)
-          : null,
-        deliveryLegDurationSeconds: canTrackDelivery
-          ? (currentStop?.legDurationSeconds ?? null)
-          : null,
-        deliveryLegDistanceMeters: canTrackDelivery
-          ? (currentStop?.legDistanceMeters ?? null)
-          : null,
-        deliveryRoutingDataStale: canTrackDelivery
-          ? (plan?.routingDataStale ?? false)
-          : null,
-        canTrackDelivery,
-        assignedRiderContact: this.assignedRiderContactFromAssignment(
-          assignment,
+    return Promise.all(
+      orders.map(async (order) => {
+        const assignment = assignmentByOrderId.get(order.id);
+        const supplierAssignment = supplierByOrderId.get(order.id);
+        const plan = assignment?.riderId
+          ? planByRiderId.get(assignment.riderId)
+          : undefined;
+        const remainingStops = (plan?.stops ?? [])
+          .filter((stop) => stop.status === DispatchStopStatus.PENDING)
+          .sort((left, right) => left.sequence - right.sequence);
+        const plannedStop = assignment
+          ? plan?.stops?.find(
+              (candidate) => candidate.assignmentId === assignment.id,
+            )
+          : undefined;
+        const routeIndex = assignment
+          ? remainingStops.findIndex(
+              (candidate) => candidate.assignmentId === assignment.id,
+            )
+          : -1;
+        const queuePosition = routeIndex >= 0 ? routeIndex + 1 : null;
+        const currentStop = routeIndex === 0 ? remainingStops[0] : null;
+        const canTrackDelivery =
+          queuePosition === 1 &&
+          assignment != null &&
+          [DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED].includes(
+            assignment.status,
+          );
+
+        // Customer-facing delivery handoff OTP only (pickup OTP is supplier/ops).
+        const deliveryOtp =
+          assignment &&
+          !assignment.deliveryOtpVerifiedAt &&
+          [
+            DeliveryStatus.PICKED_UP,
+            DeliveryStatus.ON_THE_WAY,
+            DeliveryStatus.ARRIVED,
+          ].includes(assignment.status)
+            ? (assignment.deliveryOtpCode ?? null)
+            : null;
+
+        return Object.assign(order, {
+          deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
+          deliveryQueuePosition: queuePosition,
+          deliveryQueueSize:
+            routeIndex >= 0 ? remainingStops.length || null : null,
+          deliveryPlanState: plannedStop ? 'planned' : 'unplanned',
+          deliveryPlanVersion: plannedStop ? (plan?.version ?? null) : null,
+          deliveryRouteGeometry: canTrackDelivery
+            ? (currentStop?.legGeometry ?? null)
+            : null,
+          deliveryLegDurationSeconds: canTrackDelivery
+            ? (currentStop?.legDurationSeconds ?? null)
+            : null,
+          deliveryLegDistanceMeters: canTrackDelivery
+            ? (currentStop?.legDistanceMeters ?? null)
+            : null,
+          deliveryRoutingDataStale: canTrackDelivery
+            ? (plan?.routingDataStale ?? false)
+            : null,
           canTrackDelivery,
-        ),
-        assignedSlot:
-          order.batchOrderId == null
-            ? undefined
-            : assignedSlotByBatchOrderId.get(order.batchOrderId),
-      });
-    });
+          deliveryOtp,
+          assignedRiderContact: this.assignedRiderContactFromAssignment(
+            assignment,
+            canTrackDelivery,
+          ),
+          assignedSupplierContact:
+            await this.assignedSupplierContactFromAssignment(
+              supplierAssignment,
+            ),
+          assignedSlot:
+            order.batchOrderId == null
+              ? undefined
+              : assignedSlotByBatchOrderId.get(order.batchOrderId),
+          claims: claimsByOrderId.get(order.id) ?? [],
+        });
+      }),
+    );
+  }
+
+  private assignedSupplierContactFromAssignment(
+    assignment: SupplierAssignment | undefined,
+  ): Promise<{
+    supplierId: number;
+    businessName: string;
+    decision: string;
+    acceptanceDeadline: Date | null;
+    assignmentId: number;
+    logoUrl: string | null;
+    address: string | null;
+    broadAddress: string | null;
+    selfQcEvidenceUrls: string[];
+    selfQcEvidenceFileIds: number[];
+  } | null> {
+    return this.buildAssignedSupplierContact(assignment);
+  }
+
+  private async buildAssignedSupplierContact(
+    assignment: SupplierAssignment | undefined,
+  ): Promise<{
+    supplierId: number;
+    businessName: string;
+    decision: string;
+    acceptanceDeadline: Date | null;
+    assignmentId: number;
+    logoUrl: string | null;
+    address: string | null;
+    broadAddress: string | null;
+    selfQcEvidenceUrls: string[];
+    selfQcEvidenceFileIds: number[];
+  } | null> {
+    if (!assignment) return null;
+    const supplier = assignment.supplier;
+    const address = supplier?.address?.trim() || null;
+    const broadAddress = this.formatBroadSupplierAddress(
+      address,
+      supplier?.serviceZones ?? [],
+    );
+    const logoUrl = await this.signFileId(supplier?.logoFileId ?? null);
+    let evidenceIds = this.normalizeFileIdList(
+      assignment.selfQcEvidenceFileIds,
+    );
+    // Historical self-QC may only exist in audit metadata (pre-persist).
+    if (evidenceIds.length === 0) {
+      evidenceIds = await this.loadSelfQcEvidenceFromAudit(assignment.id);
+    }
+    const selfQcEvidenceUrls: string[] = [];
+    for (const fileId of evidenceIds) {
+      const url = await this.signFileId(fileId);
+      if (url) selfQcEvidenceUrls.push(url);
+    }
+
+    return {
+      supplierId: assignment.supplierId,
+      businessName:
+        supplier?.businessName?.trim() || `Supplier #${assignment.supplierId}`,
+      decision: assignment.decision,
+      acceptanceDeadline: assignment.acceptanceDeadline ?? null,
+      assignmentId: assignment.id,
+      logoUrl,
+      address,
+      broadAddress,
+      selfQcEvidenceUrls,
+      selfQcEvidenceFileIds: evidenceIds,
+    };
+  }
+
+  private normalizeFileIdList(raw: unknown): number[] {
+    if (!Array.isArray(raw)) return [];
+    const out: number[] = [];
+    for (const item of raw) {
+      const n =
+        typeof item === 'number'
+          ? item
+          : typeof item === 'string'
+            ? Number(item)
+            : Number.NaN;
+      if (Number.isFinite(n) && Number.isInteger(n) && n > 0) {
+        out.push(n);
+      }
+    }
+    return [...new Set(out)];
+  }
+
+  /** Recover evidence file ids from supplier_self_qc audit when column is empty. */
+  private async loadSelfQcEvidenceFromAudit(
+    assignmentId: number,
+  ): Promise<number[]> {
+    try {
+      const rows = await this.dataSource.query(
+        `
+        SELECT metadata->'evidenceFileIds' AS evidence
+        FROM audit_events
+        WHERE action = 'supplier_self_qc'
+          AND entity_type = 'supplier_assignment'
+          AND entity_id = $1
+        ORDER BY id DESC
+        LIMIT 1
+        `,
+        [String(assignmentId)],
+      );
+      const evidence = rows?.[0]?.evidence;
+      return this.normalizeFileIdList(evidence);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Public-facing short location, e.g. "San Pedro, Davao City". */
+  private formatBroadSupplierAddress(
+    address: string | null,
+    serviceZones: string[],
+  ): string | null {
+    // Prefer a short form of the real shop address when present.
+    if (address?.trim()) {
+      const parts = address
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .filter(
+          (p) =>
+            !/^(philippines|ph|filipinas)$/i.test(p) && !/^\d{4,5}$/.test(p),
+        );
+      if (parts.length === 1) return parts[0];
+      if (parts.length >= 2) {
+        // "117 San Pedro Street, Davao City, ..." → "San Pedro Street, Davao City"
+        // or shorter: last 1–2 words of the street segment + city.
+        const city = parts[1];
+        let area = parts[0].replace(/^\d+\s+/, '');
+        const words = area.split(/\s+/).filter(Boolean);
+        if (words.length > 3) {
+          area = words.slice(0, 2).join(' ');
+        } else if (
+          words.length === 3 &&
+          /street|st\.?|ave|road|rd\.?/i.test(words[2])
+        ) {
+          area = words.slice(0, 2).join(' ');
+        }
+        return `${area}, ${city}`;
+      }
+    }
+    const zones = (serviceZones ?? [])
+      .map((z) => String(z).trim())
+      .filter(Boolean);
+    if (zones.length > 0) {
+      return zones.slice(0, 2).join(', ');
+    }
+    return null;
+  }
+
+  private async signFileId(fileId: number | null): Promise<string | null> {
+    if (fileId == null || !Number.isInteger(fileId) || fileId <= 0) {
+      return null;
+    }
+    try {
+      const file = await this.filesService.findById(fileId);
+      if (!file?.objectKey) return file?.url ?? null;
+      return await this.filesService.getPresignedUrlForKey(
+        file.objectKey,
+        3600,
+      );
+    } catch {
+      return null;
+    }
   }
 
   private assignedRiderContactFromAssignment(
@@ -451,7 +726,7 @@ export class OrdersService {
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (
-      user?.role !== UserRole.CUSTOMER ||
+      user?.role !== UserRole.CLIENT ||
       !user.isBetaUser ||
       !user.betaEnrolledAt
     ) {
@@ -558,6 +833,27 @@ export class OrdersService {
         })
       : 0;
     orderData.paymentStatus = creditPayment ? 'paid' : 'pending';
+    Object.assign(
+      orderData,
+      applyMarketplacePaymentDefaults(orderData as Partial<Order>),
+    );
+
+    // Server-side COD eligibility (cap, pilot flag, concurrency, risk).
+    // Rejects ₱1,501+ even if client sends paymentMethod=cod.
+    if (
+      orderData.userId != null &&
+      isCodPaymentMethod(String(orderData.paymentMethod ?? ''))
+    ) {
+      const codResult = await this.paymentsService.assertCodEligibleForCheckout(
+        {
+          userId: Number(orderData.userId),
+          paymentMethod: String(orderData.paymentMethod ?? ''),
+          finalTotalMinor: orderData.finalTotalMinor,
+        },
+      );
+      orderData.codEligible = codResult?.eligible === true;
+    }
+
     const creation = await this.dataSource.transaction(async (manager) => {
       const transactionOrdersRepo = manager.getRepository(Order);
       const transactionItemsRepo = manager.getRepository(OrderItem);
@@ -582,6 +878,18 @@ export class OrdersService {
         orderId: orderRef,
       });
       const persistedOrder = await transactionOrdersRepo.save(order);
+
+      if (
+        isCodPaymentMethod(String(persistedOrder.paymentMethod ?? '')) &&
+        persistedOrder.codEligible
+      ) {
+        await this.paymentsService.ensurePendingCodCollection({
+          orderId: persistedOrder.id,
+          amountMinor: String(persistedOrder.finalTotalMinor ?? '0'),
+          eligible: true,
+          eligibilityReason: null,
+        });
+      }
       const savedItem = await transactionItemsRepo.save(
         transactionItemsRepo.create({
           orderId: persistedOrder.id,
@@ -685,7 +993,8 @@ export class OrdersService {
     const subtotal = quote.subtotal;
     // Client totals are display hints only. Checkout charges are authoritative
     // on the server so a direct request cannot underpay a credit order.
-    const deliveryFee =
+    // May be overridden by geo-zone base fee after zone match below.
+    let deliveryFee =
       (dto.deliveryOption === 'delivery' ? STANDARD_DELIVERY_FEE : 0) +
       SERVICE_FEE;
     const deliveryAddressId =
@@ -787,6 +1096,7 @@ export class OrdersService {
     }
 
     let deliveryType: 'local' | 'external' = 'local';
+    let zoneDeliveryFeePesos: number | null = null;
 
     for (const dest of resolvedDestinations) {
       const inside = await this.settingsService.isInsideServiceArea(
@@ -794,8 +1104,37 @@ export class OrdersService {
         dest.longitude,
       );
       if (!inside) {
+        // Pilot policy: when geo zones are active and reject_outside_zones,
+        // refuse checkout instead of classifying as external.
+        if (this.geoZonesService) {
+          try {
+            const [hasZones, commerce] = await Promise.all([
+              this.geoZonesService.hasActiveZones(),
+              this.geoZonesService.getCommerceSettings(),
+            ]);
+            if (hasZones && commerce.rejectOutsideZones) {
+              throw new ServiceAreaMismatchException();
+            }
+          } catch (err) {
+            if (err instanceof ServiceAreaMismatchException) throw err;
+          }
+        }
         deliveryType = 'external';
         break;
+      }
+
+      if (this.geoZonesService && zoneDeliveryFeePesos == null) {
+        try {
+          const match = await this.geoZonesService.matchPoint(
+            dest.latitude,
+            dest.longitude,
+          );
+          if (match.inside && match.zone) {
+            zoneDeliveryFeePesos = Number(match.deliveryFeeMinor) / 100;
+          }
+        } catch {
+          /* optional zone fee */
+        }
       }
     }
 
@@ -807,6 +1146,14 @@ export class OrdersService {
     const extraDestCount = Math.max(0, resolvedDestinations.length - 1);
     const extraDestinationFee =
       extraDestCount * Number(settings.extraDestinationSurcharge);
+    // Prefer zone base fee for local delivery when a zone match exists.
+    if (
+      deliveryType === 'local' &&
+      dto.deliveryOption === 'delivery' &&
+      zoneDeliveryFeePesos != null
+    ) {
+      deliveryFee = zoneDeliveryFeePesos + SERVICE_FEE;
+    }
     const totalPrice = calculateChargeTotal({
       subtotal,
       deliveryFee,
@@ -872,6 +1219,24 @@ export class OrdersService {
         dto.paymentMethod,
         isBetaModeEnabled,
       );
+
+      // Pre-compute marketplace money defaults for COD gate (same as aggregate order).
+      const paymentDefaultsPreview = applyMarketplacePaymentDefaults({
+        totalPrice: subtotal,
+        deliveryFee,
+        paymentMethod: dto.paymentMethod,
+      } as Partial<Order>);
+      let codEligibleForBatch = false;
+      if (isCodPaymentMethod(dto.paymentMethod)) {
+        const codResult =
+          await this.paymentsService.assertCodEligibleForCheckout({
+            userId,
+            paymentMethod: dto.paymentMethod,
+            finalTotalMinor: paymentDefaultsPreview.finalTotalMinor,
+          });
+        codEligibleForBatch = codResult?.eligible === true;
+      }
+
       const { batchRef, orderRef } = await this.nextBatchReferences(manager);
       const creditPayment = OrdersService.isCreditPaymentMethod(
         dto.paymentMethod,
@@ -974,30 +1339,45 @@ export class OrdersService {
       const firstDestId =
         savedDestinations[normalizedItems[0]?.destinationIndex ?? 0]?.id ??
         null;
-      const aggregateOrder = txOrdersRepo.create({
-        userId,
-        orderId: orderRef,
-        category: normalizedItems.length > 1 ? 'batch' : firstItem.category,
-        quantity: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
-        totalPrice: subtotal,
-        deliveryFee,
-        paymentMethod: dto.paymentMethod,
-        paymentStatus,
-        deliveryOption: dto.deliveryOption,
-        deliveryAddressId: validatedDeliveryAddressId,
-        fileName:
-          normalizedItems.length > 1
-            ? `${normalizedItems.length} print jobs`
-            : firstItem.fileName,
-        fileUrl: normalizedItems.length === 1 ? firstItem.fileUrl : undefined,
-        fileMetadataId:
-          normalizedItems.length === 1
-            ? (firstItem.fileMetadataId ?? null)
-            : null,
-        batchOrderId: savedBatch.id,
-        destinationId: firstDestId,
-      } as Partial<Order>);
+      const aggregateOrder = txOrdersRepo.create(
+        applyMarketplacePaymentDefaults({
+          userId,
+          orderId: orderRef,
+          category: normalizedItems.length > 1 ? 'batch' : firstItem.category,
+          quantity: normalizedItems.reduce(
+            (sum, item) => sum + item.quantity,
+            0,
+          ),
+          totalPrice: subtotal,
+          deliveryFee,
+          paymentMethod: dto.paymentMethod,
+          paymentStatus,
+          deliveryOption: dto.deliveryOption,
+          deliveryAddressId: validatedDeliveryAddressId,
+          fileName:
+            normalizedItems.length > 1
+              ? `${normalizedItems.length} print jobs`
+              : firstItem.fileName,
+          fileUrl: normalizedItems.length === 1 ? firstItem.fileUrl : undefined,
+          fileMetadataId:
+            normalizedItems.length === 1
+              ? (firstItem.fileMetadataId ?? null)
+              : null,
+          batchOrderId: savedBatch.id,
+          destinationId: firstDestId,
+          codEligible: codEligibleForBatch,
+        }),
+      );
       const savedOrder = await txOrdersRepo.save(aggregateOrder);
+
+      if (codEligibleForBatch && isCodPaymentMethod(dto.paymentMethod)) {
+        await this.paymentsService.ensurePendingCodCollection({
+          orderId: savedOrder.id,
+          amountMinor: String(savedOrder.finalTotalMinor ?? '0'),
+          eligible: true,
+          eligibilityReason: null,
+        });
+      }
 
       for (const [index, item] of normalizedItems.entries()) {
         const quoteItem = quote.items[index];
@@ -1159,13 +1539,503 @@ export class OrdersService {
   }
 
   private static readonly CANCELLABLE_STATUSES: OrderStatus[] = [
-    OrderStatus.ORDER_PLACED,
-    OrderStatus.FILE_VERIFIED,
+    OrderStatus.SUBMITTED,
+    OrderStatus.APPROVED_FOR_MATCHING,
   ];
 
   private static isCreditPaymentMethod(paymentMethod?: string): boolean {
     const normalized = paymentMethod?.replace(/[_-]/g, '').toLowerCase();
-    return normalized === 'credits' || normalized === 'gridcredits';
+    return (
+      normalized === 'credits' ||
+      normalized === 'gridcredits' ||
+      normalized === 'pilotcredit' ||
+      normalized === 'pilotcredits'
+    );
+  }
+
+  /**
+   * Freeze immutable commercial snapshot at payment authorization.
+   * Intended for the payments module when entering `payment_authorized`.
+   * Idempotent: a second call leaves the existing snapshot unchanged.
+   */
+  freezeAuthorizationSnapshot(
+    order: Order,
+    input: FreezeAuthorizationInput = {},
+  ): Order {
+    return freezeAuthorizationSnapshotOnOrder(order, input);
+  }
+
+  /**
+   * Load order, freeze authorization snapshot, persist.
+   * Does not perform status transition (payment module owns that).
+   */
+  async persistAuthorizationSnapshot(
+    orderId: number,
+    input: FreezeAuthorizationInput = {},
+  ): Promise<Order> {
+    const order = await this.ordersRepo.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+    const frozen = this.freezeAuthorizationSnapshot(order, input);
+    return this.ordersRepo.save(frozen);
+  }
+
+  /** Default ops payment-authorization window after supplier accept (PRD §6.3). */
+  static readonly PAYMENT_AUTH_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
+  static creditReserveIdempotencyKey(orderId: number): string {
+    return `payment-auth:reserve:order:${orderId}`;
+  }
+
+  static creditSpendIdempotencyKey(orderId: number): string {
+    return `payment-auth:spend:order:${orderId}`;
+  }
+
+  /**
+   * Authorize payment for production (Task 3.3).
+   *
+   * Ops/super only — clients cannot authorize. Allowed from
+   * `supplier_accepted` or `awaiting_payment`.
+   * - pilot_credit / gridCredits: reserve → spend (idempotent) unless already paid
+   *   (ledger always charges the order owner, not the ops actor)
+   * - COD: re-check eligibility; authorize for collection (not cash in hand)
+   * Freezes commercial snapshot and transitions to `payment_authorized`.
+   */
+  async authorizePayment(
+    orderId: number,
+    context: OrderStatusChangeContext,
+  ): Promise<Order> {
+    if (!Number.isInteger(context?.actorUserId) || context.actorUserId <= 0) {
+      throw new BadRequestException('Status change actor is required');
+    }
+    const reason = context.reason?.trim() || 'Ops payment authorization';
+
+    const precheck = await this.ordersRepo.findOne({ where: { id: orderId } });
+    if (!precheck) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+
+    const actorRole = (context.actorRole ?? '').toLowerCase();
+    const isOps =
+      actorRole === 'ops_admin' ||
+      actorRole === 'super_admin' ||
+      actorRole === 'system';
+    if (!isOps) {
+      throw new ForbiddenException({
+        code: 'ops_only_payment_authorization',
+        message:
+          'Only ops or super admin can authorize payment to start production',
+      });
+    }
+
+    // Idempotent: already authorized.
+    if (
+      precheck.orderStatus === OrderStatus.PAYMENT_AUTHORIZED &&
+      precheck.paymentAuthorizationStatus ===
+        PaymentAuthorizationStatus.AUTHORIZED
+    ) {
+      return (await this.findById(orderId)) ?? precheck;
+    }
+
+    if (
+      precheck.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
+      precheck.orderStatus !== OrderStatus.AWAITING_PAYMENT
+    ) {
+      throw new BadRequestException({
+        code: 'invalid_status_for_authorization',
+        message: `Cannot authorize payment from status ${precheck.orderStatus}`,
+      });
+    }
+
+    let creditMutation: CreditMutationResult | null = null;
+
+    const result = await this.dataSource.transaction(async (manager) => {
+      const ordersRepo = manager.getRepository(Order);
+      const locked = await ordersRepo.findOneOrFail({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (
+        locked.orderStatus === OrderStatus.PAYMENT_AUTHORIZED &&
+        locked.paymentAuthorizationStatus ===
+          PaymentAuthorizationStatus.AUTHORIZED
+      ) {
+        return { previous: null as Order | null, order: locked };
+      }
+
+      if (
+        locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
+        locked.orderStatus !== OrderStatus.AWAITING_PAYMENT
+      ) {
+        throw new BadRequestException({
+          code: 'invalid_status_for_authorization',
+          message: `Cannot authorize payment from status ${locked.orderStatus}`,
+        });
+      }
+
+      assertOrderStatusTransition(
+        locked.orderStatus,
+        OrderStatus.PAYMENT_AUTHORIZED,
+      );
+
+      const paymentMethod = String(locked.paymentMethod ?? '');
+      const isCredit = OrdersService.isCreditPaymentMethod(paymentMethod);
+      const isCod = isCodPaymentMethod(paymentMethod);
+
+      if (!isCredit && !isCod) {
+        throw new BadRequestException({
+          code: 'unsupported_payment_method',
+          message: `Payment authorization does not support method '${paymentMethod}'`,
+        });
+      }
+
+      if (isCredit) {
+        creditMutation = await this.settlePilotCreditsForAuthorization(
+          locked,
+          context.actorUserId,
+          manager,
+        );
+        locked.paymentStatus = 'paid';
+      } else {
+        // COD: authorize for collection — cash remains pending until rider collect.
+        const codResult =
+          await this.paymentsService.assertCodEligibleForCheckout({
+            userId: locked.userId,
+            paymentMethod,
+            finalTotalMinor: locked.finalTotalMinor,
+            excludeOrderId: locked.id,
+          });
+        locked.codEligible = codResult?.eligible === true;
+        await this.paymentsService.ensurePendingCodCollection({
+          orderId: locked.id,
+          amountMinor: String(locked.finalTotalMinor ?? '0'),
+          eligible: locked.codEligible,
+          eligibilityReason: codResult?.message ?? null,
+        });
+        // paymentStatus stays pending until cash_collected.
+      }
+
+      this.freezeAuthorizationSnapshot(locked, {
+        paymentMethod,
+      });
+
+      const fromStatus = locked.orderStatus;
+      locked.orderStatus = OrderStatus.PAYMENT_AUTHORIZED;
+
+      const saved = await ordersRepo.save(locked);
+
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: locked.id,
+        fromStatus,
+        toStatus: OrderStatus.PAYMENT_AUTHORIZED,
+        changedByUserId: context.actorUserId,
+        notes: reason,
+      });
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: locked.id,
+          fromStatus,
+          toStatus: OrderStatus.PAYMENT_AUTHORIZED,
+          actorUserId: context.actorUserId,
+          actorRole: context.actorRole ?? null,
+          reason,
+        },
+        manager,
+      );
+
+      return {
+        previous: { ...locked, orderStatus: fromStatus } as Order,
+        order: saved,
+      };
+    });
+
+    this.creditsService.publishCreditMutation?.(creditMutation);
+
+    if (!result.previous) {
+      return (await this.findById(orderId)) ?? result.order;
+    }
+
+    try {
+      return await this.publishStatusUpdate(
+        result.previous,
+        orderId,
+        OrderStatus.PAYMENT_AUTHORIZED,
+        null,
+      );
+    } catch {
+      this.logger.warn(
+        `Post-commit auth publication failed for order ${orderId}; returning committed state`,
+      );
+      return (await this.findById(orderId)) ?? result.order;
+    }
+  }
+
+  /**
+   * Pilot Credits path: reserve then spend with stable per-order idempotency keys.
+   * Skips ledger when payment was already marked paid (legacy create-time debit).
+   */
+  private async settlePilotCreditsForAuthorization(
+    order: Order,
+    actorUserId: number,
+    manager: EntityManager,
+  ): Promise<CreditMutationResult | null> {
+    const amountCredits = calculateChargeTotal({
+      totalPrice: order.totalPrice,
+      deliveryFee: order.deliveryFee,
+    });
+
+    if (amountCredits <= 0) {
+      return null;
+    }
+
+    // Legacy create() already debited gridCredits — do not double-spend.
+    if (String(order.paymentStatus ?? '').toLowerCase() === 'paid') {
+      return null;
+    }
+
+    const reserveKey = OrdersService.creditReserveIdempotencyKey(order.id);
+    const spendKey = OrdersService.creditSpendIdempotencyKey(order.id);
+    const referenceId = order.orderId ?? `ORDER:${order.id}`;
+
+    await this.creditsService.reserveCredits(
+      order.userId,
+      amountCredits,
+      reserveKey,
+      {
+        referenceId,
+        reason: `Payment auth reserve for ${referenceId}`,
+        actorUserId,
+        manager,
+      },
+    );
+
+    return this.creditsService.spendCredits(
+      order.userId,
+      amountCredits,
+      spendKey,
+      {
+        reserveIdempotencyKey: reserveKey,
+        referenceId,
+        reason: `Payment auth spend for ${referenceId}`,
+        actorUserId,
+        manager,
+      },
+    );
+  }
+
+  /**
+   * Expire orders still waiting for ops payment authorization after supplier
+   * accept (24h). Releases supplier assignment (stub when matching service
+   * absent) and returns the order to `approved_for_matching` for re-match.
+   *
+   * Invoked by PaymentTimeoutSchedulerService; also unit-testable with `now`.
+   */
+  async expireStalePaymentAuthorizations(
+    now: Date = new Date(),
+  ): Promise<{ expiredOrderIds: number[]; scanned: number }> {
+    const waitingStatuses = [
+      OrderStatus.SUPPLIER_ACCEPTED,
+      OrderStatus.AWAITING_PAYMENT,
+    ];
+    const candidates = await this.ordersRepo.find({
+      where: waitingStatuses.map((orderStatus) => ({ orderStatus })),
+      order: { id: 'ASC' },
+    });
+
+    const expiredOrderIds: number[] = [];
+    const cutoff = now.getTime() - OrdersService.PAYMENT_AUTH_TIMEOUT_MS;
+
+    for (const candidate of candidates) {
+      const waitStartedAt = await this.resolvePaymentWaitStartedAt(candidate);
+      if (waitStartedAt.getTime() > cutoff) {
+        continue;
+      }
+
+      try {
+        await this.expirePaymentWait(candidate.id, now);
+        expiredOrderIds.push(candidate.id);
+      } catch (err) {
+        this.logger.warn(
+          `Payment timeout expiry failed for order ${candidate.id}: ${err}`,
+        );
+      }
+    }
+
+    return { expiredOrderIds, scanned: candidates.length };
+  }
+
+  /**
+   * When payment wait started: prefer status-history entry into current status;
+   * fall back to updatedAt / createdAt.
+   */
+  private async resolvePaymentWaitStartedAt(order: Order): Promise<Date> {
+    try {
+      const history = await this.dataSource
+        .getRepository(OrderStatusHistory)
+        .find({
+          where: {
+            orderId: order.id,
+            toStatus: order.orderStatus,
+          },
+          order: { id: 'DESC' },
+          take: 1,
+        });
+      if (history[0]?.createdAt) {
+        return new Date(history[0].createdAt);
+      }
+    } catch {
+      // History unavailable — fall through.
+    }
+    return new Date(order.updatedAt ?? order.createdAt ?? Date.now());
+  }
+
+  /**
+   * Single-order payment timeout: mark expired, stub-release assignment,
+   * return to approved_for_matching.
+   */
+  async expirePaymentWait(
+    orderId: number,
+    now: Date = new Date(),
+  ): Promise<Order> {
+    const systemActorId = 0;
+    const reason = `Payment authorization timed out after 24h (${now.toISOString()})`;
+
+    const result = await this.dataSource.transaction(async (manager) => {
+      const ordersRepo = manager.getRepository(Order);
+      const locked = await ordersRepo.findOneOrFail({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (
+        locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
+        locked.orderStatus !== OrderStatus.AWAITING_PAYMENT
+      ) {
+        return { previous: null as Order | null, order: locked };
+      }
+
+      assertOrderStatusTransition(
+        locked.orderStatus,
+        OrderStatus.APPROVED_FOR_MATCHING,
+      );
+
+      // Best-effort: release any open pilot credit reserve for this order.
+      await this.releaseOpenAuthReserveIfAny(locked, manager);
+
+      // Stub reassignment: mark accepted/pending supplier assignments cancelled.
+      await this.stubReleaseSupplierAssignments(
+        manager,
+        locked.id,
+        'payment_timeout',
+      );
+
+      const fromStatus = locked.orderStatus;
+      locked.orderStatus = OrderStatus.APPROVED_FOR_MATCHING;
+      locked.paymentAuthorizationStatus = PaymentAuthorizationStatus.EXPIRED;
+
+      const saved = await ordersRepo.save(locked);
+
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: locked.id,
+        fromStatus,
+        toStatus: OrderStatus.APPROVED_FOR_MATCHING,
+        changedByUserId: systemActorId,
+        notes: reason,
+      });
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: locked.id,
+          fromStatus,
+          toStatus: OrderStatus.APPROVED_FOR_MATCHING,
+          actorUserId: systemActorId,
+          actorRole: 'system',
+          reason,
+        },
+        manager,
+      );
+
+      return {
+        previous: { ...locked, orderStatus: fromStatus } as Order,
+        order: saved,
+      };
+    });
+
+    if (!result.previous) {
+      return result.order;
+    }
+    try {
+      return await this.publishStatusUpdate(
+        result.previous,
+        orderId,
+        OrderStatus.APPROVED_FOR_MATCHING,
+        null,
+      );
+    } catch {
+      return (await this.findById(orderId)) ?? result.order;
+    }
+  }
+
+  private async releaseOpenAuthReserveIfAny(
+    order: Order,
+    manager: EntityManager,
+  ): Promise<void> {
+    if (!OrdersService.isCreditPaymentMethod(order.paymentMethod)) {
+      return;
+    }
+    const amountCredits = calculateChargeTotal({
+      totalPrice: order.totalPrice,
+      deliveryFee: order.deliveryFee,
+    });
+    if (amountCredits <= 0) return;
+
+    const reserveKey = OrdersService.creditReserveIdempotencyKey(order.id);
+    const releaseKey = `payment-auth:release:order:${order.id}:timeout`;
+    try {
+      await this.creditsService.releaseCredits(
+        order.userId,
+        amountCredits,
+        releaseKey,
+        {
+          reserveIdempotencyKey: reserveKey,
+          referenceId: order.orderId ?? `ORDER:${order.id}`,
+          reason: 'Payment auth timeout release',
+          actorUserId: 0,
+          manager,
+        },
+      );
+    } catch {
+      // No open reserve (already spent/released/never reserved) — ignore.
+    }
+  }
+
+  /**
+   * Stub: cancel open supplier_assignments for the order so capacity can re-match.
+   * Matching service will own richer reassignment in Phase 4/5.
+   */
+  private async stubReleaseSupplierAssignments(
+    manager: EntityManager,
+    orderId: number,
+    reason: string,
+  ): Promise<void> {
+    try {
+      await manager.query(
+        `UPDATE supplier_assignments
+         SET decision = 'cancelled',
+             decision_reason = $2,
+             decided_at = NOW(),
+             updated_at = NOW()
+         WHERE order_id = $1
+           AND decision IN ('pending', 'accepted')`,
+        [orderId, reason],
+      );
+    } catch (err) {
+      // Table may not exist in unit tests / early envs.
+      this.logger.debug?.(
+        `stubReleaseSupplierAssignments skipped for order ${orderId}: ${err}`,
+      );
+    }
   }
 
   private async assertBetaPaymentMethod(
@@ -1174,7 +2044,7 @@ export class OrdersService {
     isBetaModeEnabled = true,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
-    if (user?.role !== UserRole.CUSTOMER || !user.isBetaUser) return;
+    if (user?.role !== UserRole.CLIENT || !user.isBetaUser) return;
     if (
       isBetaModeEnabled &&
       !OrdersService.isCreditPaymentMethod(paymentMethod)
@@ -1336,6 +2206,21 @@ export class OrdersService {
     address: Address,
     labelOverride?: string,
   ): NormalizedDeliveryDestination {
+    const latitude = Number(address.latitude);
+    const longitude = Number(address.longitude);
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180 ||
+      (latitude === 0 && longitude === 0)
+    ) {
+      throw new BadRequestException(
+        'Saved delivery address is missing a valid map pin',
+      );
+    }
     return {
       addressId: address.id,
       label:
@@ -1348,8 +2233,8 @@ export class OrdersService {
       province: address.province ?? null,
       zipCode: address.zipCode ?? null,
       landmark: address.landmark ?? null,
-      latitude: Number(address.latitude),
-      longitude: Number(address.longitude),
+      latitude,
+      longitude,
     };
   }
 
@@ -1657,6 +2542,17 @@ export class OrdersService {
           changedByUserId: userId,
           notes: 'Customer cancelled order',
         });
+        await this.auditService.recordOrderStatusTransition(
+          {
+            orderId: order.id,
+            fromStatus: order.orderStatus,
+            toStatus: OrderStatus.CANCELLED,
+            actorUserId: userId,
+            actorRole: 'client',
+            reason: 'Customer cancelled order',
+          },
+          manager,
+        );
       }
       return {
         previous: alreadyCancelled ? null : order,
@@ -1779,6 +2675,19 @@ export class OrdersService {
             notes: 'Customer cancelled batch',
           })),
         );
+        for (const order of pending) {
+          await this.auditService.recordOrderStatusTransition(
+            {
+              orderId: order.id,
+              fromStatus: order.orderStatus,
+              toStatus: OrderStatus.CANCELLED,
+              actorUserId: userId,
+              actorRole: 'client',
+              reason: 'Customer cancelled batch',
+            },
+            manager,
+          );
+        }
       }
       return {
         previousOrders: pending,
@@ -1786,6 +2695,69 @@ export class OrdersService {
         releasedSlotDate,
       };
     });
+  }
+
+  async confirmReceipt(id: number, userId: number): Promise<Order> {
+    await this.dataSource.transaction(async (manager) => {
+      const transactionOrdersRepo = manager.getRepository(Order);
+      const order = await transactionOrdersRepo.findOneOrFail({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (order.userId !== userId) {
+        throw new ForbiddenException(
+          'You can only confirm receipt for your own orders',
+        );
+      }
+
+      if (
+        order.orderStatus !== OrderStatus.ISSUE_WINDOW_OPEN &&
+        order.orderStatus !== OrderStatus.DELIVERED &&
+        order.orderStatus !== OrderStatus.COLLECTED_BY_CUSTOMER
+      ) {
+        throw new BadRequestException(
+          'Order cannot be confirmed at this stage',
+        );
+      }
+
+      await transactionOrdersRepo.update(
+        { id: order.id, orderStatus: order.orderStatus },
+        { orderStatus: OrderStatus.COMPLETED },
+      );
+
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: order.id,
+        fromStatus: order.orderStatus,
+        toStatus: OrderStatus.COMPLETED,
+        changedByUserId: userId,
+        notes: 'Customer confirmed receipt',
+      });
+
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: order.id,
+          fromStatus: order.orderStatus,
+          toStatus: OrderStatus.COMPLETED,
+          actorUserId: userId,
+          actorRole: 'client',
+          reason: 'Customer confirmed receipt',
+        },
+        manager,
+      );
+
+      if (this.payoutsService) {
+        await this.payoutsService.closeIssueWindowHold(order.id, manager);
+      }
+    });
+
+    const completed = await this.findById(id);
+    if (!completed) throw new NotFoundException('Order not found');
+    return this.publishStatusUpdate(
+      completed,
+      id,
+      'Customer confirmed receipt',
+    );
   }
 
   async updateStatus(
@@ -1812,10 +2784,23 @@ export class OrdersService {
         throw new BadRequestException('Order batch changed during update');
       }
       if (locked.orderStatus === orderStatus) {
-        return { previous: null, surveyRequirement: null };
+        return {
+          previous: null,
+          surveyRequirement: null,
+          publishedStatus: orderStatus,
+        };
       }
       if (orderStatus === OrderStatus.CANCELLED) {
         throw new BadRequestException('Use the cancellation workflow');
+      }
+      // Money transitions must freeze snapshot / settle credits via authorizePayment.
+      // Status-only jumps to payment_authorized skip the authorization gate.
+      if (orderStatus === OrderStatus.PAYMENT_AUTHORIZED) {
+        throw new BadRequestException({
+          code: 'use_authorize_payment',
+          message:
+            'Use POST /orders/:id/authorize-payment to enter payment_authorized',
+        });
       }
       if (
         RIDER_ASSIGNMENT_WORKFLOW_STATUSES.has(orderStatus) ||
@@ -1825,7 +2810,7 @@ export class OrdersService {
         throw new BadRequestException('Use the rider assignment workflow');
       }
       if (
-        orderStatus === OrderStatus.COMPLETED_PICKUP &&
+        orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER &&
         locked.deliveryOption !== 'pickup'
       ) {
         throw new BadRequestException(
@@ -1833,6 +2818,22 @@ export class OrdersService {
         );
       }
       assertOrderStatusTransition(locked.orderStatus, orderStatus);
+      // Production requires payment authorization (PRD §5.3 / Task 3.3).
+      // Graph already requires payment_authorized status; also enforce the
+      // independent paymentAuthorizationStatus flag (COD auth ≠ cash collected).
+      if (orderStatus === OrderStatus.PRODUCTION) {
+        if (
+          locked.paymentAuthorizationStatus !==
+            PaymentAuthorizationStatus.AUTHORIZED ||
+          locked.orderStatus !== OrderStatus.PAYMENT_AUTHORIZED
+        ) {
+          throw new BadRequestException({
+            code: 'payment_not_authorized',
+            message:
+              'Cannot enter production without payment authorization (payment_authorized)',
+          });
+        }
+      }
       if (
         !Number.isInteger(context?.actorUserId) ||
         context!.actorUserId <= 0
@@ -1860,11 +2861,40 @@ export class OrdersService {
         changedByUserId: context!.actorUserId,
         notes: reason,
       });
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: id,
+          fromStatus: locked.orderStatus,
+          toStatus: orderStatus,
+          actorUserId: context!.actorUserId,
+          actorRole: context?.actorRole ?? null,
+          reason,
+        },
+        manager,
+      );
+
+      // Pickup collection opens the same 24h material concern window as delivery.
+      let publishedStatus = orderStatus;
+      if (orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER) {
+        await this.openMaterialIssueWindow(
+          manager,
+          id,
+          OrderStatus.COLLECTED_BY_CUSTOMER,
+          context!.actorUserId,
+          '24h material issue window opened after customer collection',
+        );
+        publishedStatus = OrderStatus.ISSUE_WINDOW_OPEN;
+      }
+
       const surveyRequirement =
-        orderStatus === OrderStatus.COMPLETED_PICKUP
+        orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER
           ? await this.prepareCompletionRecords(manager, locked)
           : null;
-      return { previous: locked, surveyRequirement };
+      return {
+        previous: locked,
+        surveyRequirement,
+        publishedStatus,
+      };
     });
     if (!completion.previous) {
       const current = await this.findById(id);
@@ -1875,7 +2905,7 @@ export class OrdersService {
       return await this.publishStatusUpdate(
         completion.previous,
         id,
-        status,
+        completion.publishedStatus ?? status,
         completion.surveyRequirement,
       );
     } catch {
@@ -1911,6 +2941,7 @@ export class OrdersService {
       throw new BadRequestException('Delivery completion requires delivery');
     }
     assertOrderStatusTransition(order.orderStatus, OrderStatus.DELIVERED);
+    const fromStatus = order.orderStatus;
     const updateResult = await ordersRepo.update(
       { id: order.id, orderStatus: order.orderStatus },
       { orderStatus: OrderStatus.DELIVERED },
@@ -1920,16 +2951,116 @@ export class OrdersService {
     }
     await manager.getRepository(OrderStatusHistory).insert({
       orderId: order.id,
-      fromStatus: order.orderStatus,
+      fromStatus,
       toStatus: OrderStatus.DELIVERED,
       changedByUserId: actorUserId,
       notes: 'Rider completed delivery',
     });
+    await this.auditService.recordOrderStatusTransition(
+      {
+        orderId: order.id,
+        fromStatus,
+        toStatus: OrderStatus.DELIVERED,
+        actorUserId,
+        actorRole: 'rider',
+        reason: 'Rider completed delivery',
+      },
+      manager,
+    );
+
+    // Immediately open 24h material issue window + held payout (Phase 9.2).
+    await this.openMaterialIssueWindow(
+      manager,
+      order.id,
+      OrderStatus.DELIVERED,
+      actorUserId,
+      '24h material issue window opened after delivery proof',
+    );
+
     const surveyRequirement = await this.prepareCompletionRecords(
       manager,
       order,
     );
-    return { previous: order, surveyRequirement };
+    // previous snapshot used by publisher — reflect pre-delivery status.
+    // Notify with concern-window copy (final status is issue_window_open).
+    return {
+      previous: order,
+      surveyRequirement,
+      publishedStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+    };
+  }
+
+  /**
+   * Open 24h material concern window after delivery or customer collection.
+   * Sets issueWindowEndsAt, holds supplier payout, and moves to issue_window_open.
+   */
+  private async openMaterialIssueWindow(
+    manager: EntityManager,
+    orderId: number,
+    fromStatus: OrderStatus,
+    actorUserId: number | null,
+    historyNotes: string,
+  ): Promise<Date | null> {
+    assertOrderStatusTransition(fromStatus, OrderStatus.ISSUE_WINDOW_OPEN);
+    const ordersRepo = manager.getRepository(Order);
+
+    let issueWindowEndsAt: Date | null = null;
+    if (this.payoutsService) {
+      try {
+        const opened = await this.payoutsService.openIssueWindowOnDelivered(
+          orderId,
+          actorUserId,
+          manager,
+        );
+        issueWindowEndsAt = opened.issueWindowEndsAt;
+      } catch (err) {
+        this.logger.warn(
+          `Issue-window payout open failed for order ${orderId}: ${err}`,
+        );
+        issueWindowEndsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await ordersRepo.update({ id: orderId }, { issueWindowEndsAt });
+      }
+    } else {
+      issueWindowEndsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await ordersRepo.update({ id: orderId }, { issueWindowEndsAt });
+    }
+
+    await ordersRepo.update(
+      { id: orderId, orderStatus: fromStatus },
+      {
+        orderStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+        ...(issueWindowEndsAt ? { issueWindowEndsAt } : {}),
+      },
+    );
+    // Prefer a real user actor when present (e.g. rider who completed
+    // delivery). Never write actor id 0 — audit_events.actor_id FKs to users.
+    const historyActorId =
+      actorUserId != null && actorUserId > 0 ? actorUserId : null;
+    await manager.getRepository(OrderStatusHistory).insert({
+      orderId,
+      fromStatus,
+      toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+      // history column is NOT NULL without an FK; use 0 only as a last-resort
+      // system sentinel when no actor is available.
+      changedByUserId: historyActorId ?? 0,
+      notes: historyNotes,
+    });
+    await this.auditService.recordOrderStatusTransition(
+      {
+        orderId,
+        fromStatus,
+        toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+        actorUserId: historyActorId,
+        actorRole: 'system',
+        reason: 'issue_window_open',
+        metadata: {
+          issueWindowEndsAt: issueWindowEndsAt?.toISOString() ?? null,
+          systemAction: true,
+        },
+      },
+      manager,
+    );
+    return issueWindowEndsAt;
   }
 
   private async prepareCompletionRecords(
@@ -2035,25 +3166,53 @@ export class OrdersService {
 
     // Status → notification copy (shared by FCM push + in-app notification)
     const messages: Record<string, { title: string; body: string }> = {
-      file_verified: {
-        title: 'File Verified',
-        body: `Your order ${order.orderId} file has been verified.`,
+      submitted: {
+        title: 'Order Submitted',
+        body: `Your order ${order.orderId} was submitted.`,
       },
-      file_declined: {
-        title: 'File Declined',
-        body: `Your order ${order.orderId} file was declined. Please review the details and upload a replacement.`,
+      needs_qa: {
+        title: 'In Quality Review',
+        body: `Your order ${order.orderId} is being reviewed by our quality team.`,
       },
-      printing_in_progress: {
+      client_correction: {
+        title: 'Correction Needed',
+        body: `Your order ${order.orderId} needs a file correction. Please upload a revised file.`,
+      },
+      proof_approval: {
+        title: 'Proof Ready',
+        body: `A proof for order ${order.orderId} is ready for your approval.`,
+      },
+      approved_for_matching: {
+        title: 'Approved for Matching',
+        body: `Your order ${order.orderId} is approved and waiting for a supplier.`,
+      },
+      supplier_assigned: {
+        title: 'Supplier Assigned',
+        body: `A supplier has been assigned to order ${order.orderId}.`,
+      },
+      supplier_accepted: {
+        title: 'Supplier Accepted',
+        body: `A supplier accepted order ${order.orderId}.`,
+      },
+      awaiting_payment: {
+        title: 'Awaiting Payment',
+        body: `Payment authorization is needed for order ${order.orderId}.`,
+      },
+      payment_authorized: {
+        title: 'Payment Authorized',
+        body: `Payment for order ${order.orderId} is authorized. Production can begin.`,
+      },
+      production: {
         title: 'Printing Started',
         body: `Your order ${order.orderId} is being printed.`,
       },
-      finishing_mounting: {
-        title: 'Finishing Started',
-        body: `Your order ${order.orderId} is now in finishing and mounting.`,
+      supplier_self_qc: {
+        title: 'Quality Check',
+        body: `Your order ${order.orderId} is in supplier quality check.`,
       },
-      quality_checked: {
-        title: 'Quality Checked',
-        body: `Your order ${order.orderId} passed quality check.`,
+      file_rejected: {
+        title: 'File Rejected',
+        body: `Your order ${order.orderId} file was rejected. Please review the details and upload a replacement.`,
       },
       ready_for_dispatch: {
         title: 'Ready for Dispatch',
@@ -2067,17 +3226,25 @@ export class OrdersService {
         title: 'Picked Up',
         body: `Your order ${order.orderId} has been picked up.`,
       },
-      on_the_way: {
-        title: 'On The Way',
-        body: `Your order ${order.orderId} is on the way!`,
-      },
-      arrived_at_destination: {
-        title: 'Rider Arrived',
-        body: `Your delivery for ${order.orderId} has arrived!`,
+      out_for_delivery: {
+        title: 'Out for Delivery',
+        body: `Your order ${order.orderId} is out for delivery!`,
       },
       delivered: {
-        title: 'Delivered',
-        body: `Your order ${order.orderId} has been delivered. Thank you!`,
+        title: 'Order Delivered',
+        body: `Your order ${order.orderId} was delivered. You have 24 hours to report a concern if there are any print or delivery issues.`,
+      },
+      collected_by_customer: {
+        title: 'Order Collected',
+        body: `Your order ${order.orderId} was collected. You have 24 hours to report a concern if there are any print or delivery issues.`,
+      },
+      issue_window_open: {
+        title: 'Report a Concern Available',
+        body: `Please check order ${order.orderId}. You can report a concern within 24 hours if there are any print, damage, or delivery issues. Open the order and tap Report a Concern.`,
+      },
+      completed: {
+        title: 'Order Completed',
+        body: `Your order ${order.orderId} is complete.`,
       },
       cancelled: {
         title: 'Order Cancelled',
@@ -2120,12 +3287,18 @@ export class OrdersService {
       const fcmToken = await this.usersService.getFcmToken(existing.userId);
       if (fcmToken && statusMsg) {
         const progressByStatus: Partial<Record<OrderStatus, string>> = {
-          [OrderStatus.ORDER_PLACED]: '1',
-          [OrderStatus.PRINTING_IN_PROGRESS]: '2',
-          [OrderStatus.QUALITY_CHECKED]: '3',
-          [OrderStatus.ON_THE_WAY]: '4',
-          [OrderStatus.ARRIVED_AT_DESTINATION]: '4',
+          [OrderStatus.SUBMITTED]: '1',
+          [OrderStatus.NEEDS_QA]: '1',
+          [OrderStatus.APPROVED_FOR_MATCHING]: '2',
+          [OrderStatus.PAYMENT_AUTHORIZED]: '2',
+          [OrderStatus.PRODUCTION]: '2',
+          [OrderStatus.SUPPLIER_SELF_QC]: '3',
+          [OrderStatus.READY_FOR_DISPATCH]: '3',
+          [OrderStatus.RIDER_ASSIGNED]: '3',
+          [OrderStatus.PICKED_UP]: '4',
+          [OrderStatus.OUT_FOR_DELIVERY]: '4',
           [OrderStatus.DELIVERED]: '5',
+          [OrderStatus.COLLECTED_BY_CUSTOMER]: '5',
         };
         const progressCurrent = progressByStatus[orderStatus];
         const pushData = Object.fromEntries(
@@ -2190,7 +3363,7 @@ export class OrdersService {
     // slotted batch and the new status is terminal (cancelled / declined).
     if (
       (orderStatus === OrderStatus.CANCELLED ||
-        orderStatus === OrderStatus.FILE_DECLINED) &&
+        orderStatus === OrderStatus.FILE_REJECTED) &&
       order.batchOrderId != null
     ) {
       try {
@@ -2211,7 +3384,7 @@ export class OrdersService {
     // Notify admins of cancellation / decline
     if (
       orderStatus === OrderStatus.CANCELLED ||
-      orderStatus === OrderStatus.FILE_DECLINED
+      orderStatus === OrderStatus.FILE_REJECTED
     ) {
       const type =
         orderStatus === OrderStatus.CANCELLED

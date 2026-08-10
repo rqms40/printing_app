@@ -27,8 +27,20 @@ Per-surface checks (lint/build/test for server, admin, mobile, landing) are
 listed under "Development Commands" in AGENTS.md — run the owning surface's
 checks before reporting done. The stack requires `JWT_SECRET`, `MINIO_*`, and
 `GRIDGO_SEED_{CUSTOMER,RIDER,ADMIN}_PASSWORD` in an ignored `server/.env`.
-Seeded accounts: `maria@gridgo.ph` (customer), `juan@gridgo.ph` (rider),
-`admin@gridgo.ph` (admin).
+
+Marketplace pilot seed cast (`server/src/seed.ts` — passwords only in env, never
+committed):
+
+| Email | Role | Password env |
+|-------|------|----------------|
+| `maria@gridgo.ph` | `client` | `GRIDGO_SEED_CUSTOMER_PASSWORD` |
+| `supplier@gridgo.ph` | `supplier` | `GRIDGO_SEED_CUSTOMER_PASSWORD` |
+| `juan@gridgo.ph` | `rider` | `GRIDGO_SEED_RIDER_PASSWORD` |
+| `admin@gridgo.ph` | `ops_admin` | `GRIDGO_SEED_ADMIN_PASSWORD` |
+| `superadmin@gridgo.ph` | `super_admin` | `GRIDGO_SEED_ADMIN_PASSWORD` |
+
+Marketplace contract (non-mutating CI skeleton):
+`e2e/mobile-web/tests/marketplace-workflow.spec.ts`.
 
 ## The beta workflow (the flow this repo revolves around)
 

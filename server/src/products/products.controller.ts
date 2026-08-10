@@ -57,7 +57,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Post('categories')
   createCategory(@Body() dto: CreateCategoryDto) {
     return this.productsService.createCategory(dto);
@@ -65,7 +65,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('categories/:id')
   updateCategory(
     @Param('id', ParseIntPipe) id: number,
@@ -76,7 +76,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Delete('categories/:id')
   deleteCategory(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.deleteCategory(id);
@@ -92,7 +92,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Post('spec-definitions')
   createSpecDefinition(@Body() dto: CreateSpecDefinitionDto) {
     return this.productsService.createSpecDefinition(dto);
@@ -100,7 +100,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('spec-definitions/:id')
   updateSpecDefinition(
     @Param('id', ParseIntPipe) id: number,
@@ -111,7 +111,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Delete('spec-definitions/:id')
   deleteSpecDefinition(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.deleteSpecDefinition(id);
@@ -133,7 +133,7 @@ export class ProductsController {
   // to prevent NestJS from treating "reorder" as an id param
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('options/reorder')
   reorderOptions(@Body() dto: ReorderOptionsDto) {
     return this.productsService.reorderOptions(dto);
@@ -141,7 +141,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Post('options')
   createOption(@Body() dto: CreateSpecOptionDto) {
     return this.productsService.createOption(dto);
@@ -149,7 +149,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Post('spec-options')
   createOptionV2(@Body() dto: CreateSpecOptionV2Dto) {
     return this.productsService.createOptionV2(dto);
@@ -157,7 +157,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('options/:id')
   updateOption(
     @Param('id', ParseIntPipe) id: number,
@@ -168,7 +168,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Delete('options/:id')
   deleteOption(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.deleteOption(id);
@@ -176,7 +176,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('spec-options/:id')
   updateOptionV2(
     @Param('id', ParseIntPipe) id: number,
@@ -195,7 +195,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Post('addons')
   createAddon(@Body() dto: CreateAddonDto) {
     return this.productsService.createAddon(dto);
@@ -203,7 +203,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('addons/:id')
   updateAddon(
     @Param('id', ParseIntPipe) id: number,
@@ -214,7 +214,7 @@ export class ProductsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Delete('addons/:id')
   deleteAddon(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.deleteAddon(id);

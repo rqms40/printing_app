@@ -9,24 +9,37 @@ import {
   humanizeEnumValue,
   type AdminUserRecord,
 } from "@/utils/api-normalizers";
+import { isAdminCapableRole } from "@/types/enums";
 
 const { Text } = Typography;
 
 const ROLE_COLORS: Record<string, string> = {
+  client: "blue",
   customer: "blue",
+  supplier: "purple",
   rider: "gold",
+  ops_admin: "red",
+  super_admin: "magenta",
   admin: "red",
 };
 
 const AVATAR_BG: Record<string, string> = {
+  client: "#1A2A3A",
   customer: "#1A2A3A",
+  supplier: "#2A1A2A",
   rider: "#2A2A1A",
+  ops_admin: "#2A1A1A",
+  super_admin: "#2A1A2A",
   admin: "#2A1A1A",
 };
 
 const AVATAR_FG: Record<string, string> = {
+  client: "#42A5F5",
   customer: "#42A5F5",
+  supplier: "#AB47BC",
   rider: "#FFDE58",
+  ops_admin: "#EF5350",
+  super_admin: "#EC407A",
   admin: "#EF5350",
 };
 
@@ -113,13 +126,16 @@ export function UserList() {
           />
           <Space>
             <Tag color="blue" style={{ margin: 0, padding: "2px 10px" }}>
-              {visibleUsers.filter((u) => u.role === "customer").length} Customers
+              {visibleUsers.filter(
+                (u) => u.role === "client" || u.role === "customer",
+              ).length}{" "}
+              Clients
             </Tag>
             <Tag color="gold" style={{ margin: 0, padding: "2px 10px" }}>
               {visibleUsers.filter((u) => u.role === "rider").length} Riders
             </Tag>
             <Tag color="red" style={{ margin: 0, padding: "2px 10px" }}>
-              {visibleUsers.filter((u) => u.role === "admin").length} Admins
+              {visibleUsers.filter((u) => isAdminCapableRole(u.role)).length} Admins
             </Tag>
           </Space>
         </Space>
@@ -239,9 +255,11 @@ export function UserList() {
               </Tag>
             )}
             filters={[
-              { text: "Customer", value: "customer" },
+              { text: "Client", value: "client" },
+              { text: "Supplier", value: "supplier" },
               { text: "Rider", value: "rider" },
-              { text: "Admin", value: "admin" },
+              { text: "Ops Admin", value: "ops_admin" },
+              { text: "Super Admin", value: "super_admin" },
             ]}
             onFilter={(value, record: AdminUserRecord) => record.role === value}
           />

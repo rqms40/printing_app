@@ -18,14 +18,17 @@ import {
   authenticateRealtimeSocket,
   reauthorizeRealtimeSocket,
 } from '../common/realtime/realtime-socket-auth';
-import { UserRole } from '../users/entities/user.entity';
+import { isAdminRole, UserRole } from '../users/entities/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FirebaseService } from '../firebase/firebase.service';
 
+/** Map account roles → chat actor labels (message/conversation domain). */
 const CHAT_ACTOR_ROLE_BY_USER_ROLE: Record<UserRole, ChatActorRole> = {
-  [UserRole.ADMIN]: 'admin',
-  [UserRole.CUSTOMER]: 'customer',
+  [UserRole.CLIENT]: 'customer',
+  [UserRole.SUPPLIER]: 'customer',
   [UserRole.RIDER]: 'rider',
+  [UserRole.OPS_ADMIN]: 'admin',
+  [UserRole.SUPER_ADMIN]: 'admin',
 };
 
 interface ChatSocketData {
@@ -80,7 +83,7 @@ export class ChatGateway implements OnGatewayConnection {
       client.disconnect();
       return;
     }
-    if (identity.role === UserRole.ADMIN) {
+    if (isAdminRole(identity.role)) {
       await client.join('admin_inbox');
     }
     this.realtimeSessions.register(identity.id, client);

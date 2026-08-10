@@ -12,6 +12,7 @@ import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { ExternalDeliveriesController } from './external-deliveries.controller';
 import { OrdersGateway } from './orders.gateway';
+import { PaymentTimeoutScheduler } from './payment-timeout.scheduler';
 import { UsersModule } from '../users/users.module';
 import { CreditsModule } from '../credits/credits.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -25,6 +26,13 @@ import { TamSurveysModule } from '../tam-surveys/tam-surveys.module';
 import { ProductsModule } from '../products/products.module';
 import { DispatchPlan } from '../riders/entities/dispatch-plan.entity';
 import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
+import { AuditModule } from '../audit/audit.module';
+import { PaymentsModule } from '../payments/payments.module';
+import { QualityModule } from '../quality/quality.module';
+import { GeoZonesModule } from '../geo-zones/geo-zones.module';
+import { PayoutsModule } from '../payouts/payouts.module';
+import { IssuesModule } from '../issues/issues.module';
+import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 
 @Module({
   imports: [
@@ -39,6 +47,7 @@ import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.mod
       DeliveryDestination,
       FileMetadata,
       DispatchPlan,
+      SupplierAssignment,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -56,8 +65,14 @@ import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.mod
     PrinterProfileModule,
     ProductsModule,
     RealtimeSessionsModule,
+    AuditModule,
+    PaymentsModule,
+    QualityModule,
+    GeoZonesModule,
+    PayoutsModule,
+    IssuesModule,
   ],
-  providers: [OrdersService, OrdersGateway],
+  providers: [OrdersService, OrdersGateway, PaymentTimeoutScheduler],
   controllers: [OrdersController, ExternalDeliveriesController],
   exports: [OrdersService, OrdersGateway],
 })

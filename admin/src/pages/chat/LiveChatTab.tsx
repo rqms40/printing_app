@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Layout, Tabs, theme } from "antd";
 import { useChatInbox } from "@/hooks/useChat";
 import { ConversationList } from "@/components/chat/ConversationList";
@@ -18,6 +19,7 @@ const FILTER_TABS: { key: FilterKey; label: string }[] = [
 
 export function LiveChatTab() {
   const { token } = theme.useToken();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { conversations, assignConversation, closeConversation, clearUnread } =
     useChatInbox();
   const [activeConversation, setActiveConversation] =
@@ -27,6 +29,19 @@ export function LiveChatTab() {
   useEffect(() => {
     clearUnread();
   }, [clearUnread]);
+
+  useEffect(() => {
+    const convIdParam = searchParams.get("convId");
+    if (convIdParam && conversations.length > 0) {
+      const targetId = parseInt(convIdParam, 10);
+      const targetConv = conversations.find((c) => c.id === targetId);
+      if (targetConv) {
+        setActiveConversation(targetConv);
+        // Clear param so it doesn't get stuck if they click another chat
+        setSearchParams(new URLSearchParams(), { replace: true });
+      }
+    }
+  }, [searchParams, conversations, setSearchParams]);
 
   const filtered = useMemo(() => {
     switch (filter) {

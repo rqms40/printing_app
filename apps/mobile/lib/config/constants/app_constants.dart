@@ -17,6 +17,13 @@ class AppConstants {
     defaultValue: false,
   );
 
+  /// When true, checkout may offer live GCash/Maya rails (sandbox/dev only).
+  /// Default off — marketplace pilot rails are Pilot Credits + COD.
+  static const bool enableSandboxPayments = bool.fromEnvironment(
+    'ENABLE_SANDBOX_PAYMENTS',
+    defaultValue: false,
+  );
+
   // ---------------------------------------------------------------------------
   // File size limits (in MB)
   // ---------------------------------------------------------------------------

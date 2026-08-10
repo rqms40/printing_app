@@ -302,7 +302,7 @@ describe('atomic credit accounting (e2e)', () => {
            payment_method, payment_status, order_status, delivery_option
          ) VALUES (
            'ORD-LEGACY-INDIVIDUAL', $1, 'paper', 40, 20,
-           'gridCredits', 'paid', 'order_placed', 'pickup'
+           'gridCredits', 'paid', 'submitted', 'pickup'
          ) RETURNING id`,
         [user.id],
       );
@@ -429,7 +429,7 @@ describe('atomic credit accounting (e2e)', () => {
       );
       await service.updateStatus(
         order.id,
-        OrderStatus.FILE_VERIFIED,
+        OrderStatus.APPROVED_FOR_MATCHING,
         {},
         {
           actorUserId: fixture.userId,
@@ -444,7 +444,7 @@ describe('atomic credit accounting (e2e)', () => {
       ]);
       const statusAttempt = service.updateStatus(
         order.id,
-        OrderStatus.PRINTING_IN_PROGRESS,
+        OrderStatus.PAYMENT_AUTHORIZED,
         {},
         {
           actorUserId: fixture.userId,
@@ -478,7 +478,7 @@ describe('atomic credit accounting (e2e)', () => {
           [order.id],
         ),
       ).resolves.toEqual([
-        { order_status: 'printing_in_progress', payment_status: 'paid' },
+        { order_status: 'payment_authorized', payment_status: 'paid' },
       ]);
       await expect(
         dataSource.query(
@@ -506,7 +506,7 @@ describe('atomic credit accounting (e2e)', () => {
       );
       await service.updateStatus(
         order.id,
-        OrderStatus.FILE_VERIFIED,
+        OrderStatus.APPROVED_FOR_MATCHING,
         {},
         {
           actorUserId: fixture.userId,
@@ -526,7 +526,7 @@ describe('atomic credit accounting (e2e)', () => {
       await waitForOrderLockWaiters(dataSource, 1);
       const statusAttempt = service.updateStatus(
         order.id,
-        OrderStatus.PRINTING_IN_PROGRESS,
+        OrderStatus.PAYMENT_AUTHORIZED,
         {},
         {
           actorUserId: fixture.userId,
@@ -628,8 +628,8 @@ describe('atomic credit accounting (e2e)', () => {
           [fixture.batchId],
         ),
       ).resolves.toEqual([
-        { order_status: 'order_placed' },
-        { order_status: 'order_placed' },
+        { order_status: 'submitted' },
+        { order_status: 'submitted' },
       ]);
       expect(creditEvent).not.toHaveBeenCalled();
       expect(slot.gateway.notifyDateChanged).not.toHaveBeenCalled();
@@ -692,8 +692,8 @@ describe('atomic credit accounting (e2e)', () => {
           [fixture.batchId],
         ),
       ).resolves.toEqual([
-        { order_status: 'order_placed' },
-        { order_status: 'order_placed' },
+        { order_status: 'submitted' },
+        { order_status: 'submitted' },
       ]);
     } finally {
       await dataSource.destroy();
@@ -857,9 +857,9 @@ describe('atomic credit accounting (e2e)', () => {
          delivery_option
        ) VALUES
          ('ORD-10001', $1, $2, 'paper', 20, 0, 'gridCredits', 'paid',
-          'order_placed', 'pickup'),
+          'submitted', 'pickup'),
          ('ORD-10002', $1, $2, 'paper', 20, 0, 'gridCredits', 'paid',
-          'order_placed', 'pickup')`,
+          'submitted', 'pickup')`,
       [user.id, batch.id],
     );
     return { userId: user.id, batchId: batch.id, batchRef: batch.batch_ref };

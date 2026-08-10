@@ -22,7 +22,7 @@ String _labelFor(PaymentMethod m) {
     case PaymentMethod.cod:
       return 'Cash on Delivery';
     case PaymentMethod.gridCredits:
-      return 'GRIDGO Credits';
+      return 'Pilot Credits';
   }
 }
 
@@ -157,7 +157,7 @@ class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
               if (creditsOnlyMode) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Beta orders use GRIDGO Credits only.',
+                  'Beta orders use Pilot Credits only.',
                   style: AppTypography.caption.copyWith(
                     color: colors.onSurfaceDim,
                     fontSize: 11,

@@ -8,7 +8,7 @@ import { Model as Phone } from './PhoneModel' // Make sure you have this file in
 const isMobile = () => window.innerWidth < 768
 
 // ─── GRIDGO text layers (zero-gravity scatter) ───────────────────────────────
-function GridTextLayer({ index }: { index: number }) {
+function GridTextLayer({ index, isDarkMode }: { index: number, isDarkMode?: boolean }) {
   const mesh = useRef<(THREE.Mesh & { fillOpacity: number; outlineOpacity: number })>(null)
 
   // Each layer has a fixed offset so the stack looks tight at rest
@@ -29,6 +29,9 @@ function GridTextLayer({ index }: { index: number }) {
     // All layers pull straight back on Z (no X/Y drift)
     const retreatZ = index === 0 ? 1.5 : 2.5 + index * 1.2
     mesh.current.position.z = THREE.MathUtils.lerp(baseZ, baseZ - retreatZ, ease)
+
+    // Scroll the text UP naturally with the page (1 vh is roughly 6.6 units in this camera setup)
+    mesh.current.position.y = vh * 6.6
 
     // ── Viewport-responsive scale ─────────────────────────────────────────
     // Camera z=8, vertical fov=45° → visible height = 6.63 units.
@@ -53,6 +56,11 @@ function GridTextLayer({ index }: { index: number }) {
 
     // Keep rotation absolutely still
     mesh.current.rotation.set(0, 0, 0)
+
+    // Force troika text to sync its properties
+    if (typeof mesh.current.sync === 'function') {
+      mesh.current.sync()
+    }
   })
 
   return (
@@ -61,9 +69,9 @@ function GridTextLayer({ index }: { index: number }) {
       fontSize={4.15}
       fontWeight={900}
       letterSpacing={0.28}
-      color="white"
+      color={isDarkMode ? "white" : "#111111"}
       outlineWidth={index === 0 ? 0 : 0.025}
-      outlineColor="#ffffff"
+      outlineColor={isDarkMode ? "#ffffff" : "#111111"}
       fillOpacity={baseAlpha}
       position={[0, 0, baseZ]}
     >
@@ -72,11 +80,11 @@ function GridTextLayer({ index }: { index: number }) {
   )
 }
 
-function GridTextLayers() {
+function GridTextLayers({ isDarkMode }: { isDarkMode?: boolean }) {
   return (
     <group>
       {[0, 1, 2, 3, 4].map(i => (
-        <GridTextLayer key={i} index={i} />
+        <GridTextLayer key={i} index={i} isDarkMode={isDarkMode} />
       ))}
     </group>
   )
@@ -110,50 +118,27 @@ function getPhoneState(vh: number, fromBottomVh: number) {
   const BETA_ROT_Z = 0.4       // + = leans left,      - = leans right
   // ╚══════════════════════════════════════════════╝
 
-  if (vh <= 1.0) {
-    const t = THREE.MathUtils.clamp(vh, 0, 1)
-    const x = mobile ? THREE.MathUtils.lerp(-0.08, 0.04, t) : 0.02
-    const y = mobile
-      ? THREE.MathUtils.lerp(0, 1.5, t)
-      : THREE.MathUtils.lerp(0, 1.2, t)
-    const scale = mobile
-      ? THREE.MathUtils.lerp(0.92, 0.96, t)
-      : THREE.MathUtils.lerp(1.16, 1.16, t)
-
-    return {
-      pos: [x, y, 0.35] as [number, number, number],
-      rot: [HERO_ROT_X, HERO_ROT_Y, HERO_ROT_Z] as [number, number, number],
-      scale,
-    }
-  }
-
   if (fromBottomVh <= 1.2) {
     const t = THREE.MathUtils.clamp(1.2 - fromBottomVh, 0, 1.2) / 1.2
+    
+    // Adjust final target for mobile to ensure it stays on-screen
+    const targetX = mobile ? -0.8 : -2.5
+    const targetScale = mobile ? 1.3 : 1.8
+    
     return {
       pos: [
-        THREE.MathUtils.lerp(-8, -2.5, Math.pow(t, 2)),
+        THREE.MathUtils.lerp(-8, targetX, Math.pow(t, 2)),
         THREE.MathUtils.lerp(8, -0.2, t),
         0,
       ] as [number, number, number],
       rot: [BETA_ROT_X, BETA_ROT_Y, BETA_ROT_Z] as [number, number, number],
-      scale: THREE.MathUtils.lerp(0.5, 1.8, t),
-    }
-  }
-
-  if (vh > 1.0 && vh <= 2.0) {
-    const t = THREE.MathUtils.clamp(vh - 1.0, 0, 1)
-    const startY = mobile ? 4.0 : 1.5
-    const startScale = mobile ? 0.9 : 1.4
-    return {
-      pos: [0, THREE.MathUtils.lerp(startY, 12, t), 0] as [number, number, number],
-      rot: [0, THREE.MathUtils.lerp(0, Math.PI, t), 0] as [number, number, number],
-      scale: THREE.MathUtils.lerp(startScale, 0.5, t),
+      scale: THREE.MathUtils.lerp(0.5, targetScale, t),
     }
   }
 
   return {
     pos: [0, 12, 0] as [number, number, number],
-    rot: [0, Math.PI, 0] as [number, number, number],
+    rot: [HERO_ROT_X, HERO_ROT_Y, HERO_ROT_Z] as [number, number, number],
     scale: 0.5,
   }
 }
@@ -161,6 +146,13 @@ function getPhoneState(vh: number, fromBottomVh: number) {
 // ─── Phone rig ──────────────────────────────────────────────────────────────
 function PhoneRig() {
   const group = useRef<THREE.Group>(null)
+  const [mobile, setMobile] = React.useState(window.innerWidth < 768)
+
+  React.useEffect(() => {
+    const handleResize = () => setMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   useFrame(() => {
     if (!group.current) return
@@ -169,9 +161,28 @@ function PhoneRig() {
     const innerHeight = window.innerHeight
     const vh = scrollY / innerHeight
     const maxScroll = document.documentElement.scrollHeight - innerHeight
-    const fromBottomVh = Math.max(0, (maxScroll - scrollY) / innerHeight)
+    
+    const footer = document.querySelector('footer')
+    const footerHeight = footer ? footer.offsetHeight : 0
+    
+    const maxScrollBeta = Math.max(0, maxScroll - footerHeight)
+    
+    let fromBottomVh = (maxScrollBeta - scrollY) / innerHeight
+    let footerScrollVh = 0
+    
+    if (fromBottomVh < 0) {
+      footerScrollVh = -fromBottomVh
+      fromBottomVh = 0
+    }
 
     const target = getPhoneState(vh, fromBottomVh)
+    
+    // Apply scroll offset if scrolling into footer
+    // In 3D space, moving up is positive Y.
+    // 6.627 is roughly the visible height in 3D units for fov 45, z=8
+    const visibleHeightUnits = 2 * Math.tan((45 / 2) * (Math.PI / 180)) * 8
+    target.pos[1] += footerScrollVh * visibleHeightUnits
+
     const lf = 0.08 // lerp factor
 
     group.current.position.x = THREE.MathUtils.lerp(group.current.position.x, target.pos[0], lf)
@@ -184,7 +195,7 @@ function PhoneRig() {
   })
 
   return (
-    <group ref={group} scale={1.8}>
+    <group ref={group} position={[0, 12, 0]} rotation={[-1.42, 0.08, 0.28]} scale={0.5}>
       <Float speed={1.5} rotationIntensity={0.05} floatIntensity={0.2}>
         <Phone />
       </Float>
@@ -223,7 +234,15 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 // ─── Scene export ────────────────────────────────────────────────────────────
-export function PhoneScene() {
+export function PhoneScene({ isDarkMode }: { isDarkMode?: boolean }) {
+  const [mobile, setMobile] = React.useState(window.innerWidth < 768)
+
+  React.useEffect(() => {
+    const handleResize = () => setMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   return (
     <div className="fixed inset-0 pointer-events-none z-30">
       <ErrorBoundary>
@@ -242,17 +261,18 @@ export function PhoneScene() {
           <Environment preset="city" />
 
           <CameraRig />
-          <GridTextLayers />
-          <PhoneRig />
-
-          <ContactShadows
-            position={[0, -2.5, 0]}
-            opacity={0.3}
-            scale={12}
-            blur={2.5}
-            far={5}
-            color="#FFDE58"
-          />
+          
+          <group visible={!mobile}>
+            <PhoneRig />
+            <ContactShadows
+              position={[0, -2.5, 0]}
+              opacity={0.3}
+              scale={12}
+              blur={2.5}
+              far={5}
+              color="#FFDE58"
+            />
+          </group>
         </Canvas>
       </ErrorBoundary>
     </div>

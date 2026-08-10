@@ -12,6 +12,30 @@ npm test
 
 `npm test` serves `apps/mobile/build/web` on `127.0.0.1:8091` and runs Chromium checks at desktop and narrow mobile viewports.
 
+## Marketplace Workflow Contract
+
+The managed marketplace pilot contract lives in `tests/marketplace-workflow.spec.ts`.
+It records the Super Admin → Ops → Client → Supplier → Rider → payout path from
+the migration plan (Phase 11) and asserts plan/README presence. **Default CI
+mode is non-mutating** and does not start a web server or require docker-compose.
+
+Run the non-mutating contract checks:
+
+```sh
+npm test -- tests/marketplace-workflow.spec.ts
+```
+
+Run the CI-style contract checks without starting a local web server:
+
+```sh
+MOBILE_WEB_E2E_NO_SERVER=1 npm test -- tests/marketplace-workflow.spec.ts
+```
+
+Live preflight / destructive marketplace flows are not wired yet; when added they
+must use explicit env flags (for example `GRIDGO_RUN_MARKETPLACE_FLOW_E2E=1`)
+and isolated loopback stacks only. Until then, keep the beta workflow contract
+below as the historical multi-stop delivery harness.
+
 ## Beta Workflow Regression
 
 The beta workflow contract lives in `tests/beta-workflow.spec.ts`. It records the admin, customer, and rider path from enabling beta mode through customer survey lockout, and it links audited regressions to GitHub issues.

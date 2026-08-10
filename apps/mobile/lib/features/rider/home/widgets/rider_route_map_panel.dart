@@ -41,7 +41,9 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
     for (final stop in _planned) {
       final geometry = stop.planStop?.geometry;
       if (geometry != null) points.addAll(geometry.points);
-      points.add(stop.planStop!.destination);
+      // Prefer order destination pin so it matches Delivery Info address text.
+      final pin = stop.pinDestination ?? stop.planStop!.destination;
+      points.add(pin);
     }
     if (points.length == 1) points.add(MapHelpers.davaoCenter);
     return points;
@@ -139,7 +141,8 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
                         MapHelpers.shopMarker(point: widget.planOrigin ?? MapHelpers.shopPoint),
                         for (final stop in _planned)
                           _numberedStopMarker(
-                            stop.planStop!.destination,
+                            stop.pinDestination ??
+                                stop.planStop!.destination,
                             stop.planSequence!,
                           ),
                         if (livePoint != null)

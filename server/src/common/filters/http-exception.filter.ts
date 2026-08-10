@@ -53,12 +53,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (status >= 500 || !(exception instanceof HttpException)) {
       const err = exception as Error;
       this.logger.error(
-        `${request?.method} ${request?.url} → ${status} ${err?.message ?? exception}`,
+        `${request?.method} ${request?.url} ΓåÆ ${status} ${err?.message ?? exception}`,
         err?.stack,
       );
     } else {
       this.logger.warn(
-        `${request?.method} ${request?.url} → ${status} ${JSON.stringify(responseBody.message)}`,
+        `${request?.method} ${request?.url} ΓåÆ ${status} ${JSON.stringify(responseBody.message)}`,
       );
     }
 

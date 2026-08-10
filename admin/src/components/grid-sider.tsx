@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMenu, useNavigation } from "@refinedev/core";
+import { useMemo, useState } from "react";
+import { useGetIdentity, useMenu, useNavigation } from "@refinedev/core";
 import type { ITreeMenu } from "@refinedev/core";
 import { Button, ConfigProvider, Layout, Menu, Tag, theme } from "antd";
 import type { MenuProps } from "antd";
@@ -7,14 +7,74 @@ import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { useNotificationsContext } from "@/context/notifications-context";
 import { GridLogo } from "@/components/grid-logo";
 import type { BadgeCounts } from "@/types/notification";
+import { isSupplierRole, isSuperAdminRole } from "@/types/enums";
+import type { AdminIdentity } from "@/utils/api-normalizers";
 
 const BADGE_MAP: Partial<Record<string, keyof BadgeCounts>> = {
   "admin/orders": "newOrders",
   "credit-requests": "pendingTopUps",
 };
 
+/** Resources exclusive to the supplier portal (not shown to ops). */
+const SUPPLIER_PORTAL_RESOURCES = new Set([
+  "supplier-jobs",
+  "supplier-payouts",
+]);
+
+/** Super Admin–only governance resources (hidden from ops_admin). */
+const SUPER_ONLY_RESOURCES = new Set([
+  "super-verification",
+  "super-zones",
+  "super-audit",
+  "super-finance",
+  "super-admin",
+]);
+
 interface GridSiderProps {
   initialCollapsed?: boolean;
+}
+
+type MenuRoleMode = "unknown" | "supplier" | "ops" | "super";
+
+/**
+ * Role-filter the Refine menu.
+ * - unknown: default-deny — hide ops and supplier items until identity loads
+ *   (avoids flashing full ops nav for suppliers during getIdentity).
+ * - supplier: only supplier portal resources
+ * - ops: non-supplier, non-super-only resources
+ * - super: ops resources + super governance pages
+ */
+function filterMenuForRole(
+  items: ITreeMenu[],
+  mode: MenuRoleMode,
+): ITreeMenu[] {
+  if (mode === "unknown") return [];
+
+  return items
+    .map((item) => {
+      const isSupplierRes = SUPPLIER_PORTAL_RESOURCES.has(item.name);
+      const isSuperRes = SUPER_ONLY_RESOURCES.has(item.name);
+      if (mode === "supplier") {
+        if (isSupplierRes) return item;
+        if (item.children?.length) {
+          const children = filterMenuForRole(item.children, mode);
+          if (children.length === 0) return null;
+          return { ...item, children };
+        }
+        return null;
+      }
+      // Ops + Super: hide supplier portal
+      if (isSupplierRes) return null;
+      // Ops only: hide super-only resources
+      if (mode === "ops" && isSuperRes) return null;
+      if (item.children?.length) {
+        const children = filterMenuForRole(item.children, mode);
+        if (children.length === 0 && !item.list) return null;
+        return { ...item, children };
+      }
+      return item;
+    })
+    .filter((item): item is ITreeMenu => item != null);
 }
 
 export function GridSider({ initialCollapsed = false }: GridSiderProps) {
@@ -23,10 +83,36 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
   const { menuItems, selectedKey } = useMenu();
   const { push } = useNavigation();
   const { badgeCounts } = useNotificationsContext();
+  const { data: identity, isLoading: identityLoading } =
+    useGetIdentity<AdminIdentity>();
+  const roleKnown = !identityLoading && identity?.role != null;
+  const supplier = isSupplierRole(identity?.role);
+  const superAdmin = isSuperAdminRole(identity?.role);
+  const menuMode: MenuRoleMode = !roleKnown
+    ? "unknown"
+    : supplier
+      ? "supplier"
+      : superAdmin
+        ? "super"
+        : "ops";
 
-  const defaultOpenKeys = menuItems
+  const visibleMenuItems = useMemo(
+    () => filterMenuForRole(menuItems, menuMode),
+    [menuItems, menuMode],
+  );
+
+  const defaultOpenKeys = visibleMenuItems
     .filter((item) => item.children?.some((child) => child.key === selectedKey))
-    .map((item) => item.key);
+    .map((item) => item.key)
+    .filter((key): key is string => typeof key === "string");
+
+  const brandLabel = !roleKnown
+    ? "GRIDGO"
+    : supplier
+      ? "GRIDGO Supplier"
+      : superAdmin
+        ? "GRIDGO Super"
+        : "GRIDGO Admin";
 
   function buildItems(items: ITreeMenu[]): MenuProps["items"] {
     return items.map((item) => {
@@ -151,7 +237,7 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
                   : "opacity 0.15s 0.12s, max-width 0.2s",
               }}
             >
-              GRIDGO Admin
+              {brandLabel}
             </span>
           </div>
 
@@ -161,7 +247,7 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
               selectedKeys={[selectedKey]}
               defaultOpenKeys={defaultOpenKeys}
               mode="inline"
-              items={buildItems(menuItems)}
+              items={buildItems(visibleMenuItems)}
               style={{ background: "transparent", border: "none" }}
             />
           </div>

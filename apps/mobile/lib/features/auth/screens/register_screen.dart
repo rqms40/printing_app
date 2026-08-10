@@ -14,6 +14,7 @@ import 'package:printing_app/features/auth/widgets/gender_identity_selector.dart
 import 'package:printing_app/features/auth/widgets/password_strength_meter.dart';
 import 'package:printing_app/features/auth/widgets/password_visibility_toggle.dart';
 import 'package:printing_app/features/auth/widgets/registration_step_header.dart';
+import 'package:printing_app/features/supplier/models/supplier_service_focus.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 
 /// The redesigned 5-step registration flow. Account moves to position 2 so a
@@ -110,7 +111,25 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return;
       case _RegisterStep.craft:
         if (!_draft.hasCategory) {
-          setState(() => _stepError = 'Choose a category to continue');
+          setState(() => _stepError = 'Choose a lane to continue');
+          return;
+        }
+        if (_draft.isSupplierLane) {
+          if (!_draft.hasServiceFocus) {
+            setState(
+              () => _stepError =
+                  'Select and rank at least one service focus to continue',
+            );
+            return;
+          }
+          setState(() {
+            _draft = _draft.copyWith(profileField: 'print_shop');
+            _step = _RegisterStep.profile;
+          });
+          return;
+        }
+        if (_draft.isRiderLane) {
+          setState(() => _step = _RegisterStep.profile);
           return;
         }
         if (!_draft.hasField) {
@@ -201,8 +220,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           gender: draft.gender,
           ageRange: draft.ageRange,
           profileCategory: draft.profileCategory!,
-          profileField: draft.profileField!,
+          profileField: draft.isSupplierLane
+              ? 'print_shop'
+              : draft.profileField,
+          organization: draft.isSupplierLane && draft.fullName.isNotEmpty
+              ? draft.fullName
+              : null,
           printingPreferences: draft.printingPreferences,
+          serviceFocusRanks: draft.serviceFocusRanks,
         );
 
     // The router's post-registration redirect decides the destination: for a
@@ -642,15 +667,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
       case _RegisterStep.craft:
         final fields = profileFieldsForCategory(_draft.profileCategory);
+        final isSupplier = _draft.isSupplierLane;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const RegistrationStepHeader(
+            RegistrationStepHeader(
               index: 3,
               total: total,
               plateLabel: 'CRAFT',
-              title: 'What do you\nprint?',
-              subtitle: 'We preset your print style from your answer.',
+              title: isSupplier
+                  ? 'What does your\nshop print?'
+                  : 'What do you\nprint?',
+              subtitle: isSupplier
+                  ? 'Pick services and rank them — 1st is your main focus.'
+                  : 'We preset your print style from your answer.',
             ),
             const SizedBox(height: AppSpacing.xl),
             Text(
@@ -672,8 +702,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 onTap: () => setState(() {
                   _draft = _draft.copyWith(
                     profileCategory: category.value,
-                    profileField: null,
+                    profileField: category.value == 'supplier'
+                        ? 'print_shop'
+                        : null,
                     printingPreferences: const [],
+                    serviceFocusRanks: category.value == 'supplier'
+                        ? _draft.serviceFocusRanks
+                        : const [],
                   );
                   _stepError = null;
                 }),
@@ -681,7 +716,117 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               if (category != profileCategories.last)
                 const SizedBox(height: AppSpacing.sm),
             ],
-            if (_draft.hasCategory) ...[
+            if (_draft.hasCategory && isSupplier) ...[
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'SERVICE FOCUS (RANK BY PRIORITY)',
+                style: AppTypography.overline.copyWith(
+                  color: colors.onSurfaceDim,
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Tap to add, drag handles to reorder. Example: 1st Signages, '
+                '2nd Document Printing, 3rd Apparel.',
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final focus in SupplierServiceFocusCatalog.all)
+                    FilterChip(
+                      selected: _draft.serviceFocusRanks.contains(focus.key),
+                      label: Text(focus.label),
+                      onSelected: (_) {
+                        setState(() {
+                          final ranks =
+                              List<String>.from(_draft.serviceFocusRanks);
+                          if (ranks.contains(focus.key)) {
+                            ranks.remove(focus.key);
+                          } else {
+                            ranks.add(focus.key);
+                          }
+                          _draft = _draft.copyWith(serviceFocusRanks: ranks);
+                          _stepError = null;
+                        });
+                      },
+                      selectedColor: colors.brand.withValues(alpha: 0.22),
+                      checkmarkColor: colors.brand,
+                    ),
+                ],
+              ),
+              if (_draft.serviceFocusRanks.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  'YOUR RANKING',
+                  style: AppTypography.overline.copyWith(
+                    color: colors.onSurfaceDim,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _draft.serviceFocusRanks.length,
+                  onReorder: (oldIndex, newIndex) {
+                    setState(() {
+                      final ranks =
+                          List<String>.from(_draft.serviceFocusRanks);
+                      if (newIndex > oldIndex) newIndex -= 1;
+                      final item = ranks.removeAt(oldIndex);
+                      ranks.insert(newIndex, item);
+                      _draft = _draft.copyWith(serviceFocusRanks: ranks);
+                    });
+                  },
+                  itemBuilder: (context, index) {
+                    final key = _draft.serviceFocusRanks[index];
+                    final focus = SupplierServiceFocusCatalog.byKey(key);
+                    final rank = index + 1;
+                    final rankLabel = switch (rank) {
+                      1 => '1st',
+                      2 => '2nd',
+                      3 => '3rd',
+                      _ => '${rank}th',
+                    };
+                    return ListTile(
+                      key: ValueKey('rank-$key'),
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        radius: 16,
+                        backgroundColor: colors.brand.withValues(alpha: 0.2),
+                        child: Text(
+                          rankLabel,
+                          style: AppTypography.caption.copyWith(
+                            color: colors.brand,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        focus?.label ?? key,
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onBackground,
+                        ),
+                      ),
+                      trailing: ReorderableDragStartListener(
+                        index: index,
+                        child: Icon(
+                          Icons.drag_handle_rounded,
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ] else if (_draft.hasCategory && !_draft.isRiderLane) ...[
               const SizedBox(height: AppSpacing.lg),
               Text(
                 'YOUR FIELD',

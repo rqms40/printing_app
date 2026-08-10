@@ -130,6 +130,103 @@ class _RiderProfileScreenState extends ConsumerState<RiderProfileScreen> {
     });
   }
 
+  void _showEditProfileSheet(RiderProfileState profile) {
+    final colors = _colors(context);
+    final nameController = TextEditingController(text: profile.fullName);
+    final phoneController = TextEditingController(text: profile.phoneNumber);
+    var isSaving = false;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      backgroundColor: colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  left: AppSpacing.lg,
+                  right: AppSpacing.lg,
+                  top: AppSpacing.lg,
+                  bottom:
+                      AppSpacing.lg + MediaQuery.of(context).viewPadding.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: colors.disabled,
+                          borderRadius: AppRadius.borderFull,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      'Edit personal info',
+                      style: AppTypography.h3.copyWith(
+                        color: colors.onBackground,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppTextField(
+                      label: 'Full name',
+                      hintText: 'e.g. Juan Dela Cruz',
+                      controller: nameController,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppTextField(
+                      label: 'Phone number',
+                      hintText: 'e.g. +639123456789',
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    AppButton(
+                      label: 'Save changes',
+                      isFullWidth: true,
+                      isLoading: isSaving,
+                      onTap: isSaving
+                          ? null
+                          : () async {
+                              setSheetState(() => isSaving = true);
+                              final ok = await ref
+                                  .read(riderProfileProvider.notifier)
+                                  .updatePersonalInfo(
+                                    fullName: nameController.text.trim(),
+                                    phoneNumber: phoneController.text.trim(),
+                                  );
+                              if (!context.mounted) return;
+                              setSheetState(() => isSaving = false);
+                              if (ok) Navigator.pop(sheetContext);
+                            },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      nameController.dispose();
+      phoneController.dispose();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
@@ -251,6 +348,17 @@ class _RiderProfileScreenState extends ConsumerState<RiderProfileScreen> {
                 label: 'Phone',
                 value: profile.phoneNumber ?? 'Not set',
                 colors: colors,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                child: AppButton(
+                  label: 'Edit personal info',
+                  variant: AppButtonVariant.secondary,
+                  isFullWidth: true,
+                  icon: HugeIcons.strokeRoundedEdit02,
+                  onTap: () => _showEditProfileSheet(profile),
+                ),
               ),
               const SizedBox(height: AppSpacing.lg),
               _SectionHeader(label: 'VEHICLE INFO', colors: colors),

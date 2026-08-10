@@ -76,7 +76,7 @@ export class NotificationsService {
     orderRef?: string;
     metadata?: Record<string, unknown>;
   }): Promise<void> {
-    const admins = await this.usersService.findAllByRole('admin');
+    const admins = await this.usersService.findAdminUsers();
     if (admins.length === 0) return;
 
     const rows = admins.map((admin) =>

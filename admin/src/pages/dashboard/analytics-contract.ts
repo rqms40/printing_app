@@ -147,7 +147,7 @@ function getBucketKey(date: Date, period: DashboardAnalyticsPeriod) {
 }
 
 function isExcludedFromPaperDemand(status: OrderStatus) {
-  return status === "cancelled" || status === "file_declined";
+  return status === "cancelled" || status === "file_rejected";
 }
 
 export function deriveDashboardAnalyticsFromOrders(

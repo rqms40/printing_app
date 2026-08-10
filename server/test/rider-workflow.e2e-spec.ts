@@ -88,6 +88,81 @@ describe('Rider dispatch workflow (e2e)', () => {
     rider: `e2e-rider-${runId}@example.com`,
   };
 
+  async function readAssignmentOtps(assignmentId: number): Promise<{
+    pickupOtpCode: string | null;
+    deliveryOtpCode: string | null;
+  }> {
+    const row = await assignmentsRepo.findOneOrFail({
+      where: { id: assignmentId },
+      select: {
+        id: true,
+        pickupOtpCode: true,
+        deliveryOtpCode: true,
+      },
+    });
+    return {
+      pickupOtpCode: row.pickupOtpCode ?? null,
+      deliveryOtpCode: row.deliveryOtpCode ?? null,
+    };
+  }
+
+  async function uploadProofPhoto(
+    riderToken: string,
+    filename: string,
+  ): Promise<number> {
+    // Minimal 1x1 PNG
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const res = await request(app.getHttpServer())
+      .post('/api/files/upload')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .field('purpose', 'proof_of_delivery')
+      .attach('file', png, { filename, contentType: 'image/png' })
+      .expect(201);
+    return Number(res.body.id);
+  }
+
+  async function advanceStatus(
+    assignmentId: number,
+    riderToken: string,
+    status: DeliveryStatus,
+    extra: Record<string, unknown> = {},
+  ) {
+    if (status === DeliveryStatus.PICKED_UP) {
+      const { pickupOtpCode } = await readAssignmentOtps(assignmentId);
+      const fileId = await uploadProofPhoto(
+        riderToken,
+        `pickup-${assignmentId}.png`,
+      );
+      return request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${assignmentId}/status`)
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({
+          status,
+          otp: pickupOtpCode,
+          proof: { type: ProofOfDeliveryType.PHOTO, fileId },
+          ...extra,
+        });
+    }
+    if (status === DeliveryStatus.DELIVERED) {
+      const { deliveryOtpCode } = await readAssignmentOtps(assignmentId);
+      return request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${assignmentId}/status`)
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({
+          status,
+          otp: deliveryOtpCode,
+          ...extra,
+        });
+    }
+    return request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${assignmentId}/status`)
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ status, ...extra });
+  }
+
   beforeAll(async () => {
     if (!/^[a-z0-9_]+$/.test(isolatedDatabase)) {
       throw new Error('Unsafe isolated database identifier');
@@ -202,7 +277,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         email: emails.customer,
         passwordHash: 'not-used',
         fullName: 'E2E Customer',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
     );
@@ -211,7 +286,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         email: emails.admin,
         passwordHash: 'not-used',
         fullName: 'E2E Admin',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
     );
@@ -359,18 +434,17 @@ describe('Rider dispatch workflow (e2e)', () => {
     const transitions: Array<[DeliveryStatus, OrderStatus]> = [
       [DeliveryStatus.ACCEPTED, OrderStatus.RIDER_ASSIGNED],
       [DeliveryStatus.PICKED_UP, OrderStatus.PICKED_UP],
-      [DeliveryStatus.ON_THE_WAY, OrderStatus.ON_THE_WAY],
-      [DeliveryStatus.ARRIVED, OrderStatus.ARRIVED_AT_DESTINATION],
+      [DeliveryStatus.ON_THE_WAY, OrderStatus.OUT_FOR_DELIVERY],
+      [DeliveryStatus.ARRIVED, OrderStatus.OUT_FOR_DELIVERY],
     ];
 
     for (const [deliveryStatus, orderStatus] of transitions) {
-      await request(app.getHttpServer())
-        .patch(`/api/riders/assignments/${assignment.id}/status`)
-        .set('Authorization', `Bearer ${riderToken}`)
-        .send({ status: deliveryStatus })
+      await advanceStatus(assignment.id, riderToken, deliveryStatus)
         .expect(200)
         .expect((res) => {
           expect(res.body.status).toBe(deliveryStatus);
+          expect(res.body.pickupOtpCode).toBeUndefined();
+          expect(res.body.deliveryOtpCode).toBeUndefined();
         });
 
       await expect(
@@ -378,10 +452,11 @@ describe('Rider dispatch workflow (e2e)', () => {
       ).resolves.toMatchObject({ orderStatus });
     }
 
+    const { deliveryOtpCode } = await readAssignmentOtps(assignment.id);
     await request(app.getHttpServer())
       .patch(`/api/riders/assignments/${assignment.id}/status`)
       .set('Authorization', `Bearer ${riderToken}`)
-      .send({ status: DeliveryStatus.DELIVERED })
+      .send({ status: DeliveryStatus.DELIVERED, otp: deliveryOtpCode })
       .expect(400)
       .expect((res) => {
         expect(res.body.message).toBe('Proof of delivery is required');
@@ -392,17 +467,37 @@ describe('Rider dispatch workflow (e2e)', () => {
       .set('Authorization', `Bearer ${riderToken}`)
       .send({
         status: DeliveryStatus.DELIVERED,
+        otp: '000000',
         proof: {
           type: ProofOfDeliveryType.SIGNATURE,
           signatureData: signatureProof,
         },
       })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.message).toBe('Invalid OTP');
+      });
+
+    await advanceStatus(assignment.id, riderToken, DeliveryStatus.DELIVERED, {
+      proof: {
+        type: ProofOfDeliveryType.SIGNATURE,
+        signatureData: signatureProof,
+      },
+    })
       .expect(200)
       .expect((res) => {
         expect(res.body.status).toBe(DeliveryStatus.DELIVERED);
         expect(res.body.proofType).toBe(ProofOfDeliveryType.SIGNATURE);
         expect(res.body.proofSignatureData).toBe(signatureProof);
       });
+
+    // Double-complete is rejected.
+    await advanceStatus(assignment.id, riderToken, DeliveryStatus.DELIVERED, {
+      proof: {
+        type: ProofOfDeliveryType.SIGNATURE,
+        signatureData: signatureProof,
+      },
+    }).expect(400);
 
     await expect(
       ordersRepo.findOneOrFail({ where: { id: order.id } }),
@@ -441,16 +536,16 @@ describe('Rider dispatch workflow (e2e)', () => {
       },
       {
         from: OrderStatus.PICKED_UP,
-        to: OrderStatus.ON_THE_WAY,
+        to: OrderStatus.OUT_FOR_DELIVERY,
         actor: rider.id,
       },
       {
-        from: OrderStatus.ON_THE_WAY,
-        to: OrderStatus.ARRIVED_AT_DESTINATION,
+        from: OrderStatus.OUT_FOR_DELIVERY,
+        to: OrderStatus.OUT_FOR_DELIVERY,
         actor: rider.id,
       },
       {
-        from: OrderStatus.ARRIVED_AT_DESTINATION,
+        from: OrderStatus.OUT_FOR_DELIVERY,
         to: OrderStatus.DELIVERED,
         actor: rider.id,
       },
@@ -463,13 +558,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -619,11 +714,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       DeliveryStatus.PICKED_UP,
       DeliveryStatus.ON_THE_WAY,
     ]) {
-      await request(app.getHttpServer())
-        .patch(`/api/riders/assignments/${farAssignment.id}/status`)
-        .set('Authorization', `Bearer ${riderToken}`)
-        .send({ status })
-        .expect(200);
+      await advanceStatus(farAssignment.id, riderToken, status).expect(200);
     }
     await request(app.getHttpServer())
       .get(`/api/orders/${farOrder.id}`)
@@ -663,13 +754,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -775,14 +866,14 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         fcmToken: 'failing-customer-token',
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -851,13 +942,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -907,7 +998,7 @@ describe('Rider dispatch workflow (e2e)', () => {
     await request(app.getHttpServer())
       .patch('/api/orders/not-an-order-id/status')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ status: OrderStatus.FILE_VERIFIED })
+      .send({ status: OrderStatus.APPROVED_FOR_MATCHING })
       .expect(400);
 
     await request(app.getHttpServer())
@@ -931,7 +1022,7 @@ describe('Rider dispatch workflow (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/api/admin/orders/${deliveryOrder.id}/status`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ status: OrderStatus.COMPLETED_PICKUP })
+      .send({ status: OrderStatus.COLLECTED_BY_CUSTOMER })
       .expect(400);
     await request(app.getHttpServer())
       .post(`/api/admin/orders/${pickupOrder.id}/assign`)
@@ -971,13 +1062,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -1289,13 +1380,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
     ]);
@@ -1309,7 +1400,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         deliveryFee: 0,
         paymentMethod: 'cod',
         deliveryOption: 'pickup',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       }),
     );
     const adminToken = jwtService.sign({
@@ -1338,12 +1429,12 @@ describe('Rider dispatch workflow (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`/api/admin/orders/${order.id}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: OrderStatus.FILE_VERIFIED })
+        .send({ status: OrderStatus.APPROVED_FOR_MATCHING })
         .expect(500);
 
       await expect(
         ordersRepo.findOneOrFail({ where: { id: order.id } }),
-      ).resolves.toMatchObject({ orderStatus: OrderStatus.ORDER_PLACED });
+      ).resolves.toMatchObject({ orderStatus: OrderStatus.SUBMITTED });
       await expect(
         statusHistoryRepo.countBy({ orderId: order.id }),
       ).resolves.toBe(0);
@@ -1364,7 +1455,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
         isBetaUser: true,
         fileRetentionDays: 7,
@@ -1372,7 +1463,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -1452,11 +1543,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       DeliveryStatus.ON_THE_WAY,
       DeliveryStatus.ARRIVED,
     ]) {
-      await request(app.getHttpServer())
-        .patch(`/api/riders/assignments/${assignment.id}/status`)
-        .set('Authorization', `Bearer ${riderToken}`)
-        .send({ status })
-        .expect(200);
+      await advanceStatus(assignment.id, riderToken, status).expect(200);
     }
 
     const notificationCount = await notificationsRepo.countBy({
@@ -1488,6 +1575,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         .set('Authorization', `Bearer ${riderToken}`)
         .send({
           status: DeliveryStatus.DELIVERED,
+          otp: (await readAssignmentOtps(assignment.id)).deliveryOtpCode,
           proof: {
             type: ProofOfDeliveryType.SIGNATURE,
             signatureData: signatureProof,
@@ -1506,7 +1594,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       await expect(
         ordersRepo.findOneOrFail({ where: { id: order.id } }),
       ).resolves.toMatchObject({
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       });
       await expect(
         fileRepo.findOneOrFail({ where: { id: orderFile.id } }),

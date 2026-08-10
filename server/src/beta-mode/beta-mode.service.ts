@@ -327,7 +327,7 @@ export class BetaModeService {
       });
       if (!user) throw new NotFoundException(`User ${userId} not found`);
       if (
-        user.role !== UserRole.CUSTOMER ||
+        user.role !== UserRole.CLIENT ||
         !user.isBetaUser ||
         !user.betaCompletedAt
       ) {
@@ -417,7 +417,7 @@ export class BetaModeService {
   ): asserts user is User & { betaCompletedAt: Date } {
     if (!user) throw new NotFoundException(`User ${userId} not found`);
     if (
-      user.role !== UserRole.CUSTOMER ||
+      user.role !== UserRole.CLIENT ||
       !user.isBetaUser ||
       user.betaCompletedAt == null
     ) {
@@ -428,7 +428,7 @@ export class BetaModeService {
   }
 
   private assertCustomer(user: User, message: string): void {
-    if (user.role !== UserRole.CUSTOMER) {
+    if (user.role !== UserRole.CLIENT) {
       throw new ForbiddenException(message);
     }
   }

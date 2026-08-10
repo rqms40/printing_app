@@ -16,8 +16,10 @@ import {
   Tag,
 } from "antd";
 import {
+  DollarOutlined,
   ExclamationCircleOutlined,
   EnvironmentOutlined,
+  ShopOutlined,
   UserSwitchOutlined,
 } from "@ant-design/icons";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
@@ -47,6 +49,11 @@ import {
 } from "@/utils/api-normalizers";
 import { loadOrderFilePreview, type OrderFilePreview } from "./preview";
 import { ManualStatusCard } from "./components/manual-status-card";
+import {
+  adminOrderProgressPipeline,
+  isPickupDeliveryOption,
+  progressStepState,
+} from "@/utils/order-progress-pipeline";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -58,11 +65,26 @@ const DESTINATION_PIN_ICON = new DivIcon({
   iconAnchor: [12, 12],
 });
 
+function toCoordinate(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function hasCoordinates(destination?: OrderDestination | null) {
   return (
-    Number.isFinite(destination?.latitude) &&
-    Number.isFinite(destination?.longitude)
+    toCoordinate(destination?.latitude) != null &&
+    toCoordinate(destination?.longitude) != null
   );
+}
+
+function withPinnedCoordinates(
+  destination: OrderDestination,
+): OrderDestination | null {
+  const latitude = toCoordinate(destination.latitude);
+  const longitude = toCoordinate(destination.longitude);
+  if (latitude == null || longitude == null) return null;
+  return { ...destination, latitude, longitude };
 }
 
 function destinationTitle(destination: OrderDestination, index: number) {
@@ -78,20 +100,24 @@ function destinationAddress(destination: OrderDestination) {
   return destination.full_address || destination.address || "Pinned location";
 }
 
+/** Canonical delivery pins shared by Delivery Info and Pinned Delivery Map. */
 function getMappableDestinations(order: Order): OrderDestination[] {
   const seen = new Set<string>();
   const result: OrderDestination[] = [];
   const add = (destination?: OrderDestination | null) => {
-    if (!destination || !hasCoordinates(destination)) return;
+    if (!destination) return;
+    const pinned = withPinnedCoordinates(destination);
+    if (!pinned) return;
     const key =
-      destination.id != null
-        ? `id:${destination.id}`
-        : `${destination.latitude}:${destination.longitude}:${destinationAddress(destination)}`;
+      pinned.id != null
+        ? `id:${pinned.id}`
+        : `${pinned.latitude}:${pinned.longitude}:${destinationAddress(pinned)}`;
     if (seen.has(key)) return;
     seen.add(key);
-    result.push(destination);
+    result.push(pinned);
   };
 
+  // Prefer server-built destinations[], then order-level, then item drops.
   order.destinations?.forEach(add);
   add(order.delivery_address);
   order.items?.forEach((item) => add(item.delivery_address));
@@ -99,9 +125,20 @@ function getMappableDestinations(order: Order): OrderDestination[] {
   return result.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 }
 
+function destinationMapKey(destinations: OrderDestination[]): string {
+  return destinations
+    .map(
+      (d) =>
+        `${d.id ?? "x"}:${d.latitude}:${d.longitude}:${destinationAddress(d)}`,
+    )
+    .join("|");
+}
+
 function DestinationMapViewport({
+  positionsKey,
   positions,
 }: {
+  positionsKey: string;
   positions: LatLngExpression[];
 }) {
   const map = useMap();
@@ -113,7 +150,7 @@ function DestinationMapViewport({
       return;
     }
     map.fitBounds(new LatLngBounds(positions), { padding: [32, 32] });
-  }, [map, positions]);
+  }, [map, positions, positionsKey]);
 
   return null;
 }
@@ -130,11 +167,13 @@ function OrderDestinationMap({
         number,
       ],
   );
-  const center = positions[0] ?? ([7.0713113, 125.6123279] as [number, number]);
+  const center = positions[0] ?? ([7.064, 125.6079] as [number, number]);
+  const mapKey = destinationMapKey(destinations);
 
   return (
     <div style={{ height: 320, borderRadius: 8, overflow: "hidden" }}>
       <MapContainer
+        key={mapKey}
         center={center}
         zoom={15}
         style={{ height: "100%", width: "100%", zIndex: 1 }}
@@ -143,7 +182,7 @@ function OrderDestinationMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
         />
-        <DestinationMapViewport positions={positions} />
+        <DestinationMapViewport positionsKey={mapKey} positions={positions} />
         {destinations.map((destination, index) => (
           <Marker
             key={
@@ -228,6 +267,23 @@ export function OrderShow() {
   const [loading, setLoading] = useState(true);
 
   const [riderModalOpen, setRiderModalOpen] = useState(false);
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const [verifiedSuppliers, setVerifiedSuppliers] = useState<
+    {
+      supplierId: number;
+      businessName: string;
+      isEligibleCandidate: boolean;
+      score: number | null;
+      rankPosition: number | null;
+      excludeReason: string | null;
+      capabilities: string[];
+      serviceZones: string[];
+    }[]
+  >([]);
+  const [suppliersLoading, setSuppliersLoading] = useState(false);
+  const [assigningSupplierId, setAssigningSupplierId] = useState<number | null>(
+    null,
+  );
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [fileInspectorOpen, setFileInspectorOpen] = useState(false);
@@ -280,14 +336,26 @@ export function OrderShow() {
     order.order_status === "ready_for_dispatch" &&
     order.delivery_option === "delivery" &&
     !order.assigned_rider_contact?.delivery_assignment_id;
+  const canAssignSupplier = order.order_status === "approved_for_matching";
+  const canAuthorizePayment =
+    order.order_status === "supplier_accepted" ||
+    order.order_status === "awaiting_payment";
   const assignedRiderName =
     order.assigned_rider_contact?.display_name ??
     order.assigned_rider_contact?.full_name ??
     order.assigned_rider_contact?.nickname;
+  const assignedSupplierName =
+    order.assigned_supplier_contact?.business_name ?? null;
+  const assignedSupplierDecision =
+    order.assigned_supplier_contact?.decision ?? null;
 
   const handleStatusChange = (newStatus: OrderStatus) => {
-    if (newStatus === "file_declined") {
+    if (newStatus === "file_rejected") {
       setDeclineModalOpen(true);
+      return;
+    }
+    if (newStatus === "rider_assigned" && !order.assigned_rider_contact?.delivery_assignment_id) {
+      setRiderModalOpen(true);
       return;
     }
     modal.confirm({
@@ -316,8 +384,109 @@ export function OrderShow() {
       setRiderModalOpen(false);
       const res = await apiClient.get(`/admin/orders/${id}`);
       setOrder(normalizeOrder(res.data));
-    } catch {
-      void message.error("Failed to assign rider");
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? "Failed to assign rider";
+      void message.error(Array.isArray(msg) ? msg.join(", ") : String(msg));
+    }
+  };
+
+  const handleAuthorizePayment = () => {
+    modal.confirm({
+      title: "Authorize payment",
+      icon: <DollarOutlined />,
+      content:
+        "Authorize Pilot Credits or eligible COD for this order? Production can start after authorization. Credits (if any) are charged to the customer.",
+      okText: "Authorize payment",
+      onOk: async () => {
+        try {
+          await apiClient.post(`/orders/${id}/authorize-payment`);
+          void message.success("Payment authorized — production can start");
+          const res = await apiClient.get(`/admin/orders/${id}`);
+          setOrder(normalizeOrder(res.data));
+        } catch (e: unknown) {
+          const msg =
+            (e as { response?: { data?: { message?: string | string[] } } })
+              ?.response?.data?.message ?? "Failed to authorize payment";
+          void message.error(
+            Array.isArray(msg) ? msg.join(", ") : String(msg),
+          );
+          throw e;
+        }
+      },
+    });
+  };
+
+  const openSupplierAssign = async () => {
+    setSupplierModalOpen(true);
+    setSuppliersLoading(true);
+    try {
+      const res = await apiClient.get(`/ops/matching/${id}/candidates`);
+      const list = Array.isArray(res.data?.verifiedSuppliers)
+        ? res.data.verifiedSuppliers
+        : Array.isArray(res.data?.candidates)
+          ? res.data.candidates.map(
+              (c: {
+                supplierId: number;
+                businessName: string;
+                score?: number;
+                rankPosition?: number;
+              }) => ({
+                supplierId: c.supplierId,
+                businessName: c.businessName,
+                isEligibleCandidate: true,
+                score: c.score ?? null,
+                rankPosition: c.rankPosition ?? null,
+                excludeReason: null,
+                capabilities: [],
+                serviceZones: [],
+              }),
+            )
+          : [];
+      setVerifiedSuppliers(list);
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Could not load verified suppliers";
+      void message.error(typeof msg === "string" ? msg : "Load failed");
+      setVerifiedSuppliers([]);
+    } finally {
+      setSuppliersLoading(false);
+    }
+  };
+
+  const handleAssignSupplier = async (supplierId: number) => {
+    setAssigningSupplierId(supplierId);
+    try {
+      await apiClient.post(`/ops/matching/${id}/assign`, { supplierId });
+      void message.success("Supplier assigned");
+      setSupplierModalOpen(false);
+      const res = await apiClient.get(`/admin/orders/${id}`);
+      setOrder(normalizeOrder(res.data));
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Failed to assign supplier";
+      void message.error(typeof msg === "string" ? msg : "Assign failed");
+    } finally {
+      setAssigningSupplierId(null);
+    }
+  };
+
+  const handleAutoMatchSupplier = async () => {
+    setAssigningSupplierId(-1);
+    try {
+      await apiClient.post(`/ops/matching/${id}/auto-match`);
+      void message.success("Top-ranked supplier auto-matched");
+      setSupplierModalOpen(false);
+      const res = await apiClient.get(`/admin/orders/${id}`);
+      setOrder(normalizeOrder(res.data));
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Auto-match failed";
+      void message.error(typeof msg === "string" ? msg : "Auto-match failed");
+    } finally {
+      setAssigningSupplierId(null);
     }
   };
 
@@ -328,7 +497,7 @@ export function OrderShow() {
     }
     try {
       await apiClient.patch(`/admin/orders/${id}/status`, {
-        status: "file_declined",
+        status: "file_rejected",
         notes: declineReason,
       });
       void message.success("Order declined");
@@ -388,6 +557,25 @@ export function OrderShow() {
     }
   };
 
+  const openSelfQcEvidence = async (fileId: number, index: number) => {
+    setPreviewingFileId(`selfqc:${fileId}`);
+    try {
+      const response = await apiClient.get<{ url: string }>(
+        `/files/${fileId}/presigned-url`,
+      );
+      setPreviewFile({
+        url: response.data.url,
+        name: `self-qc-evidence-${order.order_id}-${index + 1}.jpg`,
+        mimeType: "image/jpeg",
+        inspection: null,
+      });
+    } catch {
+      void message.error("Unable to open proof of fulfillment photo.");
+    } finally {
+      setPreviewingFileId(null);
+    }
+  };
+
   return (
     <ShowPage
       title={`Order ${order.order_id}`}
@@ -406,9 +594,27 @@ export function OrderShow() {
                     ? `${getOrderTypeLabel(order)} · ${items.length} print jobs`
                     : getOrderTypeLabel(order)}
                 </Text>
+                {assignedSupplierName && (
+                  <Tag color="purple">
+                    Supplier: {assignedSupplierName}
+                    {assignedSupplierDecision
+                      ? ` (${assignedSupplierDecision})`
+                      : ""}
+                  </Tag>
+                )}
                 {assignedRiderName && (
                   <Tag color="green">Assigned rider: {assignedRiderName}</Tag>
                 )}
+                {order.assigned_rider_contact?.pickup_otp ? (
+                  <Tag color="volcano">
+                    Pickup OTP: {order.assigned_rider_contact.pickup_otp}
+                  </Tag>
+                ) : null}
+                {order.assigned_rider_contact?.delivery_otp ? (
+                  <Tag color="orange">
+                    Delivery OTP: {order.assigned_rider_contact.delivery_otp}
+                  </Tag>
+                ) : null}
               </Space>
             </Col>
             <Col>
@@ -420,10 +626,32 @@ export function OrderShow() {
                     style={{ width: 200 }}
                     onChange={handleStatusChange}
                     options={validNextStatuses.map((s) => ({
-                      label: ORDER_STATUS_LABELS[s],
+                      label: s === "rider_assigned" && !order.assigned_rider_contact?.delivery_assignment_id 
+                        ? "Assign a Rider" 
+                        : ORDER_STATUS_LABELS[s],
                       value: s,
                     }))}
                   />
+                )}
+                {canAuthorizePayment && (
+                  <Button
+                    type="primary"
+                    icon={<DollarOutlined />}
+                    aria-label={`Authorize payment for ${order.order_id}`}
+                    onClick={handleAuthorizePayment}
+                  >
+                    Authorize Payment
+                  </Button>
+                )}
+                {canAssignSupplier && (
+                  <Button
+                    type="primary"
+                    icon={<ShopOutlined />}
+                    aria-label={`Assign supplier for ${order.order_id}`}
+                    onClick={() => void openSupplierAssign()}
+                  >
+                    Assign Supplier
+                  </Button>
                 )}
                 {canAssignRider && (
                   <Button
@@ -696,6 +924,22 @@ export function OrderShow() {
           )}
         </Card>
 
+        {order.assigned_supplier_contact?.self_qc_evidence_file_ids && order.assigned_supplier_contact.self_qc_evidence_file_ids.length > 0 && (
+          <Card title="Proof of Fulfillment">
+            <Space size="middle" wrap>
+              {order.assigned_supplier_contact.self_qc_evidence_file_ids.map((fileId, idx) => (
+                <Button
+                  key={fileId}
+                  onClick={() => void openSelfQcEvidence(fileId, idx)}
+                  loading={previewingFileId === `selfqc:${fileId}`}
+                >
+                  View evidence photo {idx + 1}
+                </Button>
+              ))}
+            </Space>
+          </Card>
+        )}
+
         {/* Admin Notes */}
         <Card title="Admin Notes">
           <TextArea
@@ -729,6 +973,66 @@ export function OrderShow() {
           }}
         />
 
+        {/* Marketplace + logistics progress (always shows steps after Ready for Dispatch) */}
+        <Card
+          title="Order progress"
+          extra={
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Delivery process after Ready for Dispatch: assign rider → pick up
+              → out for delivery → delivered
+            </Text>
+          }
+        >
+          {(() => {
+            const isPickup = isPickupDeliveryOption(order.delivery_option);
+            const historyStatuses = history.flatMap((h) => [
+              h.from_status as OrderStatus,
+              h.to_status as OrderStatus,
+            ]);
+            const pipeline = adminOrderProgressPipeline({
+              isPickup,
+              includeOptional: historyStatuses,
+            });
+            const current = order.order_status as OrderStatus;
+            return (
+              <Timeline
+                items={pipeline.map((step) => {
+                  const state = progressStepState(step, current, pipeline);
+                  const color =
+                    state === "done"
+                      ? "green"
+                      : state === "current"
+                        ? "blue"
+                        : "gray";
+                  const isLogistics =
+                    step === "rider_assigned" ||
+                    step === "picked_up" ||
+                    step === "out_for_delivery" ||
+                    step === "delivered";
+                  return {
+                    color,
+                    children: (
+                      <div>
+                        <Text
+                          strong={state === "current"}
+                          type={state === "todo" ? "secondary" : undefined}
+                        >
+                          {ORDER_STATUS_LABELS[step] ?? statusLabel(step)}
+                          {isLogistics ? " · Delivery process" : ""}
+                          {step === "ready_for_dispatch" &&
+                          current === "ready_for_dispatch"
+                            ? " · Assign rider next"
+                            : ""}
+                        </Text>
+                      </div>
+                    ),
+                  };
+                })}
+              />
+            );
+          })()}
+        </Card>
+
         {/* Status History */}
         <Card title="Status History">
           {history.length === 0 ? (
@@ -760,6 +1064,86 @@ export function OrderShow() {
           )}
         </Card>
       </Space>
+
+      {/* Supplier Assignment Modal */}
+      <Modal
+        title="Assign verified supplier"
+        open={supplierModalOpen}
+        onCancel={() => setSupplierModalOpen(false)}
+        footer={null}
+        width={720}
+      >
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Text type="secondary">
+            Showing verified active suppliers. Ranked-eligible shops appear
+            first; you can still assign any verified supplier (ops override).
+          </Text>
+          <Button
+            onClick={() => void handleAutoMatchSupplier()}
+            loading={assigningSupplierId === -1}
+            disabled={suppliersLoading}
+          >
+            Auto-match top ranked
+          </Button>
+          <Table
+            loading={suppliersLoading}
+            dataSource={verifiedSuppliers}
+            rowKey="supplierId"
+            pagination={{ pageSize: 8 }}
+            size="small"
+            locale={{ emptyText: "No verified suppliers available" }}
+            columns={[
+              {
+                title: "Shop",
+                dataIndex: "businessName",
+                render: (name: string, row) => (
+                  <Space direction="vertical" size={0}>
+                    <Text strong>{name}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      #{row.supplierId}
+                      {row.capabilities?.length
+                        ? ` · ${row.capabilities.join(", ")}`
+                        : ""}
+                    </Text>
+                  </Space>
+                ),
+              },
+              {
+                title: "Match",
+                width: 140,
+                render: (_, row) =>
+                  row.isEligibleCandidate ? (
+                    <Tag color="green">
+                      Ranked
+                      {row.rankPosition != null ? ` #${row.rankPosition}` : ""}
+                      {row.score != null ? ` · ${row.score.toFixed(2)}` : ""}
+                    </Tag>
+                  ) : (
+                    <Tag color="default">
+                      {row.excludeReason
+                        ? humanizeEnumValue(row.excludeReason)
+                        : "Override OK"}
+                    </Tag>
+                  ),
+              },
+              {
+                title: "",
+                width: 100,
+                render: (_, row) => (
+                  <Button
+                    type="primary"
+                    size="small"
+                    loading={assigningSupplierId === row.supplierId}
+                    onClick={() => void handleAssignSupplier(row.supplierId)}
+                  >
+                    Assign
+                  </Button>
+                ),
+              },
+            ]}
+          />
+        </Space>
+      </Modal>
 
       {/* Rider Assignment Modal */}
       <Modal
@@ -836,7 +1220,7 @@ export function OrderShow() {
           onVerify={async () => {
             try {
               await apiClient.patch(`/admin/orders/${id}/status`, {
-                status: "file_verified",
+                status: "approved_for_matching",
               });
               void message.success("File verified successfully");
               setFileInspectorOpen(false);

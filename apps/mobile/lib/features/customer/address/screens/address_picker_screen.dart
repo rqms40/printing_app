@@ -48,9 +48,11 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
     _zipCodeController = TextEditingController(text: existing?.zipCode ?? '');
     _landmarkController = TextEditingController(text: existing?.landmark ?? '');
     _isDefault = existing?.isDefault ?? false;
+    // Default to GRIDGO shop area (Davao) so unmoved pins are not a random
+    // generic city center that fails to match the typed address text.
     _pinnedLocation = LatLng(
-      existing?.latitude ?? 7.0731,
-      existing?.longitude ?? 125.6128,
+      existing?.latitude ?? 7.064,
+      existing?.longitude ?? 125.6079,
     );
   }
 

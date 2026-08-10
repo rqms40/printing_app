@@ -355,9 +355,9 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                         pendingLabel ??
                             switch (locationHealth) {
                               LocationHealth.live => 'Live Tracking',
-                              LocationHealth.stale => 'Location stale',
-                              LocationHealth.offline =>
-                                'GPS offline — last known shown',
+                              LocationHealth.stale =>
+                                'Location stale (>15s)',
+                              LocationHealth.offline =>                                'GPS offline — last known shown',
                             },
                         style: AppTypography.caption.copyWith(
                           color: colors.onSurface,

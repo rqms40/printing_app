@@ -25,17 +25,25 @@ class StatusPicker extends StatelessWidget {
 
   dynamic _iconForStatus(OrderStatus status) {
     switch (status) {
-      case OrderStatus.orderPlaced:
+      case OrderStatus.draft:
+        return HugeIcons.strokeRoundedFileEdit;
+      case OrderStatus.submitted:
+      case OrderStatus.needsQa:
         return HugeIcons.strokeRoundedInvoice01;
-      case OrderStatus.fileVerified:
+      case OrderStatus.clientCorrection:
+        return HugeIcons.strokeRoundedEdit02;
+      case OrderStatus.proofApproval:
+        return HugeIcons.strokeRoundedImage01;
+      case OrderStatus.approvedForMatching:
+      case OrderStatus.supplierAssigned:
+      case OrderStatus.supplierAccepted:
         return HugeIcons.strokeRoundedCheckmarkCircle02;
-      case OrderStatus.fileDeclined:
-        return HugeIcons.strokeRoundedCancelCircle;
-      case OrderStatus.printingInProgress:
+      case OrderStatus.awaitingPayment:
+      case OrderStatus.paymentAuthorized:
+        return HugeIcons.strokeRoundedCreditCard;
+      case OrderStatus.production:
         return HugeIcons.strokeRoundedPrinter;
-      case OrderStatus.finishingMounting:
-        return HugeIcons.strokeRoundedSettings01;
-      case OrderStatus.qualityChecked:
+      case OrderStatus.supplierSelfQc:
         return HugeIcons.strokeRoundedCheckmarkBadge01;
       case OrderStatus.readyForDispatch:
         return HugeIcons.strokeRoundedPackageDelivered;
@@ -43,14 +51,17 @@ class StatusPicker extends StatelessWidget {
         return HugeIcons.strokeRoundedUserAccount;
       case OrderStatus.pickedUp:
         return HugeIcons.strokeRoundedDeliveryTruck02;
-      case OrderStatus.onTheWay:
+      case OrderStatus.outForDelivery:
         return HugeIcons.strokeRoundedDeliveryTruck01;
-      case OrderStatus.arrivedAtDestination:
-        return HugeIcons.strokeRoundedLocation01;
       case OrderStatus.delivered:
+      case OrderStatus.collectedByCustomer:
+      case OrderStatus.completed:
         return HugeIcons.strokeRoundedTickDouble01;
-      case OrderStatus.completedPickup:
-        return HugeIcons.strokeRoundedStore02;
+      case OrderStatus.deliveryFailed:
+      case OrderStatus.issueWindowOpen:
+        return HugeIcons.strokeRoundedAlert02;
+      case OrderStatus.fileRejected:
+        return HugeIcons.strokeRoundedCancelCircle;
       case OrderStatus.cancelled:
         return HugeIcons.strokeRoundedCancel02;
     }

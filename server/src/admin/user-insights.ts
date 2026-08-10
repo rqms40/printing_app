@@ -43,6 +43,35 @@ type AdminUserInsightOrderPayload = {
   updated_at: Date;
 };
 
+/** Supplier shop fields as shown on admin/super user detail (self-edited). */
+export type AdminSupplierProfileSnapshot = {
+  id: number;
+  user_id: number;
+  business_name: string;
+  description: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  address: string | null;
+  logo_file_id: number | null;
+  logo_url: string | null;
+  attributes: Record<string, string>;
+  service_zones: string[];
+  service_focus_ranks?: string[];
+  ranked_services?: Array<{ rank: number; key: string; label: string }>;
+  is_active: boolean;
+  verification_status: string | null;
+  rating_average?: number;
+  rating_count?: number;
+  capabilities: Array<{
+    id: number;
+    product_family: string;
+    materials: string[];
+    max_capacity: number;
+    lead_time_days: number;
+  }>;
+  updated_at: Date;
+};
+
 export type AdminUserDetailPayload = {
   user: {
     id: number;
@@ -71,6 +100,8 @@ export type AdminUserDetailPayload = {
     last_paid_order_at: Date | null;
   };
   recent_orders: AdminUserInsightOrderPayload[];
+  /** Present when the user has a supplier_profiles row (role may still differ). */
+  supplier_profile: AdminSupplierProfileSnapshot | null;
 };
 
 export type AdminUsersAnalyticsPayload = {
@@ -91,7 +122,7 @@ type Bucket = {
 };
 
 const PAID_STATUS = 'paid';
-const CUSTOMER_ROLE = UserRole.CUSTOMER;
+const CUSTOMER_ROLE = UserRole.CLIENT;
 
 const PROFILE_CATEGORY_LABELS: Record<string, string> = {
   student: 'Student',
@@ -128,6 +159,7 @@ export function normalizeUserInsightsPeriod(
 export function buildAdminUserDetailPayload(
   user: User,
   orders: Order[],
+  supplierProfile: AdminSupplierProfileSnapshot | null = null,
 ): AdminUserDetailPayload {
   const scopedOrders = orders.filter((order) => order.userId === user.id);
   const ordered = [...scopedOrders].sort(
@@ -169,6 +201,7 @@ export function buildAdminUserDetailPayload(
       last_paid_order_at: paidOrders[0]?.createdAt ?? null,
     },
     recent_orders: ordered.slice(0, 5).map(mapAdminInsightOrder),
+    supplier_profile: supplierProfile,
   };
 }
 

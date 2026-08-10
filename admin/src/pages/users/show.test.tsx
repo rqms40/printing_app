@@ -37,6 +37,26 @@ vi.mock("@refinedev/antd", () => ({
   ),
 }));
 
+vi.mock("@refinedev/core", () => ({
+  useGetIdentity: () => ({ data: { id: 1, role: "ops_admin" } }),
+}));
+
+vi.mock("antd", async () => {
+  const actual = await vi.importActual<typeof import("antd")>("antd");
+  return {
+    ...actual,
+    App: {
+      ...actual.App,
+      useApp: () => ({
+        message: {
+          success: vi.fn(),
+          error: vi.fn(),
+        },
+      }),
+    },
+  };
+});
+
 vi.mock("./data", async () => {
   const actual = await vi.importActual<typeof import("./data")>("./data");
 
@@ -59,13 +79,14 @@ describe("UserShow", () => {
         full_name: "Casey Customer",
         email: "casey@example.com",
         phone_number: "+639171111111",
-        role: "customer",
+        role: "client",
         is_active: true,
         is_profile_complete: false,
         profile_category: "student",
         profile_field: "architecture",
         course: null,
         organization: null,
+        client_account_type: null,
         printing_preferences: [],
         gender: null,
         date_of_birth: null,
@@ -81,6 +102,7 @@ describe("UserShow", () => {
         last_paid_order_at: "2026-04-08T15:00:00.000Z",
       },
       recent_orders: [],
+      supplier_profile: null,
     });
 
     render(
@@ -100,11 +122,97 @@ describe("UserShow", () => {
     expect(screen.getByText("No course provided")).toBeInTheDocument();
     expect(screen.getByText("No organization provided")).toBeInTheDocument();
     expect(screen.getByText("No print preferences yet")).toBeInTheDocument();
+    expect(screen.queryByText("Supplier shop profile")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to list" })).toHaveAttribute(
       "href",
       "/users",
     );
     expect(mockLoadAdminUserDetail).toHaveBeenCalledWith("7");
+  });
+
+  it("renders supplier shop profile when API returns supplier_profile", async () => {
+    mockLoadAdminUserDetail.mockResolvedValue({
+      user: {
+        id: 9,
+        full_name: "Print Co Owner",
+        email: "supplier@gridgo.ph",
+        phone_number: "+639171234567",
+        role: "supplier",
+        is_active: true,
+        is_profile_complete: true,
+        profile_category: null,
+        profile_field: null,
+        course: null,
+        organization: null,
+        client_account_type: null,
+        printing_preferences: [],
+        gender: null,
+        date_of_birth: null,
+        created_at: "2026-03-01T00:00:00.000Z",
+        updated_at: "2026-03-15T00:00:00.000Z",
+      },
+      metrics: {
+        total_orders: 0,
+        paid_orders: 0,
+        total_spend: 0,
+        average_order_value: 0,
+        last_order_at: null,
+        last_paid_order_at: null,
+      },
+      recent_orders: [],
+      supplier_profile: {
+        id: 1,
+        user_id: 9,
+        business_name: "Davao Print Co",
+        description: "Large format shop",
+        contact_phone: "+639179999999",
+        contact_email: "hello@printco.ph",
+        address: "Quimpo Blvd",
+        logo_file_id: null,
+        logo_url: null,
+        attributes: { equipment: "HP Latex" },
+        service_zones: ["Davao City"],
+        service_focus_ranks: ["tarpaulins", "apparel"],
+        ranked_services: [
+          { rank: 1, key: "tarpaulins", label: "Tarpaulins" },
+          { rank: 2, key: "apparel", label: "Apparel / Shirt Printing" },
+        ],
+        is_active: true,
+        verification_status: "verified",
+        rating_average: 4.5,
+        rating_count: 12,
+        capabilities: [
+          {
+            id: 3,
+            product_family: "flyers",
+            materials: ["glossy"],
+            max_capacity: 100,
+            lead_time_days: 2,
+          },
+        ],
+        updated_at: "2026-08-06T05:00:00.000Z",
+      },
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={["/users/show/9"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/users/show/:id" element={<UserShow />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Supplier shop profile"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Davao Print Co")).toBeInTheDocument();
+    expect(screen.getByText("Large format shop")).toBeInTheDocument();
+    expect(screen.getByText("equipment: HP Latex")).toBeInTheDocument();
+    expect(screen.getByText("flyers")).toBeInTheDocument();
+    expect(screen.getByText("Davao City")).toBeInTheDocument();
   });
 
   it("renders an error state inside the Show shell and retries loading", async () => {
@@ -116,13 +224,14 @@ describe("UserShow", () => {
           full_name: "Retry User",
           email: "retry@example.com",
           phone_number: null,
-          role: "customer",
+          role: "client",
           is_active: true,
           is_profile_complete: true,
           profile_category: null,
           profile_field: null,
           course: null,
           organization: null,
+          client_account_type: null,
           printing_preferences: [],
           gender: null,
           date_of_birth: null,
@@ -138,6 +247,7 @@ describe("UserShow", () => {
           last_paid_order_at: null,
         },
         recent_orders: [],
+        supplier_profile: null,
       });
 
     const user = userEvent.setup();

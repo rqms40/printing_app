@@ -98,7 +98,7 @@ describe("normalizeDashboardAnalytics", () => {
         delivery_fee: 0,
         payment_method: "cod",
         payment_status: "pending",
-        order_status: "printing_in_progress",
+        order_status: "production",
         delivery_option: "pickup",
         created_at: "2026-03-30T09:00:00.000Z",
         updated_at: "2026-03-30T09:00:00.000Z",

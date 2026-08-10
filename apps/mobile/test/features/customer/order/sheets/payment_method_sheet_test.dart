@@ -20,11 +20,114 @@ void main() {
     TestSetup.initApiClient();
   });
 
-  testWidgets('lists 4 methods, returns chosen one', (tester) async {
+  testWidgets('lists pilot rails (credits + COD), hides live wallets by default', (
+    tester,
+  ) async {
     final semantics = tester.ensureSemantics();
     PaymentMethod? picked;
+    final container = ProviderContainer(
+      overrides: [
+        authProvider.overrideWith(
+          (_) => _SeededAuthNotifier(
+            const AuthState(
+              status: AuthStatus.authenticated,
+              user: AuthUser(
+                id: '1',
+                email: 'maria@test.com',
+                fullName: 'Maria Santos',
+                role: 'client',
+                isProfileComplete: true,
+                credits: '500',
+              ),
+            ),
+          ),
+        ),
+        checkoutPaymentSettingsProvider.overrideWith(
+          (_) async => const CheckoutPaymentSettings(creditsOnlyMode: false),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
     await tester.pumpWidget(
-      ProviderScope(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Builder(
+            builder: (ctx) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () async {
+                  picked = await PaymentMethodSheet.show(ctx, current: null);
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pilot Credits'), findsOneWidget);
+    expect(find.text('Cash on Delivery'), findsOneWidget);
+    expect(find.text('GCash'), findsNothing);
+    expect(find.text('Maya'), findsNothing);
+    expect(
+      find.textContaining('Max ₱1,500'),
+      findsOneWidget,
+    );
+
+    final codControl = find.bySemanticsLabel(RegExp(r'^Cash on Delivery\.'));
+    expect(codControl, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(codControl)
+          .getSemanticsData()
+          .hasAction(ui.SemanticsAction.tap),
+      isTrue,
+      reason: 'enabled payment semantics must expose its selection action',
+    );
+    await tester.tap(find.text('Cash on Delivery'));
+    await tester.pump();
+    await tester.tap(find.text('Use this'));
+    await tester.pumpAndSettle();
+    expect(picked, PaymentMethod.cod);
+    semantics.dispose();
+  });
+
+  testWidgets('sandbox flag shows live GCash/Maya wallets', (tester) async {
+    PaymentMethod? picked;
+    final container = ProviderContainer(
+      overrides: [
+        authProvider.overrideWith(
+          (_) => _SeededAuthNotifier(
+            const AuthState(
+              status: AuthStatus.authenticated,
+              user: AuthUser(
+                id: '1',
+                email: 'maria@test.com',
+                fullName: 'Maria Santos',
+                role: 'client',
+                isProfileComplete: true,
+                credits: '500',
+              ),
+            ),
+          ),
+        ),
+        checkoutPaymentSettingsProvider.overrideWith(
+          (_) async => const CheckoutPaymentSettings(
+            creditsOnlyMode: false,
+            showLiveWallets: true,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
         child: MaterialApp(
           home: Builder(
             builder: (ctx) => Scaffold(
@@ -43,24 +146,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('GCash'), findsOneWidget);
     expect(find.text('Maya'), findsOneWidget);
-    expect(find.text('Cash on Delivery'), findsOneWidget);
-    expect(find.text('GRIDGO Credits'), findsOneWidget);
-    final mayaControl = find.bySemanticsLabel(RegExp(r'^Maya\.'));
-    expect(mayaControl, findsOneWidget);
-    expect(
-      tester
-          .getSemantics(mayaControl)
-          .getSemanticsData()
-          .hasAction(ui.SemanticsAction.tap),
-      isTrue,
-      reason: 'enabled payment semantics must expose its selection action',
-    );
     await tester.tap(find.text('Maya'));
     await tester.pump();
     await tester.tap(find.text('Use this'));
     await tester.pumpAndSettle();
     expect(picked, PaymentMethod.maya);
-    semantics.dispose();
   });
 
   testWidgets('saving as default patches profile and updates auth state', (
@@ -97,7 +187,7 @@ void main() {
                 id: '1',
                 email: 'maria@test.com',
                 fullName: 'Maria Santos',
-                role: 'customer',
+                role: 'client',
                 isProfileComplete: true,
                 credits: '500',
               ),
@@ -105,7 +195,10 @@ void main() {
           ),
         ),
         checkoutPaymentSettingsProvider.overrideWith(
-          (_) async => const CheckoutPaymentSettings(creditsOnlyMode: false),
+          (_) async => const CheckoutPaymentSettings(
+            creditsOnlyMode: false,
+            showLiveWallets: true,
+          ),
         ),
       ],
     );
@@ -150,7 +243,7 @@ void main() {
   });
 
   testWidgets(
-    'credits-only settings disable every non-credit payment method',
+    'credits-only settings show only Pilot Credits',
     (tester) async {
       final container = ProviderContainer(
         overrides: [
@@ -162,7 +255,7 @@ void main() {
                   id: '1',
                   email: 'maria@test.com',
                   fullName: 'Maria Santos',
-                  role: 'customer',
+                  role: 'client',
                   isProfileComplete: true,
                   credits: '500',
                 ),
@@ -198,18 +291,16 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      expect(find.text('GCash'), findsOneWidget);
-      expect(find.text('Maya'), findsOneWidget);
-      expect(find.text('Cash on Delivery'), findsOneWidget);
-      expect(find.text('GRIDGO Credits'), findsOneWidget);
-      expect(find.text('Only GRIDGO Credits is available during beta testing'), findsOneWidget);
-      expect(find.text('Unavailable during beta testing'), findsNWidgets(3));
-      expect(find.text('Top up'), findsNothing);
+      expect(find.text('Pilot Credits'), findsOneWidget);
+      expect(find.text('Cash on Delivery'), findsNothing);
+      expect(find.text('GCash'), findsNothing);
+      expect(find.text('Maya'), findsNothing);
+      expect(
+        find.text('Only Pilot Credits is available during beta testing'),
+        findsOneWidget,
+      );
 
-      await tester.tap(find.text('GCash'));
-      await tester.pump();
-      expect(picked, isNull);
-      await tester.tap(find.text('GRIDGO Credits'));
+      await tester.tap(find.text('Pilot Credits'));
       await tester.pump();
       await tester.tap(find.text('Use this'));
       await tester.pumpAndSettle();
@@ -217,9 +308,30 @@ void main() {
     },
   );
 
-  testWidgets('credits-only settings keep Maya unavailable for beta checkout', (
+  testWidgets('default method for Pilot Credits uses credits wire value', (
     tester,
   ) async {
+    final patchPayloads = <Map<String, dynamic>>[];
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.path == '/users/me/default-payment-method' &&
+            options.method == 'PATCH') {
+          patchPayloads.add(Map<String, dynamic>.from(options.data as Map));
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {'ok': true},
+            ),
+          );
+          return;
+        }
+        handler.next(options);
+      },
+    );
+    ApiClient.instance.dio.interceptors.add(interceptor);
+    addTearDown(() => ApiClient.instance.dio.interceptors.remove(interceptor));
+
     final container = ProviderContainer(
       overrides: [
         authProvider.overrideWith(
@@ -230,7 +342,7 @@ void main() {
                 id: '1',
                 email: 'maria@test.com',
                 fullName: 'Maria Santos',
-                role: 'customer',
+                role: 'client',
                 isProfileComplete: true,
                 credits: '500',
               ),
@@ -238,13 +350,12 @@ void main() {
           ),
         ),
         checkoutPaymentSettingsProvider.overrideWith(
-          (_) async => const CheckoutPaymentSettings(creditsOnlyMode: true),
+          (_) async => const CheckoutPaymentSettings(creditsOnlyMode: false),
         ),
       ],
     );
     addTearDown(container.dispose);
 
-    PaymentMethod? picked;
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -253,7 +364,7 @@ void main() {
             builder: (ctx) => Scaffold(
               body: ElevatedButton(
                 onPressed: () async {
-                  picked = await PaymentMethodSheet.show(ctx, current: null);
+                  await PaymentMethodSheet.show(ctx, current: null);
                 },
                 child: const Text('Open'),
               ),
@@ -265,11 +376,16 @@ void main() {
 
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Maya'));
+    await tester.tap(find.text('Pilot Credits'));
     await tester.pump();
+    await tester.tap(find.text('Save as default for future orders'));
+    await tester.pump();
+    await tester.tap(find.text('Use this'));
+    await tester.pumpAndSettle();
 
-    expect(picked, isNull);
-    expect(find.text('Use this'), findsOneWidget);
+    expect(patchPayloads, [
+      {'method': 'credits'},
+    ]);
   });
 }
 

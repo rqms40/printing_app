@@ -5,16 +5,22 @@ import "@testing-library/jest-dom/vitest";
 import { GridSider } from "@/components/grid-sider";
 
 // ── Mocks ──────────────────────────────────────────────────────────
-const { mockUseMenu, mockUseNavigation, mockUseNotificationsContext } =
-  vi.hoisted(() => ({
-    mockUseMenu: vi.fn(),
-    mockUseNavigation: vi.fn(),
-    mockUseNotificationsContext: vi.fn(),
-  }));
+const {
+  mockUseMenu,
+  mockUseNavigation,
+  mockUseNotificationsContext,
+  mockUseGetIdentity,
+} = vi.hoisted(() => ({
+  mockUseMenu: vi.fn(),
+  mockUseNavigation: vi.fn(),
+  mockUseNotificationsContext: vi.fn(),
+  mockUseGetIdentity: vi.fn(),
+}));
 
 vi.mock("@refinedev/core", () => ({
   useMenu: mockUseMenu,
   useNavigation: mockUseNavigation,
+  useGetIdentity: mockUseGetIdentity,
 }));
 
 vi.mock("@refinedev/antd", () => ({
@@ -34,16 +40,23 @@ const menuItems = [
   {
     key: "/credit-requests",
     name: "credit-requests",
-    label: "Top-Up Requests",
+    label: "Pilot Credits",
     icon: null,
     list: "/credit-requests",
   },
   { key: "/riders", name: "riders", label: "Riders", icon: null, list: "/riders" },
 ];
 
-function setupMocks(badgeCounts = { newOrders: 3, pendingTopUps: 1 }) {
+function setupMocks(
+  badgeCounts = { newOrders: 3, pendingTopUps: 1 },
+  role: string = "ops_admin",
+) {
   mockUseMenu.mockReturnValue({ menuItems, selectedKey: "/orders" });
   mockUseNavigation.mockReturnValue({ push: vi.fn() });
+  mockUseGetIdentity.mockReturnValue({
+    data: { id: "1", name: "Admin", email: "admin@gridgo.ph", role },
+    isLoading: false,
+  });
   mockUseNotificationsContext.mockReturnValue({
     badgeCounts,
     notifications: [],
@@ -71,7 +84,7 @@ describe("GridSider", () => {
     expect(screen.queryByText("1")).not.toBeInTheDocument();
   });
 
-  it("shows Top-Up Requests badge with correct count", () => {
+  it("shows Pilot Credits badge with correct count", () => {
     render(<GridSider />);
     expect(screen.getAllByText("1").length).toBeGreaterThan(0);
   });
@@ -80,5 +93,46 @@ describe("GridSider", () => {
     render(<GridSider initialCollapsed={true} />);
     expect(screen.queryByText("3")).not.toBeInTheDocument();
     expect(screen.queryByText("1")).not.toBeInTheDocument();
+  });
+
+  it("hides ops menu while identity is loading (default-deny)", () => {
+    mockUseGetIdentity.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+    });
+    render(<GridSider />);
+    expect(screen.queryByText("Orders")).not.toBeInTheDocument();
+    expect(screen.queryByText("Riders")).not.toBeInTheDocument();
+    expect(screen.getByText("GRIDGO")).toBeInTheDocument();
+  });
+
+  it("shows only supplier brand path after supplier identity loads", () => {
+    const supplierMenu = [
+      ...menuItems,
+      {
+        key: "/supplier/jobs",
+        name: "supplier-jobs",
+        label: "Jobs",
+        icon: null,
+        list: "/supplier/jobs",
+      },
+    ];
+    mockUseMenu.mockReturnValue({
+      menuItems: supplierMenu,
+      selectedKey: "/supplier/jobs",
+    });
+    mockUseGetIdentity.mockReturnValue({
+      data: {
+        id: "9",
+        name: "Shop",
+        email: "shop@gridgo.ph",
+        role: "supplier",
+      },
+      isLoading: false,
+    });
+    render(<GridSider />);
+    expect(screen.getByText("Jobs")).toBeInTheDocument();
+    expect(screen.queryByText("Orders")).not.toBeInTheDocument();
+    expect(screen.getByText("GRIDGO Supplier")).toBeInTheDocument();
   });
 });

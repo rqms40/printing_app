@@ -42,7 +42,7 @@ export class DeliverySlotsController {
 
   @Get('admin/delivery-slot-templates')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminListTemplates() {
     return this.templateRepo.find({
       order: { dayOfWeek: 'ASC', startTime: 'ASC' },
@@ -51,14 +51,14 @@ export class DeliverySlotsController {
 
   @Post('admin/delivery-slot-templates')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminCreateTemplate(@Body() dto: UpdateSlotTemplateDto) {
     return this.templateRepo.save(this.templateRepo.create(dto));
   }
 
   @Patch('admin/delivery-slot-templates/:id')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminUpdateTemplate(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateSlotTemplateDto,
@@ -69,7 +69,7 @@ export class DeliverySlotsController {
 
   @Delete('admin/delivery-slot-templates/:id')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminDeleteTemplate(@Param('id', ParseIntPipe) id: number) {
     await this.templateRepo.delete(id);
     return { ok: true };
@@ -77,21 +77,21 @@ export class DeliverySlotsController {
 
   @Get('admin/settings/delivery')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminGetSettings() {
     return this.settingsService.getSettings();
   }
 
   @Patch('admin/settings/delivery')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminUpdateSettings(@Body() dto: UpdateDeliverySettingsDto) {
     return this.settingsService.updateSettings(dto);
   }
 
   @Get('admin/delivery-slots/today')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminTodayDashboard(@Query('date') date?: string) {
     const today = date ?? new Date().toISOString().slice(0, 10);
     return this.slotsService.getTodaySnapshot(today);
@@ -102,14 +102,14 @@ export class DeliverySlotsController {
   /// per-day totals in a single round trip instead of N parallel calls.
   @Get('admin/delivery-slots/week-counts')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminWeekCounts(@Query('weekStart') weekStart: string) {
     return this.slotsService.getWeekBookingCounts(weekStart);
   }
 
   @Patch('admin/slot-bookings/order')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminReorderBookings(@Body() body: { orderedIds: number[] }) {
     await this.slotsService.reorderBookings(body.orderedIds);
     return { ok: true };
@@ -117,7 +117,7 @@ export class DeliverySlotsController {
 
   @Patch('admin/slot-bookings/:id/priority')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async adminSetPriority(
     @Param('id') id: string,
     @Body() body: { priority: boolean },

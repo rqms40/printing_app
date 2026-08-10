@@ -31,4 +31,23 @@ describe('user entity column metadata', () => {
 
     expect(defaultPrintMode).toBeUndefined();
   });
+
+  it('declares pilot COD eligibility and ops risk flags (default false)', () => {
+    const columns = getMetadataArgsStorage().columns;
+
+    const pilotCod = columns.find(
+      (column) =>
+        column.target === User && column.propertyName === 'pilotCodEligible',
+    );
+    const opsRisk = columns.find(
+      (column) =>
+        column.target === User && column.propertyName === 'codOpsRiskBlocked',
+    );
+
+    expect(pilotCod?.options.name).toBe('pilot_cod_eligible');
+    expect(pilotCod?.options.type).toBe('boolean');
+    expect(pilotCod?.options.default).toBe(false);
+    expect(opsRisk?.options.name).toBe('cod_ops_risk_blocked');
+    expect(opsRisk?.options.default).toBe(false);
+  });
 });

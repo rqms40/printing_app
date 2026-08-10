@@ -18,6 +18,8 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
+import { SuppliersService } from '../suppliers/suppliers.service';
+import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 import { In } from 'typeorm';
 import * as userInsights from './user-insights';
 
@@ -42,6 +44,10 @@ describe('AdminController analytics', () => {
   };
   let ordersGateway: jest.Mocked<Partial<OrdersGateway>>;
   let notificationsService: jest.Mocked<Partial<NotificationsService>>;
+  let suppliersService: {
+    findByUserIdOrNull: jest.Mock;
+    toAdminSupplierSnapshot: jest.Mock;
+  };
 
   beforeEach(async () => {
     ordersRepo = mockRepo();
@@ -70,6 +76,10 @@ describe('AdminController analytics', () => {
     notificationsService = {
       create: jest.fn(),
     };
+    suppliersService = {
+      findByUserIdOrNull: jest.fn().mockResolvedValue(null),
+      toAdminSupplierSnapshot: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AdminController],
@@ -82,6 +92,7 @@ describe('AdminController analytics', () => {
         { provide: CreditsService, useValue: creditsService },
         { provide: OrdersGateway, useValue: ordersGateway },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: SuppliersService, useValue: suppliersService },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
         {
@@ -91,6 +102,10 @@ describe('AdminController analytics', () => {
         {
           provide: getRepositoryToken(DeliveryAssignment),
           useValue: assignmentsRepo,
+        },
+        {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         { provide: getRepositoryToken(TamSurvey), useValue: mockRepo() },
         {
@@ -134,7 +149,7 @@ describe('AdminController analytics', () => {
         category: 'paper',
         paymentStatus: 'pending',
         totalPrice: 80,
-        orderStatus: OrderStatus.PRINTING_IN_PROGRESS,
+        orderStatus: OrderStatus.PRODUCTION,
         createdAt: new Date('2026-03-30T09:00:00.000Z'),
         items: [
           {
@@ -316,8 +331,9 @@ describe('AdminController analytics', () => {
       expect(ordersRepo.count).toHaveBeenCalledWith({
         where: {
           orderStatus: In([
-            OrderStatus.ORDER_PLACED,
-            OrderStatus.FILE_VERIFIED,
+            OrderStatus.SUBMITTED,
+            OrderStatus.NEEDS_QA,
+            OrderStatus.APPROVED_FOR_MATCHING,
           ]),
         },
       });
@@ -348,7 +364,7 @@ describe('AdminController analytics', () => {
         deliveryFee: 0,
         paymentMethod: 'gcash',
         paymentStatus: 'pending',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
         deliveryOption: 'delivery',
         destination: {
           id: 1,
@@ -449,9 +465,10 @@ describe('AdminController analytics', () => {
       ]);
       expect(mapped.delivery_slot_booking_id).toBe(5);
       expect(mapped.extra_destination_fee).toBe(20);
+      // QA mandatory: submitted may only go to needs_qa / file_rejected (cancel filtered).
       expect(mapped.allowed_next_statuses).toEqual([
-        OrderStatus.FILE_VERIFIED,
-        OrderStatus.FILE_DECLINED,
+        OrderStatus.NEEDS_QA,
+        OrderStatus.FILE_REJECTED,
       ]);
     });
 
@@ -481,12 +498,14 @@ describe('AdminController analytics', () => {
         } as unknown as Order).allowed_next_statuses;
 
       expect(map(OrderStatus.READY_FOR_DISPATCH, 'pickup')).toEqual([
-        OrderStatus.COMPLETED_PICKUP,
+        OrderStatus.COLLECTED_BY_CUSTOMER,
       ]);
       expect(map(OrderStatus.READY_FOR_DISPATCH, 'delivery')).toEqual([]);
       expect(map(OrderStatus.RIDER_ASSIGNED, 'delivery')).toEqual([]);
-      expect(map(OrderStatus.FILE_VERIFIED, 'delivery')).toEqual([
-        OrderStatus.PRINTING_IN_PROGRESS,
+      // payment_authorized is money-path only (authorize-payment), not status dropdown.
+      expect(map(OrderStatus.APPROVED_FOR_MATCHING, 'delivery')).toEqual([
+        OrderStatus.SUPPLIER_ASSIGNED,
+        OrderStatus.AWAITING_PAYMENT,
       ]);
     });
 
@@ -538,7 +557,7 @@ describe('AdminController analytics', () => {
     it('records an admin-provided status reason without accepting an actor id', async () => {
       const savedOrder = { id: 42 } as Order;
       const dto = {
-        status: OrderStatus.FILE_DECLINED,
+        status: OrderStatus.FILE_REJECTED,
         notes: 'Customer file is corrupted',
       };
       ordersService.updateStatus.mockResolvedValue(savedOrder);
@@ -547,10 +566,11 @@ describe('AdminController analytics', () => {
 
       expect(ordersService.updateStatus).toHaveBeenCalledWith(
         42,
-        OrderStatus.FILE_DECLINED,
+        OrderStatus.FILE_REJECTED,
         {},
         {
           actorUserId: 31,
+          actorRole: null,
           reason: 'Customer file is corrupted',
         },
       );
@@ -563,17 +583,18 @@ describe('AdminController analytics', () => {
       await expect(
         controller.updateOrderStatus(
           42,
-          { status: OrderStatus.FILE_VERIFIED },
+          { status: OrderStatus.APPROVED_FOR_MATCHING },
           { user: { sub: 31 } },
         ),
       ).resolves.toBe(savedOrder);
 
       expect(ordersService.updateStatus).toHaveBeenCalledWith(
         42,
-        OrderStatus.FILE_VERIFIED,
+        OrderStatus.APPROVED_FOR_MATCHING,
         {},
         {
           actorUserId: 31,
+          actorRole: null,
           reason: 'Admin status update',
         },
       );
@@ -619,7 +640,12 @@ describe('AdminController analytics', () => {
         controller.assignRider(42, 7, { user: { sub: 31 } }),
       ).resolves.toBe(order);
 
-      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(42, 7, 31);
+      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(
+        42,
+        7,
+        31,
+        null,
+      );
       expect(assignmentsRepo.save).not.toHaveBeenCalled();
       expect(ordersService.updateStatus).not.toHaveBeenCalled();
     });
@@ -652,7 +678,12 @@ describe('AdminController analytics', () => {
         controller.assignRider(42, 7, { user: { sub: 31 } }),
       ).resolves.toBe(savedOrder);
 
-      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(42, 7, 31);
+      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(
+        42,
+        7,
+        31,
+        null,
+      );
       expect(ordersRepo.update).not.toHaveBeenCalled();
       expect(ordersGateway.notifyOrderUpdate).not.toHaveBeenCalled();
       expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledWith(70, {
@@ -713,7 +744,12 @@ describe('AdminController analytics', () => {
         controller.assignRider(42, 7, { user: { sub: 31 } }),
       ).rejects.toThrow(BadRequestException);
 
-      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(42, 7, 31);
+      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(
+        42,
+        7,
+        31,
+        null,
+      );
       expect(ordersGateway.notifyRiderAssignment).not.toHaveBeenCalled();
     });
   });
@@ -726,7 +762,7 @@ describe('AdminController analytics', () => {
           fullName: 'Maria Santos',
           email: 'maria@gridgo.ph',
           phoneNumber: '+639171234567',
-          role: 'customer',
+          role: 'client',
           isActive: true,
           isProfileComplete: true,
           profileCategory: 'student',
@@ -789,7 +825,8 @@ describe('AdminController analytics', () => {
         where: { userId: 42 },
         order: { createdAt: 'DESC' },
       });
-      expect(buildDetailSpy).toHaveBeenCalledWith(user, orders);
+      expect(suppliersService.findByUserIdOrNull).toHaveBeenCalledWith(42);
+      expect(buildDetailSpy).toHaveBeenCalledWith(user, orders, null);
     });
   });
 

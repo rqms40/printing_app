@@ -76,7 +76,7 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
 
   const statusCfg = STATUS_TAG[conversation.status] ?? { color: "default", label: conversation.status };
   const customerName =
-    conversation.customer?.name ?? `Customer #${conversation.customerId}`;
+    conversation.customer?.name ?? conversation.customer?.fullName ?? conversation.customer?.nickname ?? (conversation.type === 'rider' ? `Rider #${conversation.customerId}` : `Customer #${conversation.customerId}`);
 
   return (
     <div

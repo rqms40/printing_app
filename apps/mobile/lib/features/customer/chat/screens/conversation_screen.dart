@@ -63,7 +63,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         ConversationType.admin => 'Human Support',
         ConversationType.rider =>
           widget.currentUserRole == SenderRole.rider
-              ? 'Customer'
+              ? 'Client'
               : 'Delivery Rider',
       };
 
@@ -73,7 +73,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     ConversationType.ai => 'Ask GridBot anything',
     ConversationType.admin => 'Start with the GRIDGO team',
     ConversationType.rider =>
-      _isRiderUser ? 'Message your customer' : 'Message your rider',
+      _isRiderUser ? 'Message your client' : 'Message your rider',
   };
 
   String get _emptyBody => switch (widget.conversationType) {

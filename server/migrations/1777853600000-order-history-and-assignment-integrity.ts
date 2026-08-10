@@ -32,7 +32,8 @@ export class OrderHistoryAndAssignmentIntegrity1777853600000 implements Migratio
                    owning_order.id IS NULL
                      OR owning_order.order_status::text IN (
                        'rider_assigned', 'picked_up', 'on_the_way',
-                       'arrived_at_destination', 'delivered'
+                       'arrived_at_destination', 'out_for_delivery',
+                       'delivered'
                      ) AS should_have_current,
                    CASE
                      WHEN (
@@ -40,9 +41,13 @@ export class OrderHistoryAndAssignmentIntegrity1777853600000 implements Migratio
                          AND assignment.status::text IN ('assigned', 'accepted'))
                        OR (owning_order.order_status::text = 'picked_up'
                          AND assignment.status::text = 'picked_up')
-                       OR (owning_order.order_status::text = 'on_the_way'
+                       OR (owning_order.order_status::text IN (
+                             'on_the_way', 'out_for_delivery'
+                           )
                          AND assignment.status::text = 'on_the_way')
-                       OR (owning_order.order_status::text = 'arrived_at_destination'
+                       OR (owning_order.order_status::text IN (
+                             'arrived_at_destination', 'out_for_delivery'
+                           )
                          AND assignment.status::text = 'arrived')
                        OR (owning_order.order_status::text = 'delivered'
                          AND assignment.status::text = 'delivered')

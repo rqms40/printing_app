@@ -1,4 +1,5 @@
 import 'enums.dart';
+import 'order_status_history.dart';
 import 'paper_specs.dart';
 import 'three_d_specs.dart';
 import 'route_geometry.dart';
@@ -92,6 +93,90 @@ class AssignedRiderContact {
   }
 }
 
+class AssignedSupplierContact {
+  const AssignedSupplierContact({
+    required this.supplierId,
+    required this.businessName,
+    this.decision,
+    this.acceptanceDeadline,
+    this.assignmentId,
+    this.logoUrl,
+    this.address,
+    this.broadAddress,
+    this.selfQcEvidenceUrls = const [],
+    this.selfQcEvidenceFileIds = const [],
+  });
+
+  final int supplierId;
+  final String businessName;
+  final String? decision;
+  final DateTime? acceptanceDeadline;
+  final int? assignmentId;
+  final String? logoUrl;
+  final String? address;
+  final String? broadAddress;
+  final List<String> selfQcEvidenceUrls;
+  final List<int> selfQcEvidenceFileIds;
+
+  factory AssignedSupplierContact.fromJson(Map<String, dynamic> json) {
+    Object? read(String camel, String snake) => json[camel] ?? json[snake];
+
+    final idRaw = read('supplierId', 'supplier_id');
+    final id = idRaw is int
+        ? idRaw
+        : int.tryParse(idRaw?.toString() ?? '') ?? 0;
+    final name =
+        (read('businessName', 'business_name')?.toString().trim().isNotEmpty ==
+                true
+            ? read('businessName', 'business_name')!.toString().trim()
+            : 'Supplier');
+
+    DateTime? deadline;
+    final rawDeadline = read('acceptanceDeadline', 'acceptance_deadline');
+    if (rawDeadline != null) {
+      deadline = DateTime.tryParse(rawDeadline.toString());
+    }
+
+    final assignmentRaw = read('assignmentId', 'assignment_id');
+    final assignmentId = assignmentRaw is int
+        ? assignmentRaw
+        : int.tryParse(assignmentRaw?.toString() ?? '');
+
+    final urlsRaw =
+        read('selfQcEvidenceUrls', 'self_qc_evidence_urls');
+    final urls = <String>[];
+    if (urlsRaw is List) {
+      for (final u in urlsRaw) {
+        final s = u?.toString().trim() ?? '';
+        if (s.isNotEmpty) urls.add(s);
+      }
+    }
+
+    final idsRaw =
+        read('selfQcEvidenceFileIds', 'self_qc_evidence_file_ids');
+    final ids = <int>[];
+    if (idsRaw is List) {
+      for (final i in idsRaw) {
+        final n = i is int ? i : int.tryParse(i?.toString() ?? '');
+        if (n != null && n > 0) ids.add(n);
+      }
+    }
+
+    return AssignedSupplierContact(
+      supplierId: id,
+      businessName: name,
+      decision: read('decision', 'decision')?.toString(),
+      acceptanceDeadline: deadline,
+      assignmentId: assignmentId,
+      logoUrl: read('logoUrl', 'logo_url')?.toString(),
+      address: read('address', 'address')?.toString(),
+      broadAddress: read('broadAddress', 'broad_address')?.toString(),
+      selfQcEvidenceUrls: urls,
+      selfQcEvidenceFileIds: ids,
+    );
+  }
+}
+
 class OrderLineItem {
   const OrderLineItem({
     required this.id,
@@ -122,6 +207,80 @@ class OrderLineItem {
   final int quantity;
   final double totalPrice;
   final String? specialInstructions;
+}
+
+/// Client-facing material claim / concern attached to an order.
+class OrderClaim {
+  const OrderClaim({
+    required this.id,
+    required this.orderId,
+    required this.category,
+    required this.categoryLabel,
+    required this.status,
+    required this.statusLabel,
+    this.actionLabel,
+    this.resolutionNotes,
+    required this.withinWindow,
+    required this.openedAt,
+    this.resolvedAt,
+  });
+
+  final int id;
+  final int orderId;
+  final String category;
+  final String categoryLabel;
+  final String status;
+  final String statusLabel;
+  /// Ops action when resolved (e.g. "Reprint approved").
+  final String? actionLabel;
+  final String? resolutionNotes;
+  final bool withinWindow;
+  final DateTime openedAt;
+  final DateTime? resolvedAt;
+
+  bool get isOpen =>
+      status == 'open' || status == 'under_review';
+
+  bool get isResolved => !isOpen;
+
+  factory OrderClaim.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic value) {
+      if (value == null) return null;
+      if (value is DateTime) return value;
+      return DateTime.tryParse(value.toString());
+    }
+
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    return OrderClaim(
+      id: parseInt(json['id']),
+      orderId: parseInt(json['orderId'] ?? json['order_id']),
+      category: (json['category'] ?? '').toString(),
+      categoryLabel: (json['categoryLabel'] ??
+              json['category_label'] ??
+              json['category'] ??
+              'Concern')
+          .toString(),
+      status: (json['status'] ?? 'open').toString(),
+      statusLabel: (json['statusLabel'] ??
+              json['status_label'] ??
+              json['status'] ??
+              'Open')
+          .toString(),
+      actionLabel: (json['actionLabel'] ?? json['action_label'])?.toString(),
+      resolutionNotes:
+          (json['resolutionNotes'] ?? json['resolution_notes'])?.toString(),
+      withinWindow: json['withinWindow'] == true ||
+          json['within_window'] == true,
+      openedAt: parseDate(json['openedAt'] ?? json['opened_at']) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      resolvedAt: parseDate(json['resolvedAt'] ?? json['resolved_at']),
+    );
+  }
 }
 
 class Order {
@@ -163,7 +322,9 @@ class Order {
     this.deliveryLegDurationSeconds,
     this.deliveryLegDistanceMeters,
     this.deliveryRoutingDataStale,
+    this.deliveryOtp,
     this.assignedRider,
+    this.assignedSupplier,
     this.estimatedCompletionAt,
     this.adminStatusNote,
     this.adminStatusSetAt,
@@ -171,6 +332,8 @@ class Order {
     this.trackingLink,
     this.assignedSlot,
     this.items = const [],
+    this.claims = const [],
+    this.statusHistory = const [],
     this.specialInstructions,
     required this.createdAt,
     required this.updatedAt,
@@ -214,7 +377,11 @@ class Order {
   final int? deliveryLegDurationSeconds;
   final int? deliveryLegDistanceMeters;
   final bool? deliveryRoutingDataStale;
+
+  /// Customer handoff OTP while out for delivery (null after delivery).
+  final String? deliveryOtp;
   final AssignedRiderContact? assignedRider;
+  final AssignedSupplierContact? assignedSupplier;
   final DateTime? estimatedCompletionAt;
   final String? adminStatusNote;
   final DateTime? adminStatusSetAt;
@@ -222,6 +389,10 @@ class Order {
   final String? trackingLink;
   final AssignedDeliverySlot? assignedSlot;
   final List<OrderLineItem> items;
+  /// Material concerns / claims reported by the customer (and ops outcomes).
+  final List<OrderClaim> claims;
+  /// Marketplace + logistics status transitions (server-authoritative).
+  final List<OrderStatusHistory> statusHistory;
   final String? specialInstructions;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -315,7 +486,9 @@ class Order {
     int? deliveryLegDurationSeconds,
     int? deliveryLegDistanceMeters,
     bool? deliveryRoutingDataStale,
+    String? deliveryOtp,
     AssignedRiderContact? assignedRider,
+    AssignedSupplierContact? assignedSupplier,
     DateTime? estimatedCompletionAt,
     String? adminStatusNote,
     DateTime? adminStatusSetAt,
@@ -323,6 +496,8 @@ class Order {
     String? trackingLink,
     AssignedDeliverySlot? assignedSlot,
     List<OrderLineItem>? items,
+    List<OrderClaim>? claims,
+    List<OrderStatusHistory>? statusHistory,
     String? specialInstructions,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -372,7 +547,9 @@ class Order {
           deliveryLegDistanceMeters ?? this.deliveryLegDistanceMeters,
       deliveryRoutingDataStale:
           deliveryRoutingDataStale ?? this.deliveryRoutingDataStale,
+      deliveryOtp: deliveryOtp ?? this.deliveryOtp,
       assignedRider: assignedRider ?? this.assignedRider,
+      assignedSupplier: assignedSupplier ?? this.assignedSupplier,
       estimatedCompletionAt:
           estimatedCompletionAt ?? this.estimatedCompletionAt,
       adminStatusNote: adminStatusNote ?? this.adminStatusNote,
@@ -381,6 +558,8 @@ class Order {
       trackingLink: trackingLink ?? this.trackingLink,
       assignedSlot: assignedSlot ?? this.assignedSlot,
       items: items ?? this.items,
+      claims: claims ?? this.claims,
+      statusHistory: statusHistory ?? this.statusHistory,
       specialInstructions: specialInstructions ?? this.specialInstructions,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

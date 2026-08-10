@@ -7,6 +7,7 @@ class RegistrationDraft {
     this.gender,
     this.ageRange,
     this.printingPreferences = const [],
+    this.serviceFocusRanks = const [],
     this.fullName = '',
     this.email = '',
     this.phoneNumber = '',
@@ -21,6 +22,8 @@ class RegistrationDraft {
   final String? gender;
   final String? ageRange;
   final List<String> printingPreferences;
+  /// Supplier lane: ordered service-focus keys (1st = index 0).
+  final List<String> serviceFocusRanks;
   final String fullName;
   final String email;
   final String phoneNumber;
@@ -30,6 +33,9 @@ class RegistrationDraft {
   bool get hasNickname => nickname.trim().isNotEmpty;
   bool get hasCategory => profileCategory != null;
   bool get hasField => profileField != null;
+  bool get isSupplierLane => profileCategory == 'supplier';
+  bool get isRiderLane => profileCategory == 'rider';
+  bool get hasServiceFocus => serviceFocusRanks.isNotEmpty;
   bool get hasGender => gender != null && gender!.trim().isNotEmpty;
   bool get hasAgeRange => ageRange != null && ageRange!.trim().isNotEmpty;
 
@@ -48,6 +54,7 @@ class RegistrationDraft {
     Object? gender = _unset,
     Object? ageRange = _unset,
     List<String>? printingPreferences,
+    List<String>? serviceFocusRanks,
     String? fullName,
     String? email,
     String? phoneNumber,
@@ -66,6 +73,7 @@ class RegistrationDraft {
       gender: gender == _unset ? this.gender : gender as String?,
       ageRange: ageRange == _unset ? this.ageRange : ageRange as String?,
       printingPreferences: printingPreferences ?? this.printingPreferences,
+      serviceFocusRanks: serviceFocusRanks ?? this.serviceFocusRanks,
       fullName: fullName ?? this.fullName,
       email: email ?? this.email,
       phoneNumber: phoneNumber ?? this.phoneNumber,

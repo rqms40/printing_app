@@ -27,23 +27,32 @@ class RecentOrdersSection extends ConsumerWidget {
   StatusBadgeVariant _variantForStatus(OrderStatus status) {
     switch (status) {
       case OrderStatus.delivered:
-      case OrderStatus.completedPickup:
+      case OrderStatus.collectedByCustomer:
+      case OrderStatus.issueWindowOpen:
+      case OrderStatus.completed:
         return StatusBadgeVariant.success;
       case OrderStatus.cancelled:
-      case OrderStatus.fileDeclined:
+      case OrderStatus.fileRejected:
+      case OrderStatus.deliveryFailed:
         return StatusBadgeVariant.error;
-      case OrderStatus.onTheWay:
+      case OrderStatus.outForDelivery:
       case OrderStatus.pickedUp:
-      case OrderStatus.arrivedAtDestination:
         return StatusBadgeVariant.info;
-      case OrderStatus.printingInProgress:
-      case OrderStatus.finishingMounting:
-      case OrderStatus.qualityChecked:
+      case OrderStatus.production:
+      case OrderStatus.supplierSelfQc:
       case OrderStatus.readyForDispatch:
       case OrderStatus.riderAssigned:
+      case OrderStatus.paymentAuthorized:
+      case OrderStatus.awaitingPayment:
+      case OrderStatus.supplierAssigned:
+      case OrderStatus.supplierAccepted:
         return StatusBadgeVariant.warning;
-      case OrderStatus.orderPlaced:
-      case OrderStatus.fileVerified:
+      case OrderStatus.draft:
+      case OrderStatus.submitted:
+      case OrderStatus.needsQa:
+      case OrderStatus.clientCorrection:
+      case OrderStatus.proofApproval:
+      case OrderStatus.approvedForMatching:
         return StatusBadgeVariant.neutral;
     }
   }

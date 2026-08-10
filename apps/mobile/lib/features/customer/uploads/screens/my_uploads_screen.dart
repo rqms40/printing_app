@@ -752,9 +752,26 @@ class _GridCard extends ConsumerWidget {
             Positioned(
               top: 6,
               right: 6,
-              child: _DeleteIconButton(
-                colors: colors,
-                onTap: () => _confirmDelete(context, ref),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _MockupIconButton(
+                    colors: colors,
+                    onTap: () => context.push(
+                      '/customer/order/preview',
+                      extra: {
+                        'artworkFileId': file.id,
+                        'productType': 'flyer',
+                        'categoryHint': file.mimeType,
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  _DeleteIconButton(
+                    colors: colors,
+                    onTap: () => _confirmDelete(context, ref),
+                  ),
+                ],
               ),
             ),
           ],
@@ -830,6 +847,36 @@ class _DeleteIconButton extends StatelessWidget {
           child: Center(
             child: HugeIcon(
               icon: HugeIcons.strokeRoundedDelete02,
+              size: 14,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MockupIconButton extends StatelessWidget {
+  const _MockupIconButton({required this.colors, required this.onTap});
+  final AppColorSet colors;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.55),
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: const SizedBox(
+          width: 30,
+          height: 30,
+          child: Center(
+            child: HugeIcon(
+              icon: HugeIcons.strokeRoundedImage01,
               size: 14,
               color: Colors.white,
             ),
@@ -957,6 +1004,22 @@ class _ListRow extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
+            IconButton(
+              tooltip: 'Product preview (mockup)',
+              onPressed: () => context.push(
+                '/customer/order/preview',
+                extra: {
+                  'artworkFileId': file.id,
+                  'productType': 'flyer',
+                  'categoryHint': file.mimeType,
+                },
+              ),
+              icon: HugeIcon(
+                icon: HugeIcons.strokeRoundedImage01,
+                size: 18,
+                color: colors.onSurfaceDim,
+              ),
+            ),
             IconButton(
               tooltip: 'Delete file',
               onPressed: () => _confirmDelete(context, ref),

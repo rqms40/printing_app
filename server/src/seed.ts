@@ -1,3 +1,17 @@
+/**
+ * GRIDGO demo seed — managed marketplace pilot cast (5 roles).
+ *
+ * Accounts (passwords from ignored env only; never commit secrets):
+ * | Email                 | Role          | Password env                    |
+ * |-----------------------|---------------|---------------------------------|
+ * | maria@gridgo.ph       | client        | GRIDGO_SEED_CUSTOMER_PASSWORD   |
+ * | supplier@gridgo.ph    | supplier      | GRIDGO_SEED_CUSTOMER_PASSWORD   |
+ * | juan@gridgo.ph        | rider         | GRIDGO_SEED_RIDER_PASSWORD      |
+ * | admin@gridgo.ph       | ops_admin     | GRIDGO_SEED_ADMIN_PASSWORD      |
+ * | superadmin@gridgo.ph  | super_admin   | GRIDGO_SEED_ADMIN_PASSWORD      |
+ *
+ * Keep CLAUDE.md seed table in sync when changing emails/roles.
+ */
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DataSource } from 'typeorm';
@@ -164,7 +178,7 @@ async function seed() {
         PrintingPreference.PLOTTING_BLUEPRINTS,
         PrintingPreference.HIGH_RES_COLOR,
       ].join(','),
-      role: 'customer',
+      role: 'client',
       is_profile_complete: true,
       is_active: true,
     },
@@ -186,7 +200,7 @@ async function seed() {
     {
       email: 'admin@gridgo.ph',
       password_hash: adminPasswordHash,
-      full_name: 'Admin User',
+      full_name: 'Ops Admin',
       phone_number: '+639191234567',
       gender: 'male',
       profile_category: ProfileCategory.PROFESSIONAL,
@@ -194,7 +208,37 @@ async function seed() {
       course: null,
       organization: 'Grid Print HQ',
       printing_preferences: [PrintingPreference.MARKETING_MATERIALS].join(','),
-      role: 'admin',
+      role: 'ops_admin',
+      is_profile_complete: true,
+      is_active: true,
+    },
+    {
+      email: 'superadmin@gridgo.ph',
+      password_hash: adminPasswordHash,
+      full_name: 'Super Admin',
+      phone_number: '+639192234567',
+      gender: 'female',
+      profile_category: ProfileCategory.PROFESSIONAL,
+      profile_field: ProfileField.BUSINESS_CORPORATE,
+      course: null,
+      organization: 'Grid Print HQ',
+      printing_preferences: [PrintingPreference.MARKETING_MATERIALS].join(','),
+      role: 'super_admin',
+      is_profile_complete: true,
+      is_active: true,
+    },
+    {
+      email: 'supplier@gridgo.ph',
+      password_hash: customerPasswordHash,
+      full_name: 'Demo Supplier',
+      phone_number: '+639193234567',
+      gender: 'male',
+      profile_category: ProfileCategory.PROFESSIONAL,
+      profile_field: ProfileField.BUSINESS_CORPORATE,
+      course: null,
+      organization: 'Davao Print Co',
+      printing_preferences: [PrintingPreference.HIGH_RES_COLOR].join(','),
+      role: 'supplier',
       is_profile_complete: true,
       is_active: true,
     },
@@ -259,7 +303,9 @@ async function seed() {
       ],
     );
   }
-  console.log('✅ 3 users created (maria/customer, juan/rider, admin)');
+  console.log(
+    '✅ 5 users created (maria/client, juan/rider, admin/ops_admin, superadmin/super_admin, supplier/supplier)',
+  );
 
   // Get user IDs
   const [maria] = await typedQuery<IdRow>(
@@ -285,8 +331,9 @@ async function seed() {
       province: 'Davao del Sur',
       zip_code: '8000',
       landmark: 'Near SM City Davao',
-      latitude: 7.0731,
-      longitude: 125.6128,
+      // SM City Davao / Quimpo Blvd Ecoland (not the map-picker default)
+      latitude: 7.0497,
+      longitude: 125.588,
       is_default: true,
     },
     {

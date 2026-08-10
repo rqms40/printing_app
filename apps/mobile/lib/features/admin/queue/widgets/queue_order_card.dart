@@ -34,30 +34,34 @@ class _QueueOrderCardState extends State<QueueOrderCard> {
         : AppColors.light;
   }
 
+  /// Icon + semantic color for density; label is always [OrderStatus.displayName]
+  /// so status is never color-only (marketplace dual-theme a11y).
   _QueueVisual _visual(AppColorSet colors) {
+    final label = widget.order.orderStatus.displayName;
     switch (widget.order.orderStatus) {
-      case OrderStatus.orderPlaced:
-      case OrderStatus.fileVerified:
+      case OrderStatus.draft:
+      case OrderStatus.submitted:
+      case OrderStatus.needsQa:
+      case OrderStatus.clientCorrection:
+      case OrderStatus.proofApproval:
+      case OrderStatus.approvedForMatching:
         return _QueueVisual(
           HugeIcons.strokeRoundedFile02,
           colors.info.withValues(alpha: 0.1),
           colors.info,
-          'New',
+          label,
         );
-      case OrderStatus.printingInProgress:
-      case OrderStatus.finishingMounting:
+      case OrderStatus.supplierAssigned:
+      case OrderStatus.supplierAccepted:
+      case OrderStatus.awaitingPayment:
+      case OrderStatus.paymentAuthorized:
+      case OrderStatus.production:
+      case OrderStatus.supplierSelfQc:
         return _QueueVisual(
           HugeIcons.strokeRoundedPrinter,
           colors.warning.withValues(alpha: 0.1),
           colors.warning,
-          'In Production',
-        );
-      case OrderStatus.qualityChecked:
-        return _QueueVisual(
-          HugeIcons.strokeRoundedCheckmarkCircle02,
-          colors.warning.withValues(alpha: 0.1),
-          colors.warning,
-          'Quality Checked',
+          label,
         );
       case OrderStatus.readyForDispatch:
       case OrderStatus.riderAssigned:
@@ -65,34 +69,34 @@ class _QueueOrderCardState extends State<QueueOrderCard> {
           HugeIcons.strokeRoundedPackage,
           colors.success.withValues(alpha: 0.1),
           colors.success,
-          'Ready',
+          label,
         );
       case OrderStatus.pickedUp:
-      case OrderStatus.onTheWay:
-      case OrderStatus.arrivedAtDestination:
+      case OrderStatus.outForDelivery:
         return _QueueVisual(
           HugeIcons.strokeRoundedDeliveryTruck02,
           colors.info.withValues(alpha: 0.1),
           colors.info,
-          'In Delivery',
+          label,
         );
       case OrderStatus.delivered:
-      case OrderStatus.completedPickup:
+      case OrderStatus.collectedByCustomer:
+      case OrderStatus.issueWindowOpen:
+      case OrderStatus.completed:
         return _QueueVisual(
           HugeIcons.strokeRoundedCheckmarkCircle02,
           colors.success.withValues(alpha: 0.1),
           colors.success,
-          'Completed',
+          label,
         );
-      case OrderStatus.fileDeclined:
+      case OrderStatus.fileRejected:
       case OrderStatus.cancelled:
+      case OrderStatus.deliveryFailed:
         return _QueueVisual(
           HugeIcons.strokeRoundedCancelCircle,
           colors.error.withValues(alpha: 0.1),
           colors.error,
-          widget.order.orderStatus == OrderStatus.cancelled
-              ? 'Cancelled'
-              : 'Declined',
+          label,
         );
     }
   }

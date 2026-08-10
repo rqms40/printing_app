@@ -28,13 +28,13 @@ describe('DeliverySlotsGateway', () => {
     const jwtService = {
       verifyAsync: jest.fn().mockResolvedValue({
         sub: 10,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
       }),
     };
     const usersService = {
       findSocketIdentity: jest.fn().mockResolvedValue({
         id: 10,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: false,
       }),
     };
@@ -45,7 +45,7 @@ describe('DeliverySlotsGateway', () => {
     );
     const client = {
       handshake: { auth: { token: 'signed-token' } },
-      data: { userId: 10, role: UserRole.CUSTOMER },
+      data: { userId: 10, role: UserRole.CLIENT },
       join: jest.fn(),
       disconnect: jest.fn(),
     };

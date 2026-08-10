@@ -16,7 +16,7 @@ import {
   DeliveryStatus,
 } from './entities/delivery-assignment.entity';
 import { UsersService, type SocketIdentity } from '../users/users.service';
-import { UserRole } from '../users/entities/user.entity';
+import { isAdminRole, UserRole } from '../users/entities/user.entity';
 import { DispatchPlanService } from './dispatch-plan.service';
 import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
 import { authenticateRealtimeSocket } from '../common/realtime/realtime-socket-auth';
@@ -97,11 +97,11 @@ export class LocationGateway implements OnGatewayConnection {
       'Live tracking is not available for this stop',
     );
     if (!assignment) {
-      if (role === UserRole.CUSTOMER) throw unavailable;
+      if (role === UserRole.CLIENT) throw unavailable;
       throw new WsException('Delivery not found');
     }
 
-    if (role === UserRole.CUSTOMER) {
+    if (role === UserRole.CLIENT) {
       if (assignment.order?.userId !== userId) {
         throw unavailable;
       }
@@ -116,7 +116,7 @@ export class LocationGateway implements OnGatewayConnection {
       if (assignment.rider?.userId !== userId) {
         throw new WsException('Forbidden');
       }
-    } else if (role !== UserRole.ADMIN) {
+    } else if (!isAdminRole(role)) {
       throw new WsException('Forbidden');
     }
 

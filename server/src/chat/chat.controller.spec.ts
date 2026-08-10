@@ -57,7 +57,7 @@ describe('ChatController', () => {
 
       await expect(
         controller.openOrderConversation('42', {
-          user: { sub: 5, role: 'customer', email: 'customer@example.com' },
+          user: { sub: 5, role: 'client', email: 'customer@example.com' },
         }),
       ).resolves.toBe(conversation);
       expect(
@@ -96,7 +96,7 @@ describe('ChatController', () => {
         {
           id: 1,
           conversationId: 10,
-          senderRole: 'customer',
+          senderrole: 'client',
           content: 'Where are you?',
         },
       ];
@@ -144,7 +144,7 @@ describe('ChatController', () => {
 
       await expect(
         controller.getMessages('10', '1', '50', {
-          user: { sub: 12, role: 'customer', email: 'not-rider@example.com' },
+          user: { sub: 12, role: 'client', email: 'not-rider@example.com' },
         }),
       ).rejects.toThrow(ForbiddenException);
       expect(chatService.getMessagesForActor).toHaveBeenCalledWith(
@@ -183,7 +183,7 @@ describe('ChatController', () => {
 
       await expect(
         controller.getMessages('10', '1', '50', {
-          user: { sub: 5, role: 'customer', email: 'customer@example.com' },
+          user: { sub: 5, role: 'client', email: 'customer@example.com' },
         }),
       ).resolves.toBe(messages);
       expect(chatService.getMessagesForActor).toHaveBeenCalledWith(

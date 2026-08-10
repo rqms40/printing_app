@@ -11,6 +11,7 @@ import 'package:printing_app/features/customer/order/models/delivery_speed_tier.
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
+import 'package:printing_app/shared/models/order_status_history.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
 import 'package:printing_app/shared/models/route_geometry.dart';
@@ -21,12 +22,22 @@ import 'package:printing_app/shared/services/websocket_service.dart';
 /// Terminal statuses that mark an order as completed/done.
 const terminalStatuses = {
   OrderStatus.delivered,
-  OrderStatus.completedPickup,
+  OrderStatus.collectedByCustomer,
+  OrderStatus.issueWindowOpen,
+  OrderStatus.completed,
   OrderStatus.cancelled,
+  OrderStatus.fileRejected,
 };
 
 /// Statuses eligible for customer-initiated cancellation.
-const cancellableStatuses = {OrderStatus.orderPlaced, OrderStatus.fileVerified};
+const cancellableStatuses = {
+  OrderStatus.draft,
+  OrderStatus.submitted,
+  OrderStatus.needsQa,
+  OrderStatus.clientCorrection,
+  OrderStatus.proofApproval,
+  OrderStatus.approvedForMatching,
+};
 
 dynamic _readJsonValue(
   Map<String, dynamic> json,
@@ -93,20 +104,16 @@ String? _readSpecialInstructions(
 }
 
 OrderStatus _parseOrderStatus(String value) {
-  // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
-  final camelCase = value.replaceAllMapped(
-    RegExp(r'_([a-z])'),
-    (m) => m.group(1)!.toUpperCase(),
-  );
-  return OrderStatus.values.firstWhere(
-    (e) => e.name == camelCase,
-    orElse: () => OrderStatus.orderPlaced,
-  );
+  return parseMarketplaceOrderStatus(value);
 }
 
 PaymentMethod _parsePaymentMethod(String value) {
   final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
-  if (normalized == 'credits' || normalized == 'gridcredit') {
+  if (normalized == 'credits' ||
+      normalized == 'gridcredit' ||
+      normalized == 'gridcredits' ||
+      normalized == 'pilotcredit' ||
+      normalized == 'pilotcredits') {
     return PaymentMethod.gridCredits;
   }
   if (normalized == 'cash' || normalized == 'cashondelivery') {
@@ -357,6 +364,20 @@ AssignedRiderContact? _parseAssignedRider(Map<String, dynamic> json) {
   return null;
 }
 
+AssignedSupplierContact? _parseAssignedSupplier(Map<String, dynamic> json) {
+  final value =
+      _readJsonValue(
+        json,
+        'assignedSupplierContact',
+        'assigned_supplier_contact',
+      ) ??
+      _readJsonValue(json, 'assignedSupplier', 'assigned_supplier');
+  if (value is Map) {
+    return AssignedSupplierContact.fromJson(Map<String, dynamic>.from(value));
+  }
+  return null;
+}
+
 Order _parseOrder(Map<String, dynamic> json) {
   final batch = _readJsonValue(json, 'batchOrder', 'batch_order');
   final batchJson = batch is Map ? Map<String, dynamic>.from(batch) : null;
@@ -543,7 +564,11 @@ Order _parseOrder(Map<String, dynamic> json) {
     deliveryLegDurationSeconds: legDuration,
     deliveryLegDistanceMeters: legDistance,
     deliveryRoutingDataStale: rawRoutingStale is bool ? rawRoutingStale : null,
+    deliveryOtp: _normalizeOptionalText(
+      _readJsonValue(json, 'deliveryOtp', 'delivery_otp'),
+    ),
     assignedRider: _parseAssignedRider(json),
+    assignedSupplier: _parseAssignedSupplier(json),
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
     ),
@@ -563,6 +588,8 @@ Order _parseOrder(Map<String, dynamic> json) {
     )?.toString(),
     assignedSlot: _parseAssignedSlot(json),
     items: items,
+    claims: _parseOrderClaims(json),
+    statusHistory: _parseOrderStatusHistory(json),
     specialInstructions: _readSpecialInstructions(
       json,
       specs,
@@ -571,6 +598,48 @@ Order _parseOrder(Map<String, dynamic> json) {
     createdAt: _parseDate(_readJsonValue(json, 'createdAt', 'created_at')),
     updatedAt: _parseDate(_readJsonValue(json, 'updatedAt', 'updated_at')),
   );
+}
+
+List<OrderClaim> _parseOrderClaims(Map<String, dynamic> json) {
+  final raw = _readJsonValue(json, 'claims', 'materialClaims', 'material_claims');
+  if (raw is! List) return const [];
+  return raw
+      .whereType<Map>()
+      .map((row) => OrderClaim.fromJson(Map<String, dynamic>.from(row)))
+      .toList();
+}
+
+List<OrderStatusHistory> _parseOrderStatusHistory(Map<String, dynamic> json) {
+  final raw = _readJsonValue(json, 'statusHistory', 'status_history');
+  if (raw is! List) return const [];
+  final rows = <OrderStatusHistory>[];
+  for (final entry in raw.whereType<Map>()) {
+    final map = Map<String, dynamic>.from(entry);
+    final fromRaw =
+        _readJsonValue(map, 'fromStatus', 'from_status')?.toString() ?? '';
+    final toRaw =
+        _readJsonValue(map, 'toStatus', 'to_status')?.toString() ?? '';
+    if (toRaw.isEmpty) continue;
+    rows.add(
+      OrderStatusHistory(
+        id: _readJsonValue(map, 'id')?.toString() ?? '',
+        orderId: _readJsonValue(map, 'orderId', 'order_id')?.toString() ?? '',
+        fromStatus: parseMarketplaceOrderStatus(
+          fromRaw.isEmpty ? 'submitted' : fromRaw,
+        ),
+        toStatus: parseMarketplaceOrderStatus(toRaw),
+        changedByUserId:
+            _readJsonValue(map, 'changedByUserId', 'changed_by_user_id')
+                ?.toString(),
+        notes: _readJsonValue(map, 'notes')?.toString(),
+        createdAt: _parseDate(
+          _readJsonValue(map, 'createdAt', 'created_at'),
+        ),
+      ),
+    );
+  }
+  rows.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  return rows;
 }
 
 OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
@@ -806,7 +875,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
           next[index] = updated;
           state = next;
           if (updated.orderStatus == OrderStatus.delivered ||
-              updated.orderStatus == OrderStatus.completedPickup) {
+              updated.orderStatus == OrderStatus.collectedByCustomer) {
             unawaited(onCompletionUpdate?.call());
           }
         } else {
@@ -935,7 +1004,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
           'quantity': order.quantity,
           'totalPrice': order.totalPrice,
           'deliveryFee': order.deliveryFee,
-          'paymentMethod': order.paymentMethod.name,
+          'paymentMethod': order.paymentMethod.orderApiValue,
           'deliveryOption': order.deliveryOption,
           'deliveryAddressId': _deliveryAddressIdValue(order.deliveryAddressId),
           'fileName': order.fileName,
@@ -1024,7 +1093,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     final body = <String, dynamic>{
       'items': mappedItems,
       'deliveryFee': deliveryFee,
-      'paymentMethod': paymentMethod.name,
+      'paymentMethod': paymentMethod.orderApiValue,
       'deliveryOption': deliveryOption,
       'deliveryAddressId': addressId,
       'speedTier': speedTier.toApi(),
@@ -1189,6 +1258,67 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       debugPrint('OrdersProvider: cancel failed ($e) — reverting local state');
       await _fetchOrders();
     }
+  }
+
+  /// Client: resubmit revised artwork after Ops requested correction.
+  /// Upload via files API first, then pass [fileMetadataId].
+  Future<void> resubmitCorrection(
+    String orderId, {
+    required int fileMetadataId,
+    String? notes,
+  }) async {
+    await ApiClient.instance.post(
+      '/orders/$orderId/resubmit-correction',
+      data: {
+        'fileMetadataId': fileMetadataId,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    await _fetchOrders();
+  }
+
+  /// Client: approve proof → approved_for_matching.
+  Future<void> approveProof(String orderId) async {
+    await ApiClient.instance.post('/orders/$orderId/approve-proof');
+    await _fetchOrders();
+  }
+
+  /// Client: reject proof → client_correction.
+  Future<void> rejectProof(String orderId, {String? reason}) async {
+    await ApiClient.instance.post(
+      '/orders/$orderId/reject-proof',
+      data: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+    await _fetchOrders();
+  }
+
+  /// Client: open a material claim after collection/delivery (Claims queue).
+  Future<void> reportConcern(
+    String orderId, {
+    required String category,
+    String? notes,
+  }) async {
+    final parsedId = int.tryParse(orderId);
+    if (parsedId == null) {
+      throw ArgumentError('Invalid order id');
+    }
+    await ApiClient.instance.post(
+      '/issues',
+      data: {
+        'orderId': parsedId,
+        'category': category,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    await _fetchOrders();
+  }
+
+  /// Client: confirms receipt of order, moving it from issue_window_open to completed.
+  Future<void> confirmReceipt(String orderId) async {
+    await ApiClient.instance.patch('/orders/$orderId/confirm-receipt');
+    await _fetchOrders();
   }
 }
 

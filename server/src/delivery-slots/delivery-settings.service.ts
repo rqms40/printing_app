@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DeliverySettings } from './entities/delivery-settings.entity';
 import { GeoRadiusService } from './geo-radius.service';
+import { GeoZonesService } from '../geo-zones/geo-zones.service';
 
 @Injectable()
 export class DeliverySettingsService {
@@ -10,6 +11,7 @@ export class DeliverySettingsService {
     @InjectRepository(DeliverySettings)
     private readonly repo: Repository<DeliverySettings>,
     private readonly geo: GeoRadiusService,
+    @Optional() private readonly geoZones?: GeoZonesService,
   ) {}
 
   async getSettings(): Promise<DeliverySettings> {
@@ -35,10 +37,23 @@ export class DeliverySettingsService {
     return this.repo.save(current);
   }
 
+  /**
+   * Prefer active geo zones when configured; fall back to radius circle.
+   */
   async isInsideServiceArea(
     lat: number | null,
     lng: number | null,
   ): Promise<boolean> {
+    if (this.geoZones) {
+      try {
+        const hasZones = await this.geoZones.hasActiveZones();
+        if (hasZones) {
+          return this.geoZones.isInsideAnyZone(lat, lng);
+        }
+      } catch {
+        // Zones module unavailable — fall through to radius.
+      }
+    }
     const s = await this.getSettings();
     return this.geo.isInsideRadius(
       lat,

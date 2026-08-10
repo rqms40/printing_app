@@ -1,70 +1,542 @@
 /// All domain enums for GRIDGO with displayName extensions.
 library;
 
-enum UserRole { customer, rider, admin }
+enum UserRole {
+  client,
+  supplier,
+  rider,
+  opsAdmin,
+  superAdmin,
+  /// Legacy aliases accepted when parsing API payloads during cutover.
+  customer,
+  admin,
+}
 
-extension UserRoleX on UserRole {
+/// Marketplace client metadata only — not an auth role or shell.
+enum ClientAccountType {
+  business,
+  organization,
+  teacher,
+}
+
+extension ClientAccountTypeX on ClientAccountType {
+  String get apiValue {
+    switch (this) {
+      case ClientAccountType.business:
+        return 'business';
+      case ClientAccountType.organization:
+        return 'organization';
+      case ClientAccountType.teacher:
+        return 'teacher';
+    }
+  }
+
   String get displayName {
     switch (this) {
-      case UserRole.customer:
-        return 'Customer';
-      case UserRole.rider:
-        return 'Rider';
-      case UserRole.admin:
-        return 'Admin';
+      case ClientAccountType.business:
+        return 'Business';
+      case ClientAccountType.organization:
+        return 'Organization';
+      case ClientAccountType.teacher:
+        return 'Teacher';
     }
   }
 }
 
+ClientAccountType? parseClientAccountType(String? raw) {
+  switch (raw) {
+    case 'business':
+      return ClientAccountType.business;
+    case 'organization':
+      return ClientAccountType.organization;
+    case 'teacher':
+      return ClientAccountType.teacher;
+    default:
+      return null;
+  }
+}
+
+extension UserRoleX on UserRole {
+  String get displayName {
+    switch (this) {
+      case UserRole.client:
+      case UserRole.customer:
+        return 'Client';
+      case UserRole.supplier:
+        return 'Supplier';
+      case UserRole.rider:
+        return 'Rider';
+      case UserRole.opsAdmin:
+        return 'Ops Admin';
+      case UserRole.superAdmin:
+        return 'Super Admin';
+      case UserRole.admin:
+        return 'Admin';
+    }
+  }
+
+  /// API wire value (snake_case).
+  String get apiValue {
+    switch (this) {
+      case UserRole.client:
+      case UserRole.customer:
+        return 'client';
+      case UserRole.supplier:
+        return 'supplier';
+      case UserRole.rider:
+        return 'rider';
+      case UserRole.opsAdmin:
+        return 'ops_admin';
+      case UserRole.superAdmin:
+        return 'super_admin';
+      case UserRole.admin:
+        return 'ops_admin';
+    }
+  }
+
+  /// Collapse legacy/marketplace role strings into routing buckets.
+  String get effectiveShell {
+    switch (this) {
+      case UserRole.rider:
+        return 'rider';
+      case UserRole.opsAdmin:
+      case UserRole.superAdmin:
+      case UserRole.admin:
+        return 'admin';
+      case UserRole.client:
+      case UserRole.customer:
+      case UserRole.supplier:
+        return 'customer';
+    }
+  }
+}
+
+UserRole? parseUserRole(String? raw) {
+  switch (raw) {
+    case 'client':
+      return UserRole.client;
+    case 'supplier':
+      return UserRole.supplier;
+    case 'rider':
+      return UserRole.rider;
+    case 'ops_admin':
+      return UserRole.opsAdmin;
+    case 'super_admin':
+      return UserRole.superAdmin;
+    case 'customer':
+      return UserRole.customer;
+    case 'admin':
+      return UserRole.admin;
+    default:
+      return null;
+  }
+}
+
+/// Marketplace order lifecycle. API values are snake_case (e.g. `needs_qa`).
 enum OrderStatus {
-  orderPlaced,
-  fileVerified,
-  fileDeclined,
-  printingInProgress,
-  finishingMounting,
-  qualityChecked,
+  draft,
+  submitted,
+  needsQa,
+  clientCorrection,
+  proofApproval,
+  approvedForMatching,
+  supplierAssigned,
+  supplierAccepted,
+  awaitingPayment,
+  paymentAuthorized,
+  production,
+  supplierSelfQc,
   readyForDispatch,
   riderAssigned,
   pickedUp,
-  onTheWay,
-  arrivedAtDestination,
+  outForDelivery,
   delivered,
-  completedPickup,
+  deliveryFailed,
+  collectedByCustomer,
+  issueWindowOpen,
+  completed,
   cancelled,
+  fileRejected,
 }
 
 extension OrderStatusX on OrderStatus {
+  String get apiValue {
+    switch (this) {
+      case OrderStatus.draft:
+        return 'draft';
+      case OrderStatus.submitted:
+        return 'submitted';
+      case OrderStatus.needsQa:
+        return 'needs_qa';
+      case OrderStatus.clientCorrection:
+        return 'client_correction';
+      case OrderStatus.proofApproval:
+        return 'proof_approval';
+      case OrderStatus.approvedForMatching:
+        return 'approved_for_matching';
+      case OrderStatus.supplierAssigned:
+        return 'supplier_assigned';
+      case OrderStatus.supplierAccepted:
+        return 'supplier_accepted';
+      case OrderStatus.awaitingPayment:
+        return 'awaiting_payment';
+      case OrderStatus.paymentAuthorized:
+        return 'payment_authorized';
+      case OrderStatus.production:
+        return 'production';
+      case OrderStatus.supplierSelfQc:
+        return 'supplier_self_qc';
+      case OrderStatus.readyForDispatch:
+        return 'ready_for_dispatch';
+      case OrderStatus.riderAssigned:
+        return 'rider_assigned';
+      case OrderStatus.pickedUp:
+        return 'picked_up';
+      case OrderStatus.outForDelivery:
+        return 'out_for_delivery';
+      case OrderStatus.delivered:
+        return 'delivered';
+      case OrderStatus.deliveryFailed:
+        return 'delivery_failed';
+      case OrderStatus.collectedByCustomer:
+        return 'collected_by_customer';
+      case OrderStatus.issueWindowOpen:
+        return 'issue_window_open';
+      case OrderStatus.completed:
+        return 'completed';
+      case OrderStatus.cancelled:
+        return 'cancelled';
+      case OrderStatus.fileRejected:
+        return 'file_rejected';
+    }
+  }
+
   String get displayName {
     switch (this) {
-      case OrderStatus.orderPlaced:
-        return 'Order Placed';
-      case OrderStatus.fileVerified:
-        return 'File Verified';
-      case OrderStatus.fileDeclined:
-        return 'File Declined';
-      case OrderStatus.printingInProgress:
-        return 'Printing in Progress';
-      case OrderStatus.finishingMounting:
-        return 'Finishing & Mounting';
-      case OrderStatus.qualityChecked:
-        return 'Quality Checked';
+      case OrderStatus.draft:
+        return 'Draft';
+      case OrderStatus.submitted:
+        return 'Submitted';
+      case OrderStatus.needsQa:
+        return 'Under review';
+      case OrderStatus.clientCorrection:
+        return 'Needs your update';
+      case OrderStatus.proofApproval:
+        return 'Proof approval';
+      case OrderStatus.approvedForMatching:
+        return 'Approved for matching';
+      case OrderStatus.supplierAssigned:
+        return 'Supplier assigned';
+      case OrderStatus.supplierAccepted:
+        return 'Supplier accepted';
+      case OrderStatus.awaitingPayment:
+        return 'Awaiting ops payment auth';
+      case OrderStatus.paymentAuthorized:
+        return 'Payment authorized';
+      case OrderStatus.production:
+        return 'In production';
+      case OrderStatus.supplierSelfQc:
+        return 'Supplier quality check';
       case OrderStatus.readyForDispatch:
-        return 'Ready for Dispatch';
+        return 'Ready for dispatch';
       case OrderStatus.riderAssigned:
-        return 'Rider Assigned';
+        return 'Rider assigned';
       case OrderStatus.pickedUp:
-        return 'Picked Up';
-      case OrderStatus.onTheWay:
-        return 'On the Way';
-      case OrderStatus.arrivedAtDestination:
-        return 'Arrived at Destination';
+        return 'Picked up';
+      case OrderStatus.outForDelivery:
+        return 'Out for delivery';
       case OrderStatus.delivered:
         return 'Delivered';
-      case OrderStatus.completedPickup:
-        return 'Completed (Pickup)';
+      case OrderStatus.deliveryFailed:
+        return 'Delivery failed';
+      case OrderStatus.collectedByCustomer:
+        return 'Collected';
+      case OrderStatus.issueWindowOpen:
+        return 'Issue window open';
+      case OrderStatus.completed:
+        return 'Completed';
       case OrderStatus.cancelled:
         return 'Cancelled';
+      case OrderStatus.fileRejected:
+        return 'File rejected';
     }
+  }
+
+  /// Short client-facing explanation under the status badge.
+  String get customerSummary {
+    switch (this) {
+      case OrderStatus.draft:
+        return 'This order is still a draft and has not been submitted.';
+      case OrderStatus.submitted:
+        return 'We received your order and will review the files next.';
+      case OrderStatus.needsQa:
+        return 'Ops is reviewing your artwork and specifications.';
+      case OrderStatus.clientCorrection:
+        return 'Please update your files or specs so review can continue.';
+      case OrderStatus.proofApproval:
+        return 'Review and approve the proof when you are ready.';
+      case OrderStatus.approvedForMatching:
+        return 'Your order is approved and will be matched to a supplier.';
+      case OrderStatus.supplierAssigned:
+        return 'A print supplier has been assigned to your order.';
+      case OrderStatus.supplierAccepted:
+        return 'The supplier accepted the job. Ops will authorize payment next.';
+      case OrderStatus.awaitingPayment:
+        return 'Waiting for GRIDGO ops to authorize payment so production can start.';
+      case OrderStatus.paymentAuthorized:
+        return 'Payment is authorized. Production can begin.';
+      case OrderStatus.production:
+        return 'Your order is being printed and finished.';
+      case OrderStatus.supplierSelfQc:
+        return 'The supplier is running a final quality check.';
+      case OrderStatus.readyForDispatch:
+        return 'Print is ready and waiting for dispatch.';
+      case OrderStatus.riderAssigned:
+        return 'A rider has been assigned for pickup or delivery.';
+      case OrderStatus.pickedUp:
+        return 'The rider picked up your order from the supplier.';
+      case OrderStatus.outForDelivery:
+        return 'Your order is on the way.';
+      case OrderStatus.delivered:
+        return 'Your order was delivered.';
+      case OrderStatus.deliveryFailed:
+        return 'Delivery could not be completed. Support will follow up.';
+      case OrderStatus.collectedByCustomer:
+        return 'You collected this order. You can report a concern within 24 hours if needed.';
+      case OrderStatus.issueWindowOpen:
+        return 'Please check your order. Tap Report a Concern within 24 hours if anything is wrong.';
+      case OrderStatus.completed:
+        return 'This order is fully complete.';
+      case OrderStatus.cancelled:
+        return 'This order was cancelled.';
+      case OrderStatus.fileRejected:
+        return 'The submitted file was rejected during review.';
+    }
+  }
+
+  /// Linear progress rank for customer timelines (higher = further along).
+  /// Terminal branch statuses (cancelled, rejected, failed) are not ranked.
+  int? get timelineRank {
+    switch (this) {
+      case OrderStatus.draft:
+        return 0;
+      case OrderStatus.submitted:
+        return 10;
+      case OrderStatus.needsQa:
+        return 20;
+      case OrderStatus.clientCorrection:
+        return 25;
+      case OrderStatus.proofApproval:
+        return 30;
+      case OrderStatus.approvedForMatching:
+        return 40;
+      case OrderStatus.supplierAssigned:
+        return 50;
+      case OrderStatus.supplierAccepted:
+        return 60;
+      case OrderStatus.awaitingPayment:
+        return 70;
+      case OrderStatus.paymentAuthorized:
+        return 80;
+      case OrderStatus.production:
+        return 90;
+      case OrderStatus.supplierSelfQc:
+        return 100;
+      case OrderStatus.readyForDispatch:
+        return 110;
+      case OrderStatus.riderAssigned:
+        return 120;
+      case OrderStatus.pickedUp:
+        return 130;
+      case OrderStatus.outForDelivery:
+        return 140;
+      case OrderStatus.delivered:
+      case OrderStatus.collectedByCustomer:
+        return 150;
+      case OrderStatus.issueWindowOpen:
+        return 160;
+      case OrderStatus.completed:
+        return 170;
+      case OrderStatus.cancelled:
+      case OrderStatus.fileRejected:
+      case OrderStatus.deliveryFailed:
+        return null;
+    }
+  }
+}
+
+/// Logistics steps after ready for dispatch (admin assigns rider → delivery).
+const List<OrderStatus> deliveryLogisticsPipeline = [
+  OrderStatus.riderAssigned,
+  OrderStatus.pickedUp,
+  OrderStatus.outForDelivery,
+  OrderStatus.delivered,
+];
+
+/// Whether [status] is part of the post-dispatch rider delivery process.
+bool isDeliveryLogisticsStatus(OrderStatus status) {
+  return status == OrderStatus.riderAssigned ||
+      status == OrderStatus.pickedUp ||
+      status == OrderStatus.outForDelivery ||
+      status == OrderStatus.delivered ||
+      status == OrderStatus.deliveryFailed;
+}
+
+/// Builds the customer-visible marketplace status pipeline for an order.
+///
+/// Always includes supplier matching/payment steps so statuses like
+/// `supplier_assigned` and `supplier_accepted` appear on the timeline.
+///
+/// After [OrderStatus.readyForDispatch], the **delivery logistics process**
+/// is always shown (rider assigned → picked up → out for delivery → delivered).
+/// That path is used for Progress even when [isPickup] is true, so the client
+/// never only sees "Collected by customer" in place of logistics.
+///
+/// If the order truly completed via store pickup, [OrderStatus.collectedByCustomer]
+/// is still mapped onto the final delivery rank for the current-step indicator.
+List<OrderStatus> customerOrderStatusPipeline({
+  required bool isPickup,
+  Set<OrderStatus> includeOptional = const {},
+}) {
+  final steps = <OrderStatus>[
+    OrderStatus.submitted,
+    OrderStatus.needsQa,
+  ];
+
+  if (includeOptional.contains(OrderStatus.clientCorrection)) {
+    steps.add(OrderStatus.clientCorrection);
+  }
+  if (includeOptional.contains(OrderStatus.proofApproval)) {
+    steps.add(OrderStatus.proofApproval);
+  }
+
+  steps.addAll([
+    OrderStatus.approvedForMatching,
+    OrderStatus.supplierAssigned,
+    OrderStatus.supplierAccepted,
+    OrderStatus.awaitingPayment,
+    OrderStatus.paymentAuthorized,
+    OrderStatus.production,
+    OrderStatus.supplierSelfQc,
+    // Handoff into logistics — admin assigns a rider from here.
+    OrderStatus.readyForDispatch,
+    // Delivery process (always visible — do not replace with Collected).
+    ...deliveryLogisticsPipeline,
+  ]);
+
+  if (includeOptional.contains(OrderStatus.issueWindowOpen) ||
+      includeOptional.contains(OrderStatus.completed) ||
+      includeOptional.contains(OrderStatus.delivered) ||
+      includeOptional.contains(OrderStatus.collectedByCustomer)) {
+    steps.add(OrderStatus.issueWindowOpen);
+  }
+  if (includeOptional.contains(OrderStatus.completed)) {
+    steps.add(OrderStatus.completed);
+  }
+
+  // isPickup is retained for callers/API symmetry; logistics stay delivery-first.
+  // ignore: unused_local_variable
+  final _ = isPickup;
+
+  return steps;
+}
+
+/// Shared marketplace + logistics progress steps for admin/ops surfaces.
+///
+/// Always follows Ready for Dispatch with the rider delivery process.
+List<OrderStatus> adminOrderStatusPipeline({required bool isPickup}) {
+  return customerOrderStatusPipeline(
+    isPickup: isPickup,
+    includeOptional: {
+      OrderStatus.issueWindowOpen,
+      OrderStatus.completed,
+    },
+  );
+}
+
+/// Parse API snake_case (or camelCase) including legacy shop-queue labels.
+OrderStatus parseMarketplaceOrderStatus(
+  String value, {
+  OrderStatus fallback = OrderStatus.submitted,
+}) {
+  // camelCase → snake_case, then normalize separators.
+  final withSnake = value
+      .trim()
+      .replaceAllMapped(
+        RegExp(r'([a-z0-9])([A-Z])'),
+        (m) => '${m[1]}_${m[2]}',
+      )
+      .toLowerCase()
+      .replaceAll('-', '_')
+      .replaceAll(' ', '_');
+  final normalized = withSnake;
+  switch (normalized) {
+    // Legacy → marketplace
+    case 'order_placed':
+      return OrderStatus.submitted;
+    case 'file_verified':
+      return OrderStatus.approvedForMatching;
+    case 'file_declined':
+      return OrderStatus.fileRejected;
+    case 'printing_in_progress':
+    case 'finishing_mounting':
+      return OrderStatus.production;
+    case 'quality_checked':
+      return OrderStatus.supplierSelfQc;
+    case 'on_the_way':
+    case 'arrived_at_destination':
+      return OrderStatus.outForDelivery;
+    case 'completed_pickup':
+      return OrderStatus.collectedByCustomer;
+    // Marketplace + same-name
+    case 'draft':
+      return OrderStatus.draft;
+    case 'submitted':
+      return OrderStatus.submitted;
+    case 'needs_qa':
+      return OrderStatus.needsQa;
+    case 'client_correction':
+      return OrderStatus.clientCorrection;
+    case 'proof_approval':
+      return OrderStatus.proofApproval;
+    case 'approved_for_matching':
+      return OrderStatus.approvedForMatching;
+    case 'supplier_assigned':
+      return OrderStatus.supplierAssigned;
+    case 'supplier_accepted':
+      return OrderStatus.supplierAccepted;
+    case 'awaiting_payment':
+      return OrderStatus.awaitingPayment;
+    case 'payment_authorized':
+      return OrderStatus.paymentAuthorized;
+    case 'production':
+      return OrderStatus.production;
+    case 'supplier_self_qc':
+      return OrderStatus.supplierSelfQc;
+    case 'ready_for_dispatch':
+      return OrderStatus.readyForDispatch;
+    case 'rider_assigned':
+      return OrderStatus.riderAssigned;
+    case 'picked_up':
+      return OrderStatus.pickedUp;
+    case 'out_for_delivery':
+      return OrderStatus.outForDelivery;
+    case 'delivered':
+      return OrderStatus.delivered;
+    case 'delivery_failed':
+      return OrderStatus.deliveryFailed;
+    case 'collected_by_customer':
+      return OrderStatus.collectedByCustomer;
+    case 'issue_window_open':
+      return OrderStatus.issueWindowOpen;
+    case 'completed':
+      return OrderStatus.completed;
+    case 'cancelled':
+      return OrderStatus.cancelled;
+    case 'file_rejected':
+      return OrderStatus.fileRejected;
+    default:
+      return fallback;
   }
 }
 
@@ -76,6 +548,7 @@ enum DeliveryStatus {
   onTheWay,
   arrived,
   delivered,
+  failed,
 }
 
 extension DeliveryStatusX on DeliveryStatus {
@@ -95,6 +568,8 @@ extension DeliveryStatusX on DeliveryStatus {
         return 'Arrived';
       case DeliveryStatus.delivered:
         return 'Delivered';
+      case DeliveryStatus.failed:
+        return 'Failed';
     }
   }
 }
@@ -111,9 +586,42 @@ extension PaymentMethodX on PaymentMethod {
       case PaymentMethod.cod:
         return 'Cash on Delivery';
       case PaymentMethod.gridCredits:
-        return 'GRIDGO Credits';
+        return 'Pilot Credits';
     }
   }
+
+  /// Wire value for order create / batch checkout (server marketplace rails).
+  /// Server expects `pilot_credit` | `cod` (| sandbox `gcash`/`maya`).
+  String get orderApiValue {
+    switch (this) {
+      case PaymentMethod.gridCredits:
+        return 'pilot_credit';
+      case PaymentMethod.cod:
+        return 'cod';
+      case PaymentMethod.gcash:
+        return 'gcash';
+      case PaymentMethod.maya:
+        return 'maya';
+    }
+  }
+
+  /// Wire value for `PATCH /users/me/default-payment-method`.
+  /// Profile still accepts legacy `credits` (not pilot_credit).
+  String get defaultApiValue {
+    switch (this) {
+      case PaymentMethod.gridCredits:
+        return 'credits';
+      case PaymentMethod.cod:
+        return 'cod';
+      case PaymentMethod.gcash:
+        return 'gcash';
+      case PaymentMethod.maya:
+        return 'maya';
+    }
+  }
+
+  bool get isLiveWallet =>
+      this == PaymentMethod.gcash || this == PaymentMethod.maya;
 }
 
 enum PaymentStatus { pending, paid, failed, refunded }

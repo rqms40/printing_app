@@ -15,11 +15,11 @@ describe('LocationGateway', () => {
     jest.clearAllMocks();
     jwtService.verifyAsync.mockResolvedValue({
       sub: 10,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
     });
     usersService.findSocketIdentity.mockImplementation(async (id: number) => ({
       id,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
       isActive: true,
     }));
     gateway = new (LocationGateway as any)(
@@ -46,11 +46,11 @@ describe('LocationGateway', () => {
   it('disconnects an inactive signed user during connection', async () => {
     jwtService.verifyAsync.mockResolvedValue({
       sub: 8,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
     });
     usersService.findSocketIdentity.mockResolvedValue({
       id: 8,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
       isActive: false,
     });
     const client = {
@@ -81,11 +81,11 @@ describe('LocationGateway', () => {
   it('disconnects a missing or role-mismatched database identity', async () => {
     jwtService.verifyAsync.mockResolvedValue({
       sub: 8,
-      role: UserRole.ADMIN,
+      role: UserRole.OPS_ADMIN,
     });
     usersService.findSocketIdentity.mockResolvedValue({
       id: 8,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
       isActive: true,
     });
     const client = {
@@ -111,7 +111,7 @@ describe('LocationGateway', () => {
     const join = jest.fn().mockResolvedValue(undefined);
     const client = {
       handshake: { auth: { token: 'customer-token' } },
-      data: { userId: 10, role: UserRole.CUSTOMER },
+      data: { userId: 10, role: UserRole.CLIENT },
       join,
       disconnect: jest.fn(),
     };
@@ -164,7 +164,7 @@ describe('LocationGateway', () => {
     const join = jest.fn().mockResolvedValue(undefined);
     const client = {
       handshake: { auth: { token: 'customer-token' } },
-      data: { userId: 10, role: UserRole.CUSTOMER },
+      data: { userId: 10, role: UserRole.CLIENT },
       join,
       disconnect: jest.fn(),
     };
@@ -193,11 +193,11 @@ describe('LocationGateway', () => {
   it('rejects an assignment subscription the customer does not own before revealing queue state', async () => {
     jwtService.verifyAsync.mockResolvedValue({
       sub: 99,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
     });
     const client = {
       handshake: { auth: { token: 'other-customer-token' } },
-      data: { userId: 99, role: UserRole.CUSTOMER },
+      data: { userId: 99, role: UserRole.CLIENT },
       join: jest.fn(),
       disconnect: jest.fn(),
     };
@@ -222,13 +222,13 @@ describe('LocationGateway', () => {
   it('gives a customer the same rejection for a missing and an unowned delivery', async () => {
     const client = {
       handshake: { auth: { token: 'customer-token' } },
-      data: { userId: 99, role: UserRole.CUSTOMER },
+      data: { userId: 99, role: UserRole.CLIENT },
       join: jest.fn(),
       disconnect: jest.fn(),
     };
     jest.spyOn(gateway as any, 'authenticateSocket').mockResolvedValue({
       id: 99,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
     });
 
     assignmentRepo.findOne.mockResolvedValueOnce(null);
@@ -261,7 +261,7 @@ describe('LocationGateway', () => {
     const receivedEvents: Array<{ event: string; payload: unknown }> = [];
     const client = {
       handshake: { auth: { token: 'later-customer-token' } },
-      data: { userId: 10, role: UserRole.CUSTOMER },
+      data: { userId: 10, role: UserRole.CLIENT },
       join: jest.fn(async (room: string) => {
         joinedRooms.add(room);
       }),
@@ -319,13 +319,13 @@ describe('LocationGateway', () => {
   it('rechecks account activity and role before every subscription', async () => {
     const client = {
       handshake: { auth: { token: 'customer-token' } },
-      data: { userId: 10, role: UserRole.CUSTOMER },
+      data: { userId: 10, role: UserRole.CLIENT },
       join: jest.fn(),
       disconnect: jest.fn(),
     };
     usersService.findSocketIdentity.mockResolvedValue({
       id: 10,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
       isActive: false,
     });
 

@@ -43,7 +43,7 @@ export class DailyGridController {
   /** Admin — all cards including inactive. */
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Get('admin')
   findAll() {
     return this.service.findAll();
@@ -51,7 +51,7 @@ export class DailyGridController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Post('admin')
   create(@Body() dto: CreateDailyGridCardDto) {
     return this.service.create(dto);
@@ -60,7 +60,7 @@ export class DailyGridController {
   /** Must be declared before :id to avoid route collision. */
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('admin/reorder')
   reorder(@Body() body: { ids: number[] }) {
     return this.service.reorder(body.ids);
@@ -70,7 +70,7 @@ export class DailyGridController {
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Post('admin/upload-image')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -108,7 +108,7 @@ export class DailyGridController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Patch('admin/:id')
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -119,7 +119,7 @@ export class DailyGridController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @Delete('admin/:id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);

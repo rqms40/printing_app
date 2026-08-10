@@ -16,14 +16,14 @@ export class PrinterProfileController {
 
   @Get('admin/printer-profile')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   adminGet() {
     return this.service.getProfile();
   }
 
   @Patch('admin/printer-profile')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   adminUpdate(@Body() dto: UpdatePrinterProfileDto) {
     return this.service.updateProfile(dto);
   }

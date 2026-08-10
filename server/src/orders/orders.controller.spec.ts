@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { OrderStatus } from './entities/order.entity';
+import type { QualityService } from '../quality/quality.service';
 
 describe('OrdersController generic status boundary', () => {
   let updateStatus: jest.Mock;
@@ -10,7 +11,10 @@ describe('OrdersController generic status boundary', () => {
 
   beforeEach(() => {
     updateStatus = jest.fn();
-    controller = new OrdersController({ updateStatus } as OrdersService);
+    controller = new OrdersController(
+      { updateStatus } as OrdersService,
+      {} as QualityService,
+    );
   });
 
   it('rejects cancellation in favor of the complete cancellation workflow', () => {

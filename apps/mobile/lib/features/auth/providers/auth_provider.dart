@@ -17,6 +17,7 @@ import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart'
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
+import 'package:printing_app/features/supplier/providers/supplier_access_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 
 // ---------------------------------------------------------------------------
@@ -149,6 +150,7 @@ class AuthUser {
     this.profileField,
     this.course,
     this.organization,
+    this.clientAccountType,
     this.printingPreferences = const [],
     this.tutorialSeenKeys = const [],
     this.defaultPaymentMethod,
@@ -157,7 +159,7 @@ class AuthUser {
   final String id;
   final String email;
   final String fullName;
-  final String role; // 'customer', 'rider', 'admin'
+  final String role; // client|supplier|rider|ops_admin|super_admin (+ legacy)
   final bool isProfileComplete;
   final String? nickname;
   final String? phone;
@@ -169,6 +171,8 @@ class AuthUser {
   final String? profileField;
   final String? course;
   final String? organization;
+  /// Optional marketplace metadata: business | organization | teacher.
+  final String? clientAccountType;
   final List<String> printingPreferences;
   final List<String> tutorialSeenKeys;
   final PaymentMethod? defaultPaymentMethod;
@@ -189,6 +193,7 @@ class AuthUser {
     String? profileField,
     String? course,
     String? organization,
+    String? clientAccountType,
     List<String>? printingPreferences,
     List<String>? tutorialSeenKeys,
     PaymentMethod? defaultPaymentMethod,
@@ -209,6 +214,7 @@ class AuthUser {
       profileField: profileField ?? this.profileField,
       course: course ?? this.course,
       organization: organization ?? this.organization,
+      clientAccountType: clientAccountType ?? this.clientAccountType,
       printingPreferences: printingPreferences ?? this.printingPreferences,
       tutorialSeenKeys: tutorialSeenKeys ?? this.tutorialSeenKeys,
       defaultPaymentMethod: defaultPaymentMethod ?? this.defaultPaymentMethod,
@@ -381,6 +387,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
+      if (user.role == 'supplier') {
+        try {
+          _ref?.invalidate(supplierAccessProvider);
+        } catch (_) {}
+      }
       _connectNotificationsWs();
       _startSessionScopedData();
     } on DioException catch (e) {
@@ -422,7 +433,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String password, {
     required String fullName,
     required String profileCategory,
-    required String profileField,
+    String? profileField,
     String? nickname,
     String? phone,
     String? gender,
@@ -431,11 +442,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? course,
     String? organization,
     List<String> printingPreferences = const [],
+    List<String> serviceFocusRanks = const [],
   }) async {
     final authGeneration = _beginAuthOperation();
     _isDevBypassSession = false;
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
+      final isSupplier = profileCategory == 'supplier';
       final response = await ApiClient.instance.post(
         '/auth/register',
         data: {
@@ -444,7 +457,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'fullName': fullName,
           if (nickname != null && nickname.isNotEmpty) 'nickname': nickname,
           'profileCategory': profileCategory,
-          'profileField': profileField,
+          if (isSupplier)
+            'profileField': 'print_shop'
+          else if (profileField != null)
+            'profileField': profileField,
+          if (isSupplier && serviceFocusRanks.isNotEmpty)
+            'serviceFocusRanks': serviceFocusRanks,
           if (ageRange != null && ageRange.isNotEmpty) 'ageRange': ageRange,
           if (phone != null && phone.isNotEmpty) 'phoneNumber': phone,
           if (gender != null && gender.isNotEmpty) 'gender': gender,
@@ -507,20 +525,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     }
 
+    const clientUser = AuthUser(
+      id: '1',
+      email: 'maria@test.com',
+      fullName: 'Maria Santos',
+      nickname: 'Mia',
+      role: 'client',
+      isProfileComplete: true,
+      ageRange: '18_24',
+      profileCategory: 'student',
+      profileField: 'architecture',
+      organization: 'Mapua University',
+      printingPreferences: ['plotting_blueprints'],
+    );
     final users = {
-      'customer': const AuthUser(
-        id: '1',
-        email: 'maria@test.com',
-        fullName: 'Maria Santos',
-        nickname: 'Mia',
-        role: 'customer',
-        isProfileComplete: true,
-        ageRange: '18_24',
-        profileCategory: 'student',
-        profileField: 'architecture',
-        organization: 'Mapua University',
-        printingPreferences: ['plotting_blueprints'],
-      ),
+      'client': clientUser,
+      // Legacy alias for older call sites / tests.
+      'customer': clientUser,
       'rider': const AuthUser(
         id: '2',
         email: 'juan@test.com',
@@ -772,8 +793,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void markBetaCompletionSubmitted() {
+    final role = state.user?.role;
     if (state.status != AuthStatus.authenticated ||
-        state.user?.role != 'customer') {
+        (role != 'client' && role != 'customer')) {
       return;
     }
     _beginAuthOperation();
@@ -892,12 +914,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Prefer marketplace role strings; keep legacy values as-is for dual-read.
+  static String _normalizeRole(String? raw) {
+    switch (raw) {
+      case 'client':
+      case 'supplier':
+      case 'rider':
+      case 'ops_admin':
+      case 'super_admin':
+      case 'customer':
+      case 'admin':
+        return raw!;
+      default:
+        return 'client';
+    }
+  }
+
   AuthUser _parseUser(Map<String, dynamic> json) {
     return AuthUser(
       id: json['id'].toString(),
       email: json['email'] as String,
       fullName: (json['fullName'] as String?) ?? '',
-      role: json['role'] as String? ?? 'customer',
+      role: _normalizeRole(json['role'] as String?),
       isProfileComplete: json['isProfileComplete'] as bool? ?? false,
       nickname: (json['nickname'] ?? json['nickName']) as String?,
       phone: json['phoneNumber'] as String?,
@@ -908,6 +946,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       profileField: json['profileField'] as String?,
       course: json['course'] as String?,
       organization: json['organization'] as String?,
+      clientAccountType:
+          (json['clientAccountType'] ?? json['client_account_type']) as String?,
       printingPreferences: _parseStringList(
         json['printingPreferences'] ?? json['printing_preferences'],
       ),
@@ -952,6 +992,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return PaymentMethod.cod;
       case 'credits':
       case 'gridcredits':
+      case 'gridcredit':
+      case 'pilotcredit':
+      case 'pilotcredits':
         return PaymentMethod.gridCredits;
       default:
         return null;

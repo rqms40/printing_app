@@ -28,7 +28,7 @@ describe('OrdersGateway', () => {
     usersService = {
       findSocketIdentity: jest.fn().mockImplementation(async (id: number) => ({
         id,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       })),
     };
@@ -52,12 +52,12 @@ describe('OrdersGateway', () => {
     it('joins admin_orders room when JWT has role=admin', async () => {
       usersService.findSocketIdentity.mockResolvedValue({
         id: 1,
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       });
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 1,
-        role: 'admin',
+        role: 'ops_admin',
       });
       const client = makeClient('valid-admin-token');
 
@@ -72,7 +72,7 @@ describe('OrdersGateway', () => {
     it('joins the authenticated user room for non-admin JWTs', async () => {
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 2,
-        role: 'customer',
+        role: 'client',
       });
       const client = makeClient('customer-token');
 
@@ -105,11 +105,11 @@ describe('OrdersGateway', () => {
 
     it.each([
       ['missing', null],
-      ['inactive', { id: 8, role: UserRole.CUSTOMER, isActive: false }],
+      ['inactive', { id: 8, role: UserRole.CLIENT, isActive: false }],
     ])('disconnects a %s database identity', async (_label, identity) => {
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 8,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
       });
       usersService.findSocketIdentity.mockResolvedValue(identity);
       const client = makeClient('signed-token');
@@ -123,11 +123,11 @@ describe('OrdersGateway', () => {
     it('disconnects when the signed role differs from the database role', async () => {
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 8,
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
       });
       usersService.findSocketIdentity.mockResolvedValue({
         id: 8,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       });
       const client = makeClient('role-confused-token');
@@ -143,7 +143,7 @@ describe('OrdersGateway', () => {
       async (sub) => {
         (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
           sub,
-          role: UserRole.CUSTOMER,
+          role: UserRole.CLIENT,
         });
         const client = makeClient('invalid-subject-token');
 
@@ -158,7 +158,7 @@ describe('OrdersGateway', () => {
     it('awaits room membership before accepting the connection', async () => {
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 2,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
       });
       let completeJoin!: () => void;
       const joinPending = new Promise<void>((resolve) => {

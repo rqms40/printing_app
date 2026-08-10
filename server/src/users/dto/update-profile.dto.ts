@@ -8,6 +8,7 @@ import {
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   AgeRange,
+  ClientAccountType,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -63,6 +64,11 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   organization?: string;
+
+  @ApiPropertyOptional({ enum: ClientAccountType })
+  @IsOptional()
+  @IsEnum(ClientAccountType)
+  clientAccountType?: ClientAccountType;
 
   @ApiPropertyOptional({ enum: PrintingPreference, isArray: true })
   @IsOptional()

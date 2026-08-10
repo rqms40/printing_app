@@ -404,8 +404,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       String msg = 'Could not place order. Please try again.';
       if (data is Map && data['code'] == 'beta_credits_only') {
         msg =
-            'Beta checkout uses GRIDGO Credits only. '
-            'Switch your payment method to GRIDGO Credits.';
+            'Beta checkout uses Pilot Credits only. '
+            'Switch your payment method to Pilot Credits.';
       } else if (data is Map && data['message'] is String) {
         msg = data['message'] as String;
       }

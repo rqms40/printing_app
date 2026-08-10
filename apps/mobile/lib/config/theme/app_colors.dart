@@ -1,23 +1,33 @@
 import 'package:flutter/material.dart';
 
-/// GRIDGO color palette.
+/// GRIDGO color palette (dual-theme marketplace).
 ///
-/// Design philosophy: **Greyscale-dominant UI** with yellow (#FFDE58) reserved
-/// strictly for the brand logo dot. The UI accent is monochrome — black in
-/// light mode, white in dark mode — giving a refined, high-contrast feel
-/// without competing with the brand color.
+/// Design philosophy: **Greyscale-dominant UI** with yellow reserved as a
+/// finite attention budget — one primary CTA / current step / active nav /
+/// map route per context (TINKER/PRD dual-theme). Semantic status uses
+/// success/error/warning/info **with text labels**, never color alone.
 ///
-/// Palette: Black (#000000), White (#FEFEFE), Dark Grey (#5B5B5B),
-/// Brand Yellow (#FFDE58 — logo only).
+/// Token map:
+/// - Surfaces: background / surface* / outline*
+/// - Accent (monochrome CTAs): black (light) / near-white (dark)
+/// - Action yellow `#FFDE58`: [actionYellow] / [brandLogo] / dark [AppColorSet.brand]
+/// - Light-mode brand links: deep amber [brandLight] for contrast on white
+///
+/// Palette anchors: Black (#000000), White (#FEFEFE), Dark Grey (#5B5B5B),
+/// Action Yellow (#FFDE58).
 class AppColors {
   const AppColors._();
+
+  /// Marketplace action yellow (`#FFDE58`) — logo, brand CTAs, selected nav.
+  /// Prefer [AppColorSet.brand] in themed widgets so light mode stays readable.
+  static const Color actionYellow = Color(0xFFFFDE58);
 
   /// Brand yellow — logo dot + minimal UI touches (links, "See All", badges).
   /// Light mode uses a deeper amber for contrast on white backgrounds.
   /// Dark mode uses the brighter yellow since it reads well on black.
   static const Color brandLight = Color(0xFFD4A017); // deep amber — readable on white
-  static const Color brandDark = Color(0xFFFFDE58);  // bright yellow — pops on black
-  static const Color brandLogo = Color(0xFFFFDE58);  // always bright in logo
+  static const Color brandDark = actionYellow; // bright yellow — pops on black
+  static const Color brandLogo = actionYellow; // always bright in logo
 
   // ---------------------------------------------------------------------------
   // Light theme — warm whites, rich greys, black accent
@@ -62,7 +72,7 @@ class AppColors {
     accent: Color(0xFFF0F0F0),       // near-white — buttons, CTAs, active states
     accentSoft: Color(0xFFD0D0D0),    // pressed state
     accentOnColor: Color(0xFF000000), // black text on white accent bg
-    brand: Color(0xFFFFDE58),         // bright yellow — links, "See All", subtle highlights
+    brand: actionYellow,              // action yellow — links, selected state, brand CTAs
     success: Color(0xFF66BB6A),
     error: Color(0xFFEF5350),
     warning: Color(0xFFFFCA28),

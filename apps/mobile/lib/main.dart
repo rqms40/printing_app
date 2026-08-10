@@ -18,13 +18,16 @@ void main() async {
   await NotificationService.init();
 
   // API base URL — resolved in api_config.dart (web LAN host auto-detected).
+  // Prefer: flutter run --dart-define-from-file=dart_defines.json
   ApiClient.instance.init(baseUrl: '$kServerUrl/api');
+  developer.log('API base: $kServerUrl/api', name: 'ApiConfig');
 
   // Check if the API server is reachable; app works with mock data if not.
   final serverReachable = await ApiHealthCheck.isServerReachable();
   if (!serverReachable) {
     developer.log(
-      'API server is not reachable. App will operate with mock data.',
+      'API server is not reachable at $kServerUrl. '
+      'Start docker-compose.dev.yml or set SERVER_URL. App may use mock data.',
       name: 'ApiHealthCheck',
     );
   }

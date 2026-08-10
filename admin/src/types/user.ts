@@ -1,4 +1,4 @@
-import type { UserRole } from "./enums";
+import type { ClientAccountType, UserRole } from "./enums";
 
 export interface User {
   id: string;
@@ -12,6 +12,7 @@ export interface User {
   profile_field?: string;
   course?: string;
   organization?: string;
+  client_account_type?: ClientAccountType | null;
   printing_preferences?: string[];
   role: UserRole;
   is_profile_complete: boolean;

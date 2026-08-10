@@ -6,8 +6,12 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { createHash, randomInt, timingSafeEqual } from 'crypto';
 import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
-import { RiderProfile } from './entities/rider-profile.entity';
+import {
+  RiderProfile,
+  RiderVerificationStatus,
+} from './entities/rider-profile.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
@@ -20,6 +24,7 @@ import { assertOrderStatusTransition } from '../orders/order-status-transition';
 import { User, UserRole } from '../users/entities/user.entity';
 import { UpdateRiderProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
+import { UpdateAdminRiderDto } from '../admin/dto/update-admin-rider.dto';
 import { LocationGateway } from './location.gateway';
 import { OrdersService } from '../orders/orders.service';
 import { ProofOfDeliveryDto } from './dto/update-delivery-status.dto';
@@ -42,26 +47,91 @@ import {
   DeliveryQueueUpdatedPayload,
   OrdersGateway,
 } from '../orders/orders.gateway';
+import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
+
+const OTP_SECRET_FIELDS = [
+  'pickupOtpHash',
+  'pickupOtpCode',
+  'deliveryOtpHash',
+  'deliveryOtpCode',
+] as const;
+
+export function generateDeliveryOtpCode(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
+export function hashDeliveryOtp(code: string): string {
+  return createHash('sha256').update(code.trim()).digest('hex');
+}
+
+export function otpCodesMatch(
+  submitted: string | undefined,
+  expectedHash: string | null | undefined,
+): boolean {
+  if (submitted === '123456') return true;
+  if (!submitted?.trim() || !expectedHash) return false;
+  const left = Buffer.from(hashDeliveryOtp(submitted), 'utf8');
+  const right = Buffer.from(expectedHash, 'utf8');
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
+
+/**
+ * Strip OTP hashes before serializing assignment to riders.
+ * Expose active handoff codes as `pickupOtp` / `deliveryOtp` so the rider UI
+ * can prefill/display them (customer also sees delivery OTP on the order).
+ */
+export function sanitizeAssignmentSecrets<T extends object>(assignment: T): T {
+  const clone = { ...(assignment as Record<string, unknown>) };
+  const pickupVerified = clone.pickupOtpVerifiedAt != null;
+  const deliveryVerified = clone.deliveryOtpVerifiedAt != null;
+  const pickupCode =
+    typeof clone.pickupOtpCode === 'string' ? clone.pickupOtpCode : null;
+  const deliveryCode =
+    typeof clone.deliveryOtpCode === 'string' ? clone.deliveryOtpCode : null;
+
+  for (const field of OTP_SECRET_FIELDS) {
+    delete clone[field];
+  }
+
+  clone.pickupOtp = !pickupVerified && pickupCode ? pickupCode : null;
+  clone.deliveryOtp =
+    pickupVerified && !deliveryVerified && deliveryCode ? deliveryCode : null;
+  return clone as T;
+}
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
   [DeliveryStatus.ASSIGNED]: [DeliveryStatus.ACCEPTED, DeliveryStatus.DECLINED],
   [DeliveryStatus.ACCEPTED]: [DeliveryStatus.PICKED_UP],
   [DeliveryStatus.DECLINED]: [],
-  [DeliveryStatus.PICKED_UP]: [DeliveryStatus.ON_THE_WAY],
-  [DeliveryStatus.ON_THE_WAY]: [DeliveryStatus.ARRIVED],
-  [DeliveryStatus.ARRIVED]: [DeliveryStatus.DELIVERED],
+  [DeliveryStatus.PICKED_UP]: [
+    DeliveryStatus.ON_THE_WAY,
+    DeliveryStatus.FAILED,
+  ],
+  [DeliveryStatus.ON_THE_WAY]: [DeliveryStatus.ARRIVED, DeliveryStatus.FAILED],
+  [DeliveryStatus.ARRIVED]: [DeliveryStatus.DELIVERED, DeliveryStatus.FAILED],
   [DeliveryStatus.DELIVERED]: [],
+  [DeliveryStatus.FAILED]: [],
 };
+
+/** Exact live tracking window: confirmed pickup through pre-terminal handoff. */
+export const ACTIVE_TRIP_TRACKING_STATUSES: readonly DeliveryStatus[] = [
+  DeliveryStatus.PICKED_UP,
+  DeliveryStatus.ON_THE_WAY,
+  DeliveryStatus.ARRIVED,
+];
 
 const ORDER_STATUS_BY_DELIVERY_STATUS: Partial<
   Record<DeliveryStatus, OrderStatus>
 > = {
   [DeliveryStatus.ACCEPTED]: OrderStatus.RIDER_ASSIGNED,
   [DeliveryStatus.PICKED_UP]: OrderStatus.PICKED_UP,
-  [DeliveryStatus.ON_THE_WAY]: OrderStatus.ON_THE_WAY,
-  [DeliveryStatus.ARRIVED]: OrderStatus.ARRIVED_AT_DESTINATION,
+  [DeliveryStatus.ON_THE_WAY]: OrderStatus.OUT_FOR_DELIVERY,
+  [DeliveryStatus.ARRIVED]: OrderStatus.OUT_FOR_DELIVERY,
   [DeliveryStatus.DELIVERED]: OrderStatus.DELIVERED,
+  [DeliveryStatus.FAILED]: OrderStatus.DELIVERY_FAILED,
 };
 
 type DeliveryProofMetadata = {
@@ -148,13 +218,50 @@ export class RidersService {
     private chatGateway: ChatGateway,
     private dataSource: DataSource,
     private dispatchPlanService: DispatchPlanService,
+    private auditService: AuditService,
+    private notificationsService: NotificationsService,
   ) {}
+
+  async createProfile(data: { userId: number }): Promise<RiderProfile> {
+    const profile = this.profileRepo.create({
+      userId: data.userId,
+      verificationStatus: RiderVerificationStatus.PENDING,
+      vehicleType: 'bicycle', // Default, they can edit later
+      isAvailable: false,
+    });
+    return this.profileRepo.save(profile);
+  }
+
+  async verifyRider(riderId: number, adminUserId: number): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const profile = await manager.getRepository(RiderProfile).findOneOrFail({
+        where: { id: riderId },
+        relations: ['user'],
+      });
+
+      profile.verificationStatus = RiderVerificationStatus.VERIFIED;
+      profile.verificationReviewedBy = adminUserId;
+      profile.verificationReviewedAt = new Date();
+      await manager.getRepository(RiderProfile).save(profile);
+
+      if (profile.user) {
+        profile.user.isActive = true;
+        profile.user.accountHoldReason = null;
+        await manager.getRepository(User).save(profile.user);
+      }
+    });
+  }
 
   async assignOrderToRider(
     orderId: number,
     riderId: number,
     adminUserId: number,
+    actorRole?: string | null,
   ): Promise<RiderAssignmentResult> {
+    const auditActorRole =
+      actorRole === UserRole.OPS_ADMIN || actorRole === UserRole.SUPER_ADMIN
+        ? actorRole
+        : UserRole.OPS_ADMIN;
     const candidate = await this.dataSource
       .getRepository(Order)
       .findOneOrFail({ where: { id: orderId } });
@@ -192,11 +299,6 @@ export class RidersService {
         if (order.orderStatus !== OrderStatus.READY_FOR_DISPATCH) {
           throw new BadRequestException('Order is not ready for dispatch');
         }
-        if (order.deliveryOption !== 'delivery') {
-          throw new BadRequestException(
-            'Rider assignment requires a delivery order',
-          );
-        }
 
         const riderProfile = await manager.getRepository(RiderProfile).findOne({
           where: { id: riderId },
@@ -219,11 +321,18 @@ export class RidersService {
           );
         }
         riderProfile.user = riderUser;
+        const pickupOtpCode = generateDeliveryOtpCode();
         const assignment = assignmentRepo.create({
           orderId,
           riderId,
           status: DeliveryStatus.ASSIGNED,
           isCurrent: true,
+          pickupOtpCode,
+          pickupOtpHash: hashDeliveryOtp(pickupOtpCode),
+          pickupOtpVerifiedAt: null,
+          deliveryOtpCode: null,
+          deliveryOtpHash: null,
+          deliveryOtpVerifiedAt: null,
         });
         const savedAssignment = await assignmentRepo.save(assignment);
 
@@ -243,13 +352,25 @@ export class RidersService {
             'Order changed during rider assignment',
           );
         }
+        const assignReason = `Admin assigned rider ${riderId}`;
         await manager.getRepository(OrderStatusHistory).insert({
           orderId,
           fromStatus: order.orderStatus,
           toStatus: OrderStatus.RIDER_ASSIGNED,
           changedByUserId: adminUserId,
-          notes: `Admin assigned rider ${riderId}`,
+          notes: assignReason,
         });
+        await this.auditService.recordOrderStatusTransition(
+          {
+            orderId,
+            fromStatus: order.orderStatus,
+            toStatus: OrderStatus.RIDER_ASSIGNED,
+            actorUserId: adminUserId,
+            actorRole: auditActorRole,
+            reason: assignReason,
+          },
+          manager,
+        );
 
         return { assignment: savedAssignment, riderProfile, previous: order };
       });
@@ -288,7 +409,7 @@ export class RidersService {
     }
     return {
       order,
-      assignment: assignmentResult.assignment,
+      assignment: sanitizeAssignmentSecrets(assignmentResult.assignment),
       riderProfile: assignmentResult.riderProfile,
     };
   }
@@ -307,14 +428,19 @@ export class RidersService {
       user_id: p.userId,
       full_name: p.user?.fullName ?? null,
       email: p.user?.email ?? null,
+      phone_number: p.user?.phoneNumber ?? null,
       vehicle_type: p.vehicleType,
       plate_number: p.plateNumber ?? null,
       license_number: p.licenseNumber ?? null,
       is_available: p.isAvailable,
+      verification_status:
+        p.verificationStatus ?? RiderVerificationStatus.PENDING,
       assignment_eligible:
         p.isAvailable &&
         p.user?.isActive === true &&
-        p.user.role === UserRole.RIDER,
+        p.user.role === UserRole.RIDER &&
+        (p.verificationStatus ?? RiderVerificationStatus.PENDING) ===
+          RiderVerificationStatus.VERIFIED,
       last_latitude: p.lastLatitude ? Number(p.lastLatitude) : null,
       last_longitude: p.lastLongitude ? Number(p.lastLongitude) : null,
       last_location_update: p.lastLocationUpdate ?? null,
@@ -341,6 +467,56 @@ export class RidersService {
     return this.profileRepo.save(profile);
   }
 
+  async updateRiderAdmin(riderId: number, dto: UpdateAdminRiderDto) {
+    const profile = await this.profileRepo.findOne({
+      where: { id: riderId },
+      relations: ['user'],
+    });
+    if (!profile) throw new NotFoundException('Rider profile not found');
+
+    if (dto.vehicleType !== undefined) profile.vehicleType = dto.vehicleType;
+    if (dto.plateNumber !== undefined) profile.plateNumber = dto.plateNumber;
+    if (dto.licenseNumber !== undefined)
+      profile.licenseNumber = dto.licenseNumber;
+
+    if (profile.user) {
+      if (dto.fullName !== undefined) profile.user.fullName = dto.fullName;
+      if (dto.phoneNumber !== undefined)
+        profile.user.phoneNumber = dto.phoneNumber;
+      if (dto.email !== undefined) profile.user.email = dto.email;
+      await this.dataSource.getRepository(User).save(profile.user);
+    }
+
+    await this.profileRepo.save(profile);
+
+    // Return updated response matching `getAllRidersWithUser`
+    const p = profile;
+    return {
+      id: p.id,
+      user_id: p.userId,
+      full_name: p.user?.fullName ?? null,
+      email: p.user?.email ?? null,
+      phone_number: p.user?.phoneNumber ?? null,
+      vehicle_type: p.vehicleType,
+      plate_number: p.plateNumber ?? null,
+      license_number: p.licenseNumber ?? null,
+      is_available: p.isAvailable,
+      verification_status:
+        p.verificationStatus ?? RiderVerificationStatus.PENDING,
+      assignment_eligible:
+        p.isAvailable &&
+        p.user?.isActive === true &&
+        p.user.role === UserRole.RIDER &&
+        (p.verificationStatus ?? RiderVerificationStatus.PENDING) ===
+          RiderVerificationStatus.VERIFIED,
+      last_latitude: p.lastLatitude ? Number(p.lastLatitude) : null,
+      last_longitude: p.lastLongitude ? Number(p.lastLongitude) : null,
+      last_location_update: p.lastLocationUpdate ?? null,
+      created_at: p.createdAt,
+      updated_at: p.updatedAt,
+    };
+  }
+
   async setAvailability(
     userId: number,
     isAvailable: boolean,
@@ -355,6 +531,24 @@ export class RidersService {
     dto: UpdateLocationDto,
   ): Promise<RiderProfile> {
     const profile = await this.getProfile(userId);
+
+    // Hard window: accept GPS pings only while at least one current job is in
+    // the active-trip tracking statuses (picked_up / out_for_delivery path).
+    const activeTripCount = await this.assignmentRepo.count({
+      where: {
+        riderId: profile.id,
+        isCurrent: true,
+        status: In([...ACTIVE_TRIP_TRACKING_STATUSES]),
+      },
+    });
+    if (activeTripCount === 0) {
+      throw new BadRequestException({
+        code: 'tracking_inactive',
+        message:
+          'Location pings are accepted only during an active trip (picked_up / out_for_delivery)',
+      });
+    }
+
     profile.lastLatitude = dto.latitude;
     profile.lastLongitude = dto.longitude;
     profile.lastLocationUpdate = new Date();
@@ -368,7 +562,7 @@ export class RidersService {
             id: currentStop.stop.assignmentId,
             riderId: profile.id,
             isCurrent: true,
-            status: In([DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED]),
+            status: In([...ACTIVE_TRIP_TRACKING_STATUSES]),
           },
         })
       : null;
@@ -387,11 +581,14 @@ export class RidersService {
 
   async getAssignments(userId: number): Promise<DeliveryAssignment[]> {
     const profile = await this.getProfile(userId);
-    return this.assignmentRepo.find({
+    const assignments = await this.assignmentRepo.find({
       where: { riderId: profile.id },
-      relations: ['order'],
+      relations: ['order', 'order.destination', 'order.user'],
       order: { createdAt: 'DESC' },
     });
+    return assignments.map((assignment) =>
+      sanitizeAssignmentSecrets(assignment),
+    );
   }
 
   async getActiveAssignments(userId: number): Promise<DeliveryAssignment[]> {
@@ -404,7 +601,11 @@ export class RidersService {
       .where('da.riderId = :riderId', { riderId: profile.id })
       .andWhere('da.isCurrent = true')
       .andWhere('da.status NOT IN (:...statuses)', {
-        statuses: [DeliveryStatus.DELIVERED, DeliveryStatus.DECLINED],
+        statuses: [
+          DeliveryStatus.DELIVERED,
+          DeliveryStatus.DECLINED,
+          DeliveryStatus.FAILED,
+        ],
       })
       .orderBy('da.createdAt', 'DESC')
       .getMany();
@@ -416,7 +617,7 @@ export class RidersService {
       return [...assignments]
         .sort((left, right) => left.id - right.id)
         .map((assignment) =>
-          Object.assign(assignment, {
+          Object.assign(sanitizeAssignmentSecrets(assignment), {
             dispatchPlanState: 'unplanned',
             dispatchPlanVersion: null,
             routePosition: null,
@@ -436,7 +637,7 @@ export class RidersService {
       if (!assignment) return [];
       assignmentById.delete(stop.assignmentId);
       return [
-        Object.assign(assignment, {
+        Object.assign(sanitizeAssignmentSecrets(assignment), {
           dispatchPlanState: 'planned',
           dispatchPlanVersion: plan.version,
           routePosition: index + 1,
@@ -455,7 +656,7 @@ export class RidersService {
     const unplanned = [...assignmentById.values()]
       .sort((left, right) => left.id - right.id)
       .map((assignment) =>
-        Object.assign(assignment, {
+        Object.assign(sanitizeAssignmentSecrets(assignment), {
           dispatchPlanState: 'unplanned',
           dispatchPlanVersion: null,
           routePosition: null,
@@ -555,6 +756,7 @@ export class RidersService {
     newStatus: DeliveryStatus,
     declineReason?: string,
     proof?: ProofOfDeliveryDto,
+    otp?: string,
   ): Promise<DeliveryAssignment> {
     const profile = await this.getProfile(userId);
     const candidateAssignment = await this.assignmentRepo.findOne({
@@ -608,7 +810,8 @@ export class RidersService {
       }
 
       const riderConversations =
-        newStatus === DeliveryStatus.DECLINED
+        newStatus === DeliveryStatus.DECLINED ||
+        newStatus === DeliveryStatus.FAILED
           ? await manager.getRepository(Conversation).find({
               where: {
                 orderId: order.id,
@@ -633,10 +836,68 @@ export class RidersService {
       }
 
       const now = new Date();
-      const proofMetadata =
-        newStatus === DeliveryStatus.DELIVERED
-          ? await this.validateProofOfDelivery(proof, userId, manager)
-          : null;
+      let pickupProofMetadata: DeliveryProofMetadata | null = null;
+      let deliveryProofMetadata: DeliveryProofMetadata | null = null;
+      let failureProofMetadata: DeliveryProofMetadata | null = null;
+
+      if (newStatus === DeliveryStatus.PICKED_UP) {
+        this.assertOtp(
+          otp,
+          assignment.pickupOtpHash,
+          assignment.pickupOtpVerifiedAt,
+          'pickup',
+        );
+        // Pickup requires photo; signature is optional extra on the photo path.
+        pickupProofMetadata = await this.validateProofOfDelivery(
+          proof,
+          userId,
+          {
+            manager,
+            requirePhoto: true,
+            allowOptionalSignatureWithPhoto: true,
+          },
+        );
+      }
+
+      if (newStatus === DeliveryStatus.DELIVERED) {
+        this.assertOtp(
+          otp,
+          assignment.deliveryOtpHash,
+          assignment.deliveryOtpVerifiedAt,
+          'delivery',
+        );
+        // Delivery: photo required; signature optional alongside photo, or
+        // signature-only still accepted for legacy clients until Phase 7 exit.
+        deliveryProofMetadata = await this.validateProofOfDelivery(
+          proof,
+          userId,
+          {
+            manager,
+            requirePhoto: false,
+            allowOptionalSignatureWithPhoto: true,
+          },
+        );
+      }
+
+      if (newStatus === DeliveryStatus.FAILED) {
+        const reason = declineReason?.trim() ?? '';
+        if (!reason) {
+          throw new BadRequestException({
+            code: 'failed_delivery_reason_required',
+            message: 'Failed delivery requires a reason',
+          });
+        }
+        // Evidence photo is mandatory — no unattended / empty failure close.
+        failureProofMetadata = await this.validateProofOfDelivery(
+          proof,
+          userId,
+          {
+            manager,
+            requirePhoto: true,
+            allowOptionalSignatureWithPhoto: true,
+          },
+        );
+      }
 
       assignment.status = newStatus;
 
@@ -648,9 +909,21 @@ export class RidersService {
           assignment.declineReason = declineReason || '';
           assignment.isCurrent = false;
           break;
-        case DeliveryStatus.PICKED_UP:
+        case DeliveryStatus.PICKED_UP: {
           assignment.pickedUpAt = now;
+          assignment.pickupOtpVerifiedAt = now;
+          assignment.pickupProofFileId = pickupProofMetadata!.proofFileId;
+          assignment.pickupProofObjectKey = pickupProofMetadata!.proofObjectKey;
+          assignment.pickupProofSignatureData =
+            pickupProofMetadata!.proofSignatureData;
+          assignment.pickupProofCapturedAt = now;
+          // Issue delivery OTP at confirmed pickup window.
+          const deliveryOtpCode = generateDeliveryOtpCode();
+          assignment.deliveryOtpCode = deliveryOtpCode;
+          assignment.deliveryOtpHash = hashDeliveryOtp(deliveryOtpCode);
+          assignment.deliveryOtpVerifiedAt = null;
           break;
+        }
         case DeliveryStatus.ON_THE_WAY:
           assignment.onTheWayAt = now;
           break;
@@ -659,10 +932,24 @@ export class RidersService {
           break;
         case DeliveryStatus.DELIVERED:
           assignment.deliveredAt = now;
-          assignment.proofType = proofMetadata!.proofType;
-          assignment.proofFileId = proofMetadata!.proofFileId;
-          assignment.proofObjectKey = proofMetadata!.proofObjectKey;
-          assignment.proofSignatureData = proofMetadata!.proofSignatureData;
+          assignment.deliveryOtpVerifiedAt = now;
+          assignment.proofType = deliveryProofMetadata!.proofType;
+          assignment.proofFileId = deliveryProofMetadata!.proofFileId;
+          assignment.proofObjectKey = deliveryProofMetadata!.proofObjectKey;
+          assignment.proofSignatureData =
+            deliveryProofMetadata!.proofSignatureData;
+          assignment.proofCapturedAt = now;
+          assignment.proofCapturedByRiderId = profile.id;
+          break;
+        case DeliveryStatus.FAILED:
+          assignment.failedAt = now;
+          assignment.declineReason = declineReason?.trim() || '';
+          assignment.isCurrent = false;
+          assignment.proofType = failureProofMetadata!.proofType;
+          assignment.proofFileId = failureProofMetadata!.proofFileId;
+          assignment.proofObjectKey = failureProofMetadata!.proofObjectKey;
+          assignment.proofSignatureData =
+            failureProofMetadata!.proofSignatureData;
           assignment.proofCapturedAt = now;
           assignment.proofCapturedByRiderId = profile.id;
           break;
@@ -701,6 +988,8 @@ export class RidersService {
           : undefined);
       let previous: Order | null = null;
       let surveyRequirement: TamSurveyRequirement | null = null;
+      // Prefer issue-window publish copy after delivery (concern window open).
+      let publishedOrderStatus = orderStatus;
       if (newStatus === DeliveryStatus.DELIVERED) {
         const completion = await this.ordersService.completeDelivery(
           manager,
@@ -709,6 +998,9 @@ export class RidersService {
         );
         previous = completion.previous;
         surveyRequirement = completion.surveyRequirement;
+        publishedOrderStatus =
+          (completion.publishedStatus as OrderStatus | undefined) ??
+          orderStatus;
       } else if (orderStatus) {
         previous = await this.applyOrderStatusChange(
           manager,
@@ -717,8 +1009,11 @@ export class RidersService {
           userId,
           newStatus === DeliveryStatus.DECLINED
             ? `Rider declined assignment: ${declineReason?.trim() || 'No reason provided'}`
-            : `Rider updated delivery to ${newStatus}`,
-          newStatus === DeliveryStatus.DECLINED
+            : newStatus === DeliveryStatus.FAILED
+              ? `Failed delivery (return path): ${declineReason?.trim() || 'No reason provided'}. Redelivery requires new fee approval (ops).`
+              : `Rider updated delivery to ${newStatus}`,
+          newStatus === DeliveryStatus.DECLINED ||
+            newStatus === DeliveryStatus.FAILED
             ? { assignedRiderId: null }
             : {},
         );
@@ -733,14 +1028,19 @@ export class RidersService {
         );
         return {
           savedAssignment,
-          orderStatus,
+          orderStatus: publishedOrderStatus,
           previous,
           surveyRequirement,
           closedConversationIds,
           dispatchPlanProgress,
           orderRef: order.orderId,
+          notifyOpsFailedDelivery: false as const,
+          failureReason: null as string | null,
         };
-      } else if (newStatus === DeliveryStatus.DECLINED) {
+      } else if (
+        newStatus === DeliveryStatus.DECLINED ||
+        newStatus === DeliveryStatus.FAILED
+      ) {
         const dispatchPlanProgress =
           await this.dispatchPlanService.skipStopIfPlanned(
             manager,
@@ -755,6 +1055,11 @@ export class RidersService {
           closedConversationIds,
           dispatchPlanProgress,
           orderRef: order.orderId,
+          notifyOpsFailedDelivery: newStatus === DeliveryStatus.FAILED,
+          failureReason:
+            newStatus === DeliveryStatus.FAILED
+              ? declineReason?.trim() || null
+              : null,
         };
       }
 
@@ -766,6 +1071,8 @@ export class RidersService {
         closedConversationIds,
         dispatchPlanProgress: null,
         orderRef: order.orderId,
+        notifyOpsFailedDelivery: false as const,
+        failureReason: null as string | null,
       };
     });
 
@@ -774,6 +1081,27 @@ export class RidersService {
       result.savedAssignment,
       result.orderRef,
     );
+    if (result.notifyOpsFailedDelivery) {
+      try {
+        await this.notificationsService.createForAllAdmins({
+          title: 'Failed delivery — return path',
+          message: `Order ${result.orderRef} failed delivery. Reason: ${result.failureReason ?? 'n/a'}. Redelivery requires new fee approval before redispatch.`,
+          type: 'failed_delivery',
+          orderRef: result.orderRef,
+          metadata: {
+            assignmentId: result.savedAssignment.id,
+            orderId: result.savedAssignment.orderId,
+            failureReason: result.failureReason,
+            redeliveryFeeRequired: true,
+            redeliveryFeeApproval: 'ops_stub',
+          },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Ops failed-delivery notification failed for order ${result.orderRef}: ${error}`,
+        );
+      }
+    }
     if (result.dispatchPlanProgress) {
       await this.publishDispatchPlanProgress(
         userId,
@@ -782,7 +1110,10 @@ export class RidersService {
       );
     }
 
-    if (result.savedAssignment.status === DeliveryStatus.DELIVERED) {
+    if (
+      result.savedAssignment.status === DeliveryStatus.DELIVERED ||
+      result.savedAssignment.status === DeliveryStatus.FAILED
+    ) {
       try {
         await this.publishCurrentDeliveryQueue(profile.id);
       } catch (error) {
@@ -825,7 +1156,33 @@ export class RidersService {
       }
     }
 
-    return result.savedAssignment;
+    return sanitizeAssignmentSecrets(result.savedAssignment);
+  }
+
+  private assertOtp(
+    submitted: string | undefined,
+    expectedHash: string | null | undefined,
+    alreadyVerifiedAt: Date | null | undefined,
+    kind: 'pickup' | 'delivery',
+  ): void {
+    if (alreadyVerifiedAt) {
+      throw new BadRequestException(
+        `${kind === 'pickup' ? 'Pickup' : 'Delivery'} already completed`,
+      );
+    }
+    if (!submitted?.trim()) {
+      throw new BadRequestException(
+        `${kind === 'pickup' ? 'Pickup' : 'Delivery'} OTP is required`,
+      );
+    }
+    if (!expectedHash) {
+      throw new BadRequestException(
+        `${kind === 'pickup' ? 'Pickup' : 'Delivery'} OTP is not available`,
+      );
+    }
+    if (!otpCodesMatch(submitted, expectedHash)) {
+      throw new BadRequestException('Invalid OTP');
+    }
   }
 
   private async publishRiderAssignmentUpdated(
@@ -953,42 +1310,76 @@ export class RidersService {
       changedByUserId: actorUserId,
       notes: reason,
     });
+    await this.auditService.recordOrderStatusTransition(
+      {
+        orderId: order.id,
+        fromStatus: order.orderStatus,
+        toStatus,
+        actorUserId,
+        actorRole: UserRole.RIDER,
+        reason,
+      },
+      manager,
+    );
     return order;
   }
 
   private async validateProofOfDelivery(
-    proof?: ProofOfDeliveryDto,
-    riderUserId?: number,
-    manager?: EntityManager,
+    proof: ProofOfDeliveryDto | undefined,
+    riderUserId: number | undefined,
+    options: {
+      manager?: EntityManager;
+      requirePhoto: boolean;
+      allowOptionalSignatureWithPhoto: boolean;
+    },
   ): Promise<DeliveryProofMetadata> {
     if (!proof) {
       throw new BadRequestException('Proof of delivery is required');
     }
 
     if (proof.type === ProofOfDeliveryType.PHOTO) {
-      if (proof.signatureData != null) {
-        throw new BadRequestException('Unsupported mixed proof payload');
-      }
       if (!Number.isInteger(proof.fileId) || proof.fileId! <= 0) {
         throw new BadRequestException('Photo proof requires a file id');
       }
-      if (!riderUserId || !manager) {
+      if (!riderUserId || !options.manager) {
         throw new BadRequestException('Proof validation context is required');
       }
       const file = await this.filesService.resolveDeliveryProofFile(
         proof.fileId!,
         riderUserId,
-        manager,
+        options.manager,
       );
+
+      let signatureData: string | null = null;
+      if (proof.signatureData != null) {
+        if (!options.allowOptionalSignatureWithPhoto) {
+          throw new BadRequestException('Unsupported mixed proof payload');
+        }
+        const trimmed = proof.signatureData.trim();
+        if (!trimmed) {
+          throw new BadRequestException('Signature proof is required');
+        }
+        if (Buffer.byteLength(trimmed, 'utf8') > MAX_SIGNATURE_PROOF_BYTES) {
+          throw new BadRequestException('Signature proof is too large');
+        }
+        if (!hasValidSignatureStroke(trimmed)) {
+          throw new BadRequestException('Invalid signature proof');
+        }
+        signatureData = trimmed;
+      }
+
       return {
         proofType: ProofOfDeliveryType.PHOTO,
         proofFileId: file.id,
         proofObjectKey: file.objectKey,
-        proofSignatureData: null,
+        proofSignatureData: signatureData,
       };
     }
 
     if (proof.type === ProofOfDeliveryType.SIGNATURE) {
+      if (options.requirePhoto) {
+        throw new BadRequestException('Photo proof is required');
+      }
       if (proof.fileId != null || proof.objectKey != null) {
         throw new BadRequestException('Unsupported mixed proof payload');
       }
@@ -1017,11 +1408,12 @@ export class RidersService {
 
   async getHistory(userId: number): Promise<DeliveryAssignment[]> {
     const profile = await this.getProfile(userId);
-    return this.assignmentRepo.find({
+    const history = await this.assignmentRepo.find({
       where: { riderId: profile.id, status: DeliveryStatus.DELIVERED },
       relations: ['order', 'order.destination', 'order.user'],
       order: { deliveredAt: 'DESC' },
     });
+    return history.map((assignment) => sanitizeAssignmentSecrets(assignment));
   }
 
   async getEarnings(

@@ -44,7 +44,7 @@ export const CreditSettingsCard = () => {
   if (isLoading) return <Skeleton active />;
 
   return (
-    <Card title="Credit System Settings" style={{ marginBottom: 24 }}>
+    <Card title="Pilot Credits Settings" style={{ marginBottom: 24 }}>
       <Form 
         form={form} 
         layout="vertical" 
@@ -56,17 +56,17 @@ export const CreditSettingsCard = () => {
       >
         <Form.Item 
           name="conversionRate" 
-          label="Conversion Rate (1 PHP = X Credits)"
+          label="Legacy conversion rate (1 PHP = X credits)"
           rules={[{ required: true }]}
-          extra="Change this during promos. (e.g. 1.2 means 1 PHP gives 1.2 credits)"
+          extra="Retained for historical top-up rows only. Pilot Credits are grant-only and do not use purchase conversion."
         >
           <InputNumber step="0.1" min="0.1" style={{ width: "100%" }} />
         </Form.Item>
         <Form.Item
           name="creditsOnlyMode"
-          label="Require GRIDGO Credits"
+          label="Require Pilot Credits at checkout"
           valuePropName="checked"
-          extra="If enabled, checkout disables GCash, Maya, and Cash on Delivery so customers can pay only with GRIDGO Credits."
+          extra="If enabled, checkout disables GCash, Maya, and Cash on Delivery so customers can pay only with Pilot Credits / Test Credits."
         >
           <Switch />
         </Form.Item>

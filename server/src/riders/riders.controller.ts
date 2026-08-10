@@ -71,18 +71,24 @@ export class RidersController {
   }
 
   @Patch('assignments/:id/status')
-  updateDeliveryStatus(
+  async updateDeliveryStatus(
     @Request() req: RequestWithUser,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDeliveryStatusDto,
   ) {
-    return this.ridersService.updateDeliveryStatus(
-      req.user.sub,
-      id,
-      dto.status,
-      dto.declineReason,
-      dto.proof,
-    );
+    try {
+      return await this.ridersService.updateDeliveryStatus(
+        req.user.sub,
+        id,
+        dto.status,
+        dto.declineReason,
+        dto.proof,
+        dto.otp,
+      );
+    } catch (e) {
+      console.error('ERROR IN updateDeliveryStatus:', e);
+      throw e;
+    }
   }
 
   @Get('history')

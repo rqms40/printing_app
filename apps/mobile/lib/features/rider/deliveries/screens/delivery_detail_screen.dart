@@ -14,6 +14,8 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_checkpoint_panel.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_map_view.dart';
 import 'package:printing_app/features/rider/shared/widgets/proof_of_delivery_sheet.dart';
+import 'package:printing_app/features/rider/shared/widgets/failed_delivery_sheet.dart';
+import 'package:printing_app/features/rider/shared/widgets/cod_collection_sheet.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
@@ -109,25 +111,73 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
     }
   }
 
+  Future<Map<String, dynamic>?> _openProofSheet(
+    String orderRef, {
+    required ProofSheetKind kind,
+    String? initialOtp,
+  }) {
+    return showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _colors(context).surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (_) => ProofOfDeliverySheet(
+        orderRef: orderRef,
+        kind: kind,
+        initialOtp: initialOtp,
+      ),
+    );
+  }
+
   Future<void> _handleAdvance() async {
     final current = ref.read(deliveriesProvider).viewById(widget.assignmentId);
-    if (current?.status == DeliveryStatus.arrived) {
-      final proof = await showModalBottomSheet<Map<String, dynamic>>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: _colors(context).surface,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppRadius.lg),
-          ),
-        ),
-        builder: (_) => ProofOfDeliverySheet(orderRef: current!.order.orderRef),
+    if (current?.status == DeliveryStatus.accepted) {
+      final proof = await _openProofSheet(
+        current!.order.orderRef,
+        kind: ProofSheetKind.pickup,
+        initialOtp: current.assignment.pickupOtp,
       );
       if (proof == null) return;
       setState(() => _isAdvancing = true);
-      await ref
+      final ok = await ref
+          .read(deliveriesProvider.notifier)
+          .completePickupWithProof(widget.assignmentId, proof);
+      if (!mounted) return;
+      setState(() => _isAdvancing = false);
+      if (!ok) {
+        final err = ref.read(deliveriesProvider).errorMessage;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              err ??
+                  'Pickup failed. Ask ops/supplier for the pickup OTP (shown on admin order).',
+            ),
+          ),
+        );
+      }
+      return;
+    } else if (current?.status == DeliveryStatus.arrived) {
+      final proof = await _openProofSheet(
+        current!.order.orderRef,
+        kind: ProofSheetKind.delivery,
+        initialOtp: current.assignment.deliveryOtp,
+      );
+      if (proof == null) return;
+      setState(() => _isAdvancing = true);
+      final ok = await ref
           .read(deliveriesProvider.notifier)
           .completeDeliveryWithProof(widget.assignmentId, proof);
+      if (!mounted) return;
+      setState(() => _isAdvancing = false);
+      if (!ok) {
+        final err = ref.read(deliveriesProvider).errorMessage;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err ?? 'Delivery proof failed')),
+        );
+      }
+      return;
     } else {
       setState(() => _isAdvancing = true);
       await ref
@@ -136,6 +186,12 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
     }
     if (!mounted) return;
     setState(() => _isAdvancing = false);
+    final err = ref.read(deliveriesProvider).errorMessage;
+    if (err != null && err.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(err)),
+      );
+    }
 
     final view = ref.read(deliveriesProvider).viewById(widget.assignmentId);
     if (view?.isInProgress ?? false) {
@@ -143,6 +199,75 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
         '/rider/deliveries/${widget.assignmentId}/active',
       );
     }
+  }
+
+  Future<void> _handleFailedDelivery() async {
+    final current = ref.read(deliveriesProvider).viewById(widget.assignmentId);
+    if (current == null || !current.canMarkFailed) return;
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _colors(context).surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (_) => FailedDeliverySheet(orderRef: current.order.orderRef),
+    );
+    if (result == null || !mounted) return;
+    final reason = result['reason']?.toString() ?? '';
+    final proof = result['proof'];
+    if (proof is! Map<String, dynamic>) return;
+    setState(() => _isAdvancing = true);
+    await ref
+        .read(deliveriesProvider.notifier)
+        .markFailedDelivery(
+          widget.assignmentId,
+          reason: reason,
+          proof: proof,
+        );
+    if (!mounted) return;
+    setState(() => _isAdvancing = false);
+  }
+
+  Future<void> _handleCod({required bool fail}) async {
+    final current = ref.read(deliveriesProvider).viewById(widget.assignmentId);
+    if (current == null || !current.order.isCod) return;
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _colors(context).surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (_) => CodCollectionSheet(
+        orderRef: current.order.orderRef,
+        amountMajor: current.order.codAmountMajor,
+        mode: fail
+            ? CodCollectionSheetMode.fail
+            : CodCollectionSheetMode.collect,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() => _isAdvancing = true);
+    final notifier = ref.read(deliveriesProvider.notifier);
+    final orderId = current.order.orderInternalId;
+    if (fail) {
+      await notifier.failCodCollection(
+        orderInternalId: orderId,
+        returnReason: result['returnReason']?.toString() ?? '',
+        photoFileId: result['photoFileId'] as int?,
+      );
+    } else {
+      final fileId = result['photoFileId'];
+      if (fileId is int) {
+        await notifier.collectCod(
+          orderInternalId: orderId,
+          photoFileId: fileId,
+        );
+      }
+    }
+    if (!mounted) return;
+    setState(() => _isAdvancing = false);
   }
 
   @override
@@ -165,7 +290,7 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
     final visual = riderDeliveryVisual(view.status, colors);
     final order = view.order;
     final destination = order.destination;
-    final destLatLng = destination?.latLng;
+    final destLatLng = view.pinDestination;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -297,6 +422,14 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
                           value: formatCurrency(order.deliveryFee),
                           colors: colors,
                         ),
+                        if (order.paymentMethod != null)
+                          _InfoRow(
+                            label: 'Payment',
+                            value: order.isCod
+                                ? 'Cash on delivery'
+                                : order.paymentMethod!,
+                            colors: colors,
+                          ),
                         if (destination?.landmark != null)
                           _InfoRow(
                             label: 'Landmark',
@@ -306,6 +439,67 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
                       ],
                     ),
                   ),
+                  if (order.isCod) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'COD COLLECTION',
+                      style: AppTypography.overline.copyWith(
+                        color: colors.onSurfaceDim,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _InfoRow(
+                            label: 'Amount due',
+                            value: formatCurrency(order.codAmountMajor),
+                            colors: colors,
+                          ),
+                          _InfoRow(
+                            label: 'Status',
+                            value: order.codCollected
+                                ? 'Cash collected'
+                                : order.codFailed
+                                ? 'Collection failed'
+                                : 'Pending collection',
+                            colors: colors,
+                          ),
+                          if (!order.codCollected &&
+                              !order.codFailed &&
+                              view.isInProgress) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            AppButton(
+                              label: 'Collect cash',
+                              isFullWidth: true,
+                              isLoading: _isAdvancing,
+                              onTap: () => _handleCod(fail: false),
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            AppButton(
+                              label: 'Could not collect',
+                              variant: AppButtonVariant.secondary,
+                              isFullWidth: true,
+                              isLoading: _isAdvancing,
+                              onTap: () => _handleCod(fail: true),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (view.canMarkFailed) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    AppButton(
+                      label: 'Mark failed delivery',
+                      variant: AppButtonVariant.ghost,
+                      isFullWidth: true,
+                      isLoading: _isAdvancing,
+                      icon: HugeIcons.strokeRoundedAlert02,
+                      onTap: _handleFailedDelivery,
+                    ),
+                  ],
                   if (view.isInProgress) ...[
                     const SizedBox(height: AppSpacing.md),
                     AppButton(

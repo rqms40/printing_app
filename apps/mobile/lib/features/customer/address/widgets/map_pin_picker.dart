@@ -11,7 +11,8 @@ import 'package:printing_app/config/theme/app_typography.dart';
 class MapPinPicker extends StatefulWidget {
   const MapPinPicker({
     super.key,
-    this.initialCenter = const LatLng(7.0731, 125.6128),
+    // GRIDGO shop / Davao service area — keep in sync with MapHelpers.shopPoint.
+    this.initialCenter = const LatLng(7.064, 125.6079),
     this.height = 200,
     this.mapTilesEnabled = true,
     this.onChanged,

@@ -24,7 +24,9 @@ export class AuthController {
       profileField: dto.profileField,
       course: dto.course,
       organization: dto.organization,
+      clientAccountType: dto.clientAccountType,
       printingPreferences: dto.printingPreferences,
+      serviceFocusRanks: dto.serviceFocusRanks,
     });
   }
 

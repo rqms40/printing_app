@@ -6,7 +6,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
-import { UserRole } from '../users/entities/user.entity';
+import { isAdminRole } from '../users/entities/user.entity';
 import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
 import { authenticateRealtimeSocket } from '../common/realtime/realtime-socket-auth';
 
@@ -47,7 +47,8 @@ export type RiderAssignmentUpdatedPayload = {
     | 'picked_up'
     | 'on_the_way'
     | 'arrived'
-    | 'delivered';
+    | 'delivered'
+    | 'failed';
   change?: 'assigned' | 'statusUpdated' | 'unassigned';
 };
 
@@ -73,7 +74,7 @@ export class OrdersGateway implements OnGatewayConnection {
       return;
     }
     await client.join(`user_${identity.id}`);
-    if (identity.role === UserRole.ADMIN) {
+    if (isAdminRole(identity.role)) {
       await client.join('admin_orders');
     }
     this.realtimeSessions.register(identity.id, client);

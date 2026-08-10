@@ -29,7 +29,7 @@ describe('NotificationsGateway', () => {
     usersService = {
       findSocketIdentity: jest.fn(async (id: number) => ({
         id,
-        role: id === 1 ? UserRole.ADMIN : UserRole.CUSTOMER,
+        role: id === 1 ? UserRole.OPS_ADMIN : UserRole.CLIENT,
         isActive: true,
       })),
     };
@@ -51,7 +51,7 @@ describe('NotificationsGateway', () => {
     it('joins admin_notifications when JWT has role=admin', async () => {
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 1,
-        role: 'admin',
+        role: 'ops_admin',
       });
       const client = makeClient('valid-admin-token');
 
@@ -66,7 +66,7 @@ describe('NotificationsGateway', () => {
     it('does NOT join admin_notifications for a non-admin JWT', async () => {
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 2,
-        role: 'customer',
+        role: 'client',
       });
       const client = makeClient('customer-token');
 
@@ -101,11 +101,11 @@ describe('NotificationsGateway', () => {
     it('disconnects an inactive database identity without joining rooms', async () => {
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 2,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
       });
       usersService.findSocketIdentity.mockResolvedValue({
         id: 2,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: false,
       });
       const client = makeClient('held-token');

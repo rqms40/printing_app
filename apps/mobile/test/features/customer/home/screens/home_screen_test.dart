@@ -119,7 +119,7 @@ void main() {
         find.byWidgetPredicate(
           (widget) =>
               widget is Semantics &&
-              widget.properties.label == 'Customer home content' &&
+              widget.properties.label == 'Client home content' &&
               widget.properties.focused == false,
         ),
         findsOneWidget,

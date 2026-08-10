@@ -30,47 +30,49 @@ class _OrderCardState extends State<OrderCard> {
         : AppColors.light;
   }
 
+  /// Icon + semantic color for density; [statusLabel] always uses the
+  /// human-readable [OrderStatus.displayName] (never color alone).
   _OrderVisual _visual(AppColorSet colors) {
+    final label = widget.order.orderStatus.displayName;
     switch (widget.order.orderStatus) {
       case OrderStatus.delivered:
-      case OrderStatus.completedPickup:
+      case OrderStatus.collectedByCustomer:
+      case OrderStatus.issueWindowOpen:
+      case OrderStatus.completed:
         return _OrderVisual(
           HugeIcons.strokeRoundedCheckmarkCircle02,
           colors.success.withValues(alpha: 0.1),
           colors.success,
-          'Completed',
+          label,
         );
       case OrderStatus.cancelled:
+      case OrderStatus.fileRejected:
+      case OrderStatus.deliveryFailed:
         return _OrderVisual(
           HugeIcons.strokeRoundedCancelCircle,
           colors.error.withValues(alpha: 0.1),
           colors.error,
-          'Cancelled',
+          label,
         );
-      case OrderStatus.fileDeclined:
-        return _OrderVisual(
-          HugeIcons.strokeRoundedCancel01,
-          colors.error.withValues(alpha: 0.1),
-          colors.error,
-          'Declined',
-        );
-      case OrderStatus.onTheWay:
+      case OrderStatus.outForDelivery:
       case OrderStatus.pickedUp:
-      case OrderStatus.arrivedAtDestination:
         return _OrderVisual(
           HugeIcons.strokeRoundedDeliveryTruck02,
           colors.info.withValues(alpha: 0.1),
           colors.info,
-          'In Delivery',
+          label,
         );
-      case OrderStatus.printingInProgress:
-      case OrderStatus.finishingMounting:
-      case OrderStatus.qualityChecked:
+      case OrderStatus.production:
+      case OrderStatus.supplierSelfQc:
+      case OrderStatus.paymentAuthorized:
+      case OrderStatus.awaitingPayment:
+      case OrderStatus.supplierAssigned:
+      case OrderStatus.supplierAccepted:
         return _OrderVisual(
           HugeIcons.strokeRoundedPrinter,
           colors.warning.withValues(alpha: 0.1),
           colors.warning,
-          'In Production',
+          label,
         );
       case OrderStatus.readyForDispatch:
       case OrderStatus.riderAssigned:
@@ -78,14 +80,19 @@ class _OrderCardState extends State<OrderCard> {
           HugeIcons.strokeRoundedPackage,
           colors.success.withValues(alpha: 0.1),
           colors.success,
-          'Ready',
+          label,
         );
-      default:
+      case OrderStatus.draft:
+      case OrderStatus.submitted:
+      case OrderStatus.needsQa:
+      case OrderStatus.clientCorrection:
+      case OrderStatus.proofApproval:
+      case OrderStatus.approvedForMatching:
         return _OrderVisual(
           HugeIcons.strokeRoundedClock01,
           colors.accent.withValues(alpha: 0.08),
           colors.accent,
-          'Processing',
+          label,
         );
     }
   }

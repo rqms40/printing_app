@@ -47,7 +47,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     switch (role) {
       case 'rider':
         context.go('/rider/home');
+      case 'supplier':
+        // Service-focus ranking is required once after onboarding when empty.
+        context.go('/supplier/service-focus?setup=1');
       case 'admin':
+      case 'ops_admin':
+      case 'super_admin':
         context.go('/admin/dashboard');
       default:
         context.go('/customer/home');

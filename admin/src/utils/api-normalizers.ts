@@ -47,6 +47,7 @@ export interface AdminUserRecord {
   profile_field: string | null;
   course: string | null;
   organization: string | null;
+  client_account_type: string | null;
   printing_preferences: string[];
   created_at: string;
   updated_at: string;
@@ -76,10 +77,48 @@ export interface AdminUserRecentOrderRecord {
   created_at: string;
 }
 
+export interface AdminSupplierCapabilityRecord {
+  id: number;
+  product_family: string;
+  materials: string[];
+  max_capacity: number;
+  lead_time_days: number;
+}
+
+/** Supplier shop profile self-edited fields (admin user detail). */
+export interface AdminSupplierRankedService {
+  rank: number;
+  key: string;
+  label: string;
+}
+
+export interface AdminSupplierProfileRecord {
+  id: number;
+  user_id: number;
+  business_name: string;
+  description: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  address: string | null;
+  logo_file_id: number | null;
+  logo_url: string | null;
+  attributes: Record<string, string>;
+  service_zones: string[];
+  service_focus_ranks: string[];
+  ranked_services: AdminSupplierRankedService[];
+  is_active: boolean;
+  verification_status: string | null;
+  rating_average: number;
+  rating_count: number;
+  capabilities: AdminSupplierCapabilityRecord[];
+  updated_at: string | null;
+}
+
 export interface AdminUserDetailPayload {
   user: AdminUserDetailRecord;
   metrics: AdminUserMetricsRecord;
   recent_orders: AdminUserRecentOrderRecord[];
+  supplier_profile: AdminSupplierProfileRecord | null;
 }
 
 export interface AdminRiderRecord {
@@ -108,20 +147,29 @@ export interface AdminIdentity {
 const EMPTY_DATE = "1970-01-01T00:00:00.000Z";
 const ADMIN_USER_DETAIL_ORDER_CATEGORIES = new Set(["paper", "3d"]);
 const ADMIN_USER_DETAIL_ORDER_STATUSES = new Set<OrderStatus>([
-  "order_placed",
-  "file_verified",
-  "file_declined",
-  "printing_in_progress",
-  "finishing_mounting",
-  "quality_checked",
+  "draft",
+  "submitted",
+  "needs_qa",
+  "client_correction",
+  "proof_approval",
+  "approved_for_matching",
+  "supplier_assigned",
+  "supplier_accepted",
+  "awaiting_payment",
+  "payment_authorized",
+  "production",
+  "supplier_self_qc",
   "ready_for_dispatch",
   "rider_assigned",
   "picked_up",
-  "on_the_way",
-  "arrived_at_destination",
+  "out_for_delivery",
   "delivered",
-  "completed_pickup",
+  "delivery_failed",
+  "collected_by_customer",
+  "issue_window_open",
+  "completed",
   "cancelled",
+  "file_rejected",
 ]);
 const ADMIN_USER_DETAIL_PAYMENT_STATUSES = new Set<PaymentStatus>([
   "pending",
@@ -628,13 +676,13 @@ function normalizeStatusHistory(
       order_id: toRequiredString(record, "", "order_id", "orderId"),
       from_status: toRequiredString(
         record,
-        "order_placed",
+        "submitted",
         "from_status",
         "fromStatus",
       ) as OrderStatus,
       to_status: toRequiredString(
         record,
-        "order_placed",
+        "submitted",
         "to_status",
         "toStatus",
       ) as OrderStatus,
@@ -661,14 +709,18 @@ function normalizeOrderDestination(value: unknown): Order["delivery_address"] {
     toOptionalString(record, "address");
   const latitudeValue = read(record, "latitude");
   const longitudeValue = read(record, "longitude");
-  const latitude = latitudeValue == null ? null : Number(latitudeValue);
-  const longitude = longitudeValue == null ? null : Number(longitudeValue);
+  const latitudeRaw =
+    latitudeValue == null || latitudeValue === ""
+      ? null
+      : Number(latitudeValue);
+  const longitudeRaw =
+    longitudeValue == null || longitudeValue === ""
+      ? null
+      : Number(longitudeValue);
+  const latitude = Number.isFinite(latitudeRaw) ? latitudeRaw : null;
+  const longitude = Number.isFinite(longitudeRaw) ? longitudeRaw : null;
 
-  if (
-    !fullAddress &&
-    !Number.isFinite(latitude) &&
-    !Number.isFinite(longitude)
-  ) {
+  if (!fullAddress && latitude == null && longitude == null) {
     return undefined;
   }
 
@@ -689,8 +741,9 @@ function normalizeOrderDestination(value: unknown): Order["delivery_address"] {
     province: toOptionalString(record, "province") ?? null,
     zip_code: toOptionalString(record, "zip_code", "zipCode") ?? null,
     landmark: toOptionalString(record, "landmark") ?? null,
-    latitude: Number.isFinite(latitude) ? latitude : null,
-    longitude: Number.isFinite(longitude) ? longitude : null,
+    // Keep lat/lng always as finite numbers or null so map pins match Delivery Info.
+    latitude,
+    longitude,
     sort_order:
       read(record, "sort_order", "sortOrder") === undefined
         ? undefined
@@ -739,6 +792,8 @@ function normalizeAssignedRiderContact(
       "delivery_status",
       "deliveryStatus",
     ),
+    pickup_otp: toOptionalString(record, "pickup_otp", "pickupOtp"),
+    delivery_otp: toOptionalString(record, "delivery_otp", "deliveryOtp"),
   };
 }
 
@@ -854,7 +909,7 @@ export function normalizeOrder(input: unknown): Order & {
     ) as PaymentStatus,
     order_status: toRequiredString(
       record,
-      "order_placed",
+      "submitted",
       "order_status",
       "orderStatus",
     ) as OrderStatus,
@@ -888,6 +943,55 @@ export function normalizeOrder(input: unknown): Order & {
       "assigned_rider_id",
       "assignedRiderId",
     ),
+    assigned_supplier_contact: (() => {
+      const raw = read(
+        record,
+        "assigned_supplier_contact",
+        "assignedSupplierContact",
+      );
+      if (raw == null) return null;
+      const c = asRecord(raw);
+      const evidenceUrlsRaw = read(
+        c,
+        "self_qc_evidence_urls",
+        "selfQcEvidenceUrls",
+      );
+      const evidenceUrls = Array.isArray(evidenceUrlsRaw)
+        ? evidenceUrlsRaw.map((u) => String(u)).filter((u) => u.trim())
+        : [];
+      const evidenceIdsRaw = read(
+        c,
+        "self_qc_evidence_file_ids",
+        "selfQcEvidenceFileIds",
+      );
+      const evidenceIds = Array.isArray(evidenceIdsRaw)
+        ? evidenceIdsRaw
+            .map((i) => Number(i))
+            .filter((n) => Number.isFinite(n) && n > 0)
+        : [];
+      return {
+        supplier_id:
+          read(c, "supplier_id", "supplierId") == null
+            ? null
+            : toNumberValue(c, 0, "supplier_id", "supplierId"),
+        business_name:
+          toOptionalString(c, "business_name", "businessName") ?? null,
+        decision: toOptionalString(c, "decision") ?? null,
+        acceptance_deadline:
+          toOptionalString(c, "acceptance_deadline", "acceptanceDeadline") ??
+          null,
+        assignment_id:
+          read(c, "assignment_id", "assignmentId") == null
+            ? null
+            : toNumberValue(c, 0, "assignment_id", "assignmentId"),
+        logo_url: toOptionalString(c, "logo_url", "logoUrl") ?? null,
+        address: toOptionalString(c, "address") ?? null,
+        broad_address:
+          toOptionalString(c, "broad_address", "broadAddress") ?? null,
+        self_qc_evidence_urls: evidenceUrls,
+        self_qc_evidence_file_ids: evidenceIds,
+      };
+    })(),
     assigned_rider_contact: normalizeAssignedRiderContact(
       read(
         record,
@@ -986,6 +1090,12 @@ export function normalizeAdminUser(input: unknown): AdminUserRecord {
       toOptionalString(record, "profile_field", "profileField") ?? null,
     course: toOptionalString(record, "course") ?? null,
     organization: toOptionalString(record, "organization") ?? null,
+    client_account_type:
+      toOptionalString(
+        record,
+        "client_account_type",
+        "clientAccountType",
+      ) ?? null,
     printing_preferences: toStringArray(
       read(record, "printing_preferences", "printingPreferences"),
     ),
@@ -1049,7 +1159,7 @@ export function normalizeAdminUserRecentOrder(
     })(),
     order_status: toRequiredString(
       record,
-      "order_placed",
+      "submitted",
       "order_status",
       "orderStatus",
     ) as OrderStatus,
@@ -1064,6 +1174,128 @@ export function normalizeAdminUserRecentOrder(
   };
 }
 
+export function normalizeAdminSupplierProfile(
+  input: unknown,
+): AdminSupplierProfileRecord | null {
+  if (input === null || input === undefined) {
+    return null;
+  }
+  const record = asRecord(input);
+  if (Object.keys(record).length === 0) {
+    return null;
+  }
+
+  const attributesRaw = read(record, "attributes");
+  const attributes: Record<string, string> = {};
+  if (attributesRaw && typeof attributesRaw === "object" && !Array.isArray(attributesRaw)) {
+    for (const [key, value] of Object.entries(attributesRaw as Record<string, unknown>)) {
+      const k = key.trim();
+      if (!k) continue;
+      attributes[k] = value == null ? "" : String(value);
+    }
+  }
+
+  const zonesRaw = read(record, "service_zones", "serviceZones");
+  const service_zones = Array.isArray(zonesRaw)
+    ? zonesRaw.map((z) => String(z)).filter((z) => z.trim().length > 0)
+    : [];
+
+  const capsRaw = read(record, "capabilities");
+  const capabilities: AdminSupplierCapabilityRecord[] = [];
+  if (Array.isArray(capsRaw)) {
+    for (const cap of capsRaw) {
+      const c = asRecord(cap);
+      const materialsRaw = read(c, "materials");
+      const materials = Array.isArray(materialsRaw)
+        ? materialsRaw.map((m) => String(m)).filter(Boolean)
+        : [];
+      capabilities.push({
+        id: toNumberValue(c, 0, "id"),
+        product_family: toRequiredString(
+          c,
+          "",
+          "product_family",
+          "productFamily",
+        ),
+        materials,
+        max_capacity: toNumberValue(c, 0, "max_capacity", "maxCapacity"),
+        lead_time_days: toNumberValue(c, 0, "lead_time_days", "leadTimeDays"),
+      });
+    }
+  }
+
+  const focusRaw = read(record, "service_focus_ranks", "serviceFocusRanks");
+  const service_focus_ranks = Array.isArray(focusRaw)
+    ? focusRaw.map((z) => String(z)).filter((z) => z.trim().length > 0)
+    : [];
+
+  const rankedRaw = read(record, "ranked_services", "rankedServices");
+  const ranked_services: AdminSupplierRankedService[] = [];
+  if (Array.isArray(rankedRaw)) {
+    for (const item of rankedRaw) {
+      const s = asRecord(item);
+      const key = toOptionalString(s, "key") ?? "";
+      if (!key) continue;
+      ranked_services.push({
+        rank: toNumberValue(s, ranked_services.length + 1, "rank"),
+        key,
+        label: toOptionalString(s, "label") ?? key,
+      });
+    }
+  } else {
+    service_focus_ranks.forEach((key, index) => {
+      ranked_services.push({
+        rank: index + 1,
+        key,
+        label: key.replace(/_/g, " "),
+      });
+    });
+  }
+
+  return {
+    id: toNumberValue(record, 0, "id"),
+    user_id: toNumberValue(record, 0, "user_id", "userId"),
+    business_name: toRequiredString(
+      record,
+      "",
+      "business_name",
+      "businessName",
+    ),
+    description: toOptionalString(record, "description") ?? null,
+    contact_phone:
+      toOptionalString(record, "contact_phone", "contactPhone") ?? null,
+    contact_email:
+      toOptionalString(record, "contact_email", "contactEmail") ?? null,
+    address: toOptionalString(record, "address") ?? null,
+    logo_file_id:
+      read(record, "logo_file_id", "logoFileId") === undefined ||
+      read(record, "logo_file_id", "logoFileId") === null
+        ? null
+        : toNumberValue(record, 0, "logo_file_id", "logoFileId"),
+    logo_url: toOptionalString(record, "logo_url", "logoUrl") ?? null,
+    attributes,
+    service_zones,
+    service_focus_ranks,
+    ranked_services,
+    is_active:
+      read(record, "is_active", "isActive") === true ||
+      read(record, "is_active", "isActive") === "true",
+    verification_status:
+      toOptionalString(record, "verification_status", "verificationStatus") ??
+      null,
+    rating_average: toNumberValue(
+      record,
+      0,
+      "rating_average",
+      "ratingAverage",
+    ),
+    rating_count: toNumberValue(record, 0, "rating_count", "ratingCount"),
+    capabilities,
+    updated_at:
+      toOptionalString(record, "updated_at", "updatedAt") ?? null,
+  };
+}
+
 export function normalizeAdminUserDetail(
   payload: unknown,
 ): AdminUserDetailPayload | null {
@@ -1071,6 +1303,11 @@ export function normalizeAdminUserDetail(
   const userValue = read(record, "user");
   const metricsValue = read(record, "metrics");
   const recentOrdersValue = read(record, "recent_orders", "recentOrders");
+  const supplierProfileValue = read(
+    record,
+    "supplier_profile",
+    "supplierProfile",
+  );
 
   if (
     userValue === undefined ||
@@ -1086,6 +1323,7 @@ export function normalizeAdminUserDetail(
     user: normalizeAdminUserDetailRecord(userValue),
     metrics: normalizeAdminUserMetrics(metricsValue),
     recent_orders: recentOrdersValue.map(normalizeAdminUserRecentOrder),
+    supplier_profile: normalizeAdminSupplierProfile(supplierProfileValue),
   };
 }
 

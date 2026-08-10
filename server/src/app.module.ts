@@ -26,6 +26,15 @@ import { DeliverySlotsModule } from './delivery-slots/delivery-slots.module';
 import { PrinterProfileModule } from './printer-profile/printer-profile.module';
 import { SupportTicketsModule } from './support-tickets/support-tickets.module';
 import { HomeFeedModule } from './home-feed/home-feed.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { QualityModule } from './quality/quality.module';
+import { MatchingModule } from './matching/matching.module';
+import { IssuesModule } from './issues/issues.module';
+import { PayoutsModule } from './payouts/payouts.module';
+import { AuditModule } from './audit/audit.module';
+import { GeoZonesModule } from './geo-zones/geo-zones.module';
+import { SuperModule } from './super/super.module';
+import { MockupModule } from './mockup/mockup.module';
 import {
   createTypeOrmOptions,
   initializeDataSourceWithPreSyncNormalization,
@@ -82,6 +91,15 @@ import { AppController } from './app.controller';
     PrinterProfileModule,
     SupportTicketsModule,
     HomeFeedModule,
+    SuppliersModule,
+    QualityModule,
+    MatchingModule,
+    IssuesModule,
+    PayoutsModule,
+    AuditModule,
+    GeoZonesModule,
+    SuperModule,
+    MockupModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

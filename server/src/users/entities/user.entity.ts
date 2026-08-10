@@ -8,15 +8,30 @@ import {
 } from 'typeorm';
 import {
   AgeRange,
+  ClientAccountType,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
 } from '../profile.constants';
 
 export enum UserRole {
-  CUSTOMER = 'customer',
+  CLIENT = 'client',
+  SUPPLIER = 'supplier',
   RIDER = 'rider',
-  ADMIN = 'admin',
+  OPS_ADMIN = 'ops_admin',
+  SUPER_ADMIN = 'super_admin',
+}
+
+/** Ops Admin and Super Admin — former single `admin` capability surface. */
+export const ADMIN_ROLES: readonly UserRole[] = [
+  UserRole.OPS_ADMIN,
+  UserRole.SUPER_ADMIN,
+] as const;
+
+export function isAdminRole(
+  role: string | UserRole | null | undefined,
+): boolean {
+  return role === UserRole.OPS_ADMIN || role === UserRole.SUPER_ADMIN;
 }
 
 @Entity('users')
@@ -82,8 +97,21 @@ export class User {
   })
   printingPreferences: PrintingPreference[] | null;
 
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.CUSTOMER })
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.CLIENT })
   role: UserRole;
+
+  /**
+   * Optional client metadata: business | organization | teacher.
+   * Null for non-clients and for clients who have not set a type.
+   * Does not affect authorization or order workflows.
+   */
+  @Column({
+    name: 'client_account_type',
+    type: 'enum',
+    enum: ClientAccountType,
+    nullable: true,
+  })
+  clientAccountType: ClientAccountType | null;
 
   @Column({ name: 'is_profile_complete', default: false })
   isProfileComplete: boolean;
@@ -169,6 +197,21 @@ export class User {
 
   @Column({ name: 'beta_shared_on_social', type: 'boolean', default: false })
   betaSharedOnSocial: boolean;
+
+  /**
+   * Pilot COD allow-list. Default false — Ops/Super Admin must verify the
+   * client for cash-on-delivery before checkout can use method `cod`.
+   * Distinct from Order.codEligible (per-order evaluation result).
+   */
+  @Column({ name: 'pilot_cod_eligible', type: 'boolean', default: false })
+  pilotCodEligible: boolean;
+
+  /**
+   * Ops risk block for COD. When true, server rejects COD even if the client
+   * is otherwise pilot-verified and under the ₱1,500 cap.
+   */
+  @Column({ name: 'cod_ops_risk_blocked', type: 'boolean', default: false })
+  codOpsRiskBlocked: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

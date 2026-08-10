@@ -130,7 +130,7 @@ export class ProductsService {
 
   async deleteCategory(id: number): Promise<void> {
     await this.catRepo.findOneOrFail({ where: { id } });
-    await this.catRepo.update(id, { isActive: false });
+    await this.catRepo.delete(id);
   }
 
   // Spec definitions
@@ -191,7 +191,7 @@ export class ProductsService {
 
   async deleteSpecDefinition(id: number): Promise<void> {
     const spec = await this.specRepo.findOneOrFail({ where: { id } });
-    await this.specRepo.update(spec.id, { isActive: false });
+    await this.specRepo.delete(spec.id);
   }
 
   // Spec options

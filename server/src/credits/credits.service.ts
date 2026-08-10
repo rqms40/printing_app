@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  GoneException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
@@ -15,7 +16,11 @@ import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FirebaseService } from '../firebase/firebase.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
-import { RequestTopUpDto, UpdateSettingsDto } from './dto/credits.dto';
+import {
+  GrantPilotCreditsDto,
+  ManualAdjustmentDto,
+  UpdateSettingsDto,
+} from './dto/credits.dto';
 import { User } from '../users/entities/user.entity';
 
 export interface CreditMutationResult {
@@ -23,6 +28,20 @@ export interface CreditMutationResult {
   userId: number;
   balance: number;
   balanceChanged: boolean;
+}
+
+export interface PilotLedgerOptions {
+  referenceId?: string;
+  reason?: string;
+  actorUserId?: number;
+  expiresAt?: Date | null;
+  manager?: EntityManager;
+}
+
+export interface CreditBalanceHistory {
+  balance: number;
+  productName: 'Pilot Credits';
+  transactions: CreditTransaction[];
 }
 
 @Injectable()
@@ -38,6 +57,468 @@ export class CreditsService {
     private notificationsGateway: NotificationsGateway,
     private dataSource: DataSource,
   ) {}
+
+  // ─── Pilot Credits: grant / reserve / spend / release / expire / adjust ───
+
+  /**
+   * Ops/Super Admin grant of Pilot Credits (test instrument).
+   * Not purchaseable; reason required; optional expiry.
+   */
+  async grantPilotCredits(
+    dto: GrantPilotCreditsDto,
+    actorUserId: number,
+  ): Promise<CreditMutationResult> {
+    if (!dto.reason?.trim()) {
+      throw new BadRequestException('Grant reason is required');
+    }
+    if (!(dto.amount > 0)) {
+      throw new BadRequestException('Grant amount must be positive');
+    }
+
+    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    if (expiresAt && Number.isNaN(expiresAt.getTime())) {
+      throw new BadRequestException('Invalid expiresAt');
+    }
+
+    const mutation = await this.dataSource.transaction((manager) =>
+      this.applyBalanceDeltaWithManager({
+        userId: dto.userId,
+        amountDelta: dto.amount,
+        type: CreditTransactionType.GRANT,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: dto.referenceId ?? null,
+        reason: dto.reason.trim(),
+        actorUserId,
+        expiresAt,
+        manager,
+      }),
+    );
+    this.publishCreditMutation(mutation);
+
+    try {
+      await this.notificationsService.create({
+        userId: dto.userId,
+        title: 'Pilot Credits granted',
+        message: `You received ${dto.amount} Pilot Credits.`,
+        type: 'credit',
+      });
+    } catch {
+      // non-critical
+    }
+
+    return mutation;
+  }
+
+  /**
+   * Reserve available Pilot Credits (hold). Requires idempotency key.
+   * Deducts from available balance until spend or release.
+   */
+  async reserveCredits(
+    userId: number,
+    amount: number,
+    idempotencyKey: string,
+    options: PilotLedgerOptions = {},
+  ): Promise<CreditMutationResult> {
+    this.assertPositiveAmount(amount);
+    this.assertIdempotencyKey(idempotencyKey);
+
+    const run = async (manager: EntityManager) => {
+      const existing = await this.findByIdempotencyKey(manager, idempotencyKey);
+      if (existing) {
+        return this.idempotentReplay(
+          existing,
+          CreditTransactionType.RESERVE,
+          userId,
+          amount,
+          manager,
+        );
+      }
+      return this.applyBalanceDeltaWithManager({
+        userId,
+        amountDelta: -amount,
+        type: CreditTransactionType.RESERVE,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: options.referenceId ?? null,
+        reason: options.reason ?? null,
+        actorUserId: options.actorUserId ?? null,
+        idempotencyKey,
+        manager,
+      });
+    };
+
+    if (options.manager) {
+      return run(options.manager);
+    }
+    const mutation = await this.dataSource.transaction(run);
+    this.publishCreditMutation(mutation);
+    return mutation;
+  }
+
+  /**
+   * Spend Pilot Credits. Requires idempotency key.
+   * When `reserveIdempotencyKey` is provided, settles a prior reserve without
+   * a second balance deduction (reserve already held funds) and marks the
+   * reserve SETTLED so it cannot be spent/released again.
+   * Service-layer only — not exposed on the HTTP controller.
+   */
+  async spendCredits(
+    userId: number,
+    amount: number,
+    idempotencyKey: string,
+    options: PilotLedgerOptions & { reserveIdempotencyKey?: string } = {},
+  ): Promise<CreditMutationResult> {
+    this.assertPositiveAmount(amount);
+    this.assertIdempotencyKey(idempotencyKey);
+
+    const run = async (manager: EntityManager) => {
+      const existing = await this.findByIdempotencyKey(manager, idempotencyKey);
+      if (existing) {
+        return this.idempotentReplay(
+          existing,
+          CreditTransactionType.SPEND,
+          userId,
+          amount,
+          manager,
+        );
+      }
+
+      if (options.reserveIdempotencyKey) {
+        const reserve = await this.loadOpenReserve(
+          manager,
+          options.reserveIdempotencyKey,
+          userId,
+          amount,
+          'spend',
+        );
+        // Balance already reduced at reserve time.
+        const mutation = await this.applyBalanceDeltaWithManager({
+          userId,
+          amountDelta: 0,
+          type: CreditTransactionType.SPEND,
+          status: CreditTransactionStatus.APPROVED,
+          referenceId: options.referenceId ?? reserve.referenceId,
+          reason: options.reason ?? null,
+          actorUserId: options.actorUserId ?? null,
+          idempotencyKey,
+          amountCreditsOverride: amount,
+          manager,
+        });
+        await this.markReserveSettled(manager, reserve);
+        return mutation;
+      }
+
+      return this.applyBalanceDeltaWithManager({
+        userId,
+        amountDelta: -amount,
+        type: CreditTransactionType.SPEND,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: options.referenceId ?? null,
+        reason: options.reason ?? null,
+        actorUserId: options.actorUserId ?? null,
+        idempotencyKey,
+        manager,
+      });
+    };
+
+    if (options.manager) {
+      return run(options.manager);
+    }
+    const mutation = await this.dataSource.transaction(run);
+    this.publishCreditMutation(mutation);
+    return mutation;
+  }
+
+  /**
+   * Release a prior open reserve back to available balance.
+   * Requires a matching unsettled reserve — free release is rejected (mint hole).
+   * Marks the reserve SETTLED so it cannot be released/spent again.
+   * Service-layer only — not exposed on the HTTP controller.
+   */
+  async releaseCredits(
+    userId: number,
+    amount: number,
+    idempotencyKey: string,
+    options: PilotLedgerOptions & { reserveIdempotencyKey?: string } = {},
+  ): Promise<CreditMutationResult> {
+    this.assertPositiveAmount(amount);
+    this.assertIdempotencyKey(idempotencyKey);
+
+    if (!options.reserveIdempotencyKey?.trim()) {
+      throw new BadRequestException(
+        'Release requires a matching unsettled reserve (reserveIdempotencyKey)',
+      );
+    }
+
+    const run = async (manager: EntityManager) => {
+      const existing = await this.findByIdempotencyKey(manager, idempotencyKey);
+      if (existing) {
+        return this.idempotentReplay(
+          existing,
+          CreditTransactionType.RELEASE,
+          userId,
+          amount,
+          manager,
+        );
+      }
+
+      const reserve = await this.loadOpenReserve(
+        manager,
+        options.reserveIdempotencyKey!,
+        userId,
+        amount,
+        'release',
+      );
+
+      const mutation = await this.applyBalanceDeltaWithManager({
+        userId,
+        amountDelta: amount,
+        type: CreditTransactionType.RELEASE,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: options.referenceId ?? reserve.referenceId,
+        reason: options.reason ?? null,
+        actorUserId: options.actorUserId ?? null,
+        idempotencyKey,
+        manager,
+      });
+      await this.markReserveSettled(manager, reserve);
+      return mutation;
+    };
+
+    if (options.manager) {
+      return run(options.manager);
+    }
+    const mutation = await this.dataSource.transaction(run);
+    this.publishCreditMutation(mutation);
+    return mutation;
+  }
+
+  /**
+   * Ops/Super Admin signed balance adjustment with audit reason.
+   */
+  async manualAdjustment(
+    dto: ManualAdjustmentDto,
+    actorUserId: number,
+  ): Promise<CreditMutationResult> {
+    if (!dto.reason?.trim()) {
+      throw new BadRequestException('Adjustment reason is required');
+    }
+    if (!Number.isFinite(dto.amount) || dto.amount === 0) {
+      throw new BadRequestException('Adjustment amount must be non-zero');
+    }
+
+    const mutation = await this.dataSource.transaction((manager) =>
+      this.applyBalanceDeltaWithManager({
+        userId: dto.userId,
+        amountDelta: dto.amount,
+        type: CreditTransactionType.MANUAL_ADJUSTMENT,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: dto.referenceId ?? null,
+        reason: dto.reason.trim(),
+        actorUserId,
+        amountCreditsOverride: Math.abs(dto.amount),
+        manager,
+      }),
+    );
+    this.publishCreditMutation(mutation);
+    return mutation;
+  }
+
+  async getBalanceAndHistory(
+    userId: number,
+    limit = 50,
+  ): Promise<CreditBalanceHistory> {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    const transactions = await this.transactionRepo.find({
+      where: { userId },
+      order: { createdAt: 'DESC', id: 'DESC' },
+      take: Math.min(Math.max(limit, 1), 200),
+    });
+
+    return {
+      balance: Number(user.credits),
+      productName: 'Pilot Credits',
+      transactions,
+    };
+  }
+
+  // ─── Core atomic ledger helper ────────────────────────────────────────────
+
+  private async applyBalanceDeltaWithManager(params: {
+    userId: number;
+    amountDelta: number;
+    type: CreditTransactionType;
+    status: CreditTransactionStatus;
+    referenceId?: string | null;
+    reason?: string | null;
+    actorUserId?: number | null;
+    expiresAt?: Date | null;
+    idempotencyKey?: string | null;
+    amountCreditsOverride?: number;
+    manager: EntityManager;
+  }): Promise<CreditMutationResult> {
+    const {
+      userId,
+      amountDelta,
+      type,
+      status,
+      referenceId = null,
+      reason = null,
+      actorUserId = null,
+      expiresAt = null,
+      idempotencyKey = null,
+      amountCreditsOverride,
+      manager,
+    } = params;
+
+    const userRepo = manager.getRepository(User);
+    const transactionRepo = manager.getRepository(CreditTransaction);
+    const user = await userRepo.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const balanceBefore = Number(user.credits);
+    const balanceAfter = balanceBefore + amountDelta;
+    if (balanceAfter < 0) {
+      throw new BadRequestException('Insufficient Pilot Credits');
+    }
+
+    if (amountDelta !== 0) {
+      user.credits = balanceAfter;
+      await userRepo.save(user);
+    }
+
+    const amountCredits =
+      amountCreditsOverride ?? Math.abs(amountDelta === 0 ? 0 : amountDelta);
+    // For zero-delta spend settling a reserve, amountCreditsOverride is required.
+    const recordedAmount =
+      amountCreditsOverride != null
+        ? amountCreditsOverride
+        : Math.abs(amountDelta);
+
+    const transaction = await transactionRepo.save(
+      transactionRepo.create({
+        userId,
+        type,
+        amountCredits: recordedAmount,
+        status,
+        referenceId,
+        reason,
+        actorUserId,
+        expiresAt,
+        idempotencyKey,
+        balanceBefore,
+        balanceAfter: amountDelta === 0 ? balanceBefore : balanceAfter,
+      }),
+    );
+
+    return {
+      transaction,
+      userId: user.id,
+      balance: amountDelta === 0 ? balanceBefore : balanceAfter,
+      balanceChanged: amountDelta !== 0,
+    };
+  }
+
+  private async findByIdempotencyKey(
+    manager: EntityManager,
+    idempotencyKey: string,
+  ): Promise<CreditTransaction | null> {
+    return manager.getRepository(CreditTransaction).findOne({
+      where: { idempotencyKey },
+    });
+  }
+
+  /**
+   * Load an open (APPROVED) reserve for settlement under a write lock.
+   * Settled / mismatched reserves are rejected.
+   */
+  private async loadOpenReserve(
+    manager: EntityManager,
+    reserveIdempotencyKey: string,
+    userId: number,
+    amount: number,
+    action: 'spend' | 'release',
+  ): Promise<CreditTransaction> {
+    const reserve = await manager.getRepository(CreditTransaction).findOne({
+      where: { idempotencyKey: reserveIdempotencyKey },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!reserve) {
+      throw new BadRequestException(`Reserve not found for ${action}`);
+    }
+    if (reserve.status === CreditTransactionStatus.SETTLED) {
+      throw new BadRequestException(
+        `Reserve already settled; cannot ${action} again`,
+      );
+    }
+    if (
+      reserve.userId !== userId ||
+      reserve.type !== CreditTransactionType.RESERVE ||
+      reserve.status !== CreditTransactionStatus.APPROVED ||
+      Number(reserve.amountCredits) !== amount
+    ) {
+      throw new BadRequestException(
+        `Reserve ledger reference mismatch for ${action}`,
+      );
+    }
+    return reserve;
+  }
+
+  private async markReserveSettled(
+    manager: EntityManager,
+    reserve: CreditTransaction,
+  ): Promise<void> {
+    reserve.status = CreditTransactionStatus.SETTLED;
+    await manager.getRepository(CreditTransaction).save(reserve);
+  }
+
+  private async idempotentReplay(
+    existing: CreditTransaction,
+    expectedType: CreditTransactionType,
+    userId: number,
+    amount: number,
+    manager: EntityManager,
+  ): Promise<CreditMutationResult> {
+    if (
+      existing.userId !== userId ||
+      existing.type !== expectedType ||
+      existing.status !== CreditTransactionStatus.APPROVED ||
+      Number(existing.amountCredits) !== amount
+    ) {
+      throw new BadRequestException('Credit ledger idempotency key mismatch');
+    }
+    const user = await manager.getRepository(User).findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      transaction: existing,
+      userId,
+      balance: Number(user.credits),
+      balanceChanged: false,
+    };
+  }
+
+  private assertPositiveAmount(amount: number): void {
+    if (!(amount > 0) || !Number.isFinite(amount)) {
+      throw new BadRequestException('Amount must be a positive number');
+    }
+  }
+
+  private assertIdempotencyKey(key: string): void {
+    if (!key?.trim()) {
+      throw new BadRequestException(
+        'Idempotency key is required for reserve/spend/release',
+      );
+    }
+  }
+
+  // ─── Beta enrollment (legacy TOP_UP type, retained until Phase 11) ────────
 
   async grantBetaEnrollmentCredits(
     userId: number,
@@ -112,6 +593,7 @@ export class CreditsService {
       amountCredits: amount,
       status: CreditTransactionStatus.APPROVED,
       referenceId,
+      reason: 'Beta enrollment grant',
     });
     if (!user.betaCreditsGranted) {
       await userRepo.increment({ id: userId }, 'credits', amount);
@@ -158,41 +640,16 @@ export class CreditsService {
     return this.settingsRepo.save(settings);
   }
 
-  async requestTopUp(
-    userId: number,
-    dto: RequestTopUpDto,
-  ): Promise<CreditTransaction> {
-    const settings = await this.getSettings();
-    const amountCredits = dto.amountPhp * settings.conversionRate;
-
-    const tx = this.transactionRepo.create({
-      userId,
-      type: CreditTransactionType.TOP_UP,
-      amountPhp: dto.amountPhp,
-      amountCredits,
-      status: CreditTransactionStatus.PENDING,
-      proofOfPaymentUrl: dto.proofOfPaymentUrl,
+  /**
+   * Client top-up is disabled for Pilot Credits (grant-only instrument).
+   */
+  async requestTopUp(): Promise<never> {
+    throw new GoneException({
+      statusCode: 410,
+      message:
+        'Client top-up is disabled. Pilot Credits are grant-only test credits.',
+      code: 'pilot_credits_topup_disabled',
     });
-
-    const saved = await this.transactionRepo.save(tx);
-
-    try {
-      const user = await this.usersService.findById(userId);
-      await this.notificationsService.createForAllAdmins({
-        title: 'Top-Up Request Received',
-        message: `${user?.email ?? 'A user'} requested ₱${dto.amountPhp} top-up.`,
-        type: 'topup_request',
-        metadata: {
-          transactionId: saved.id,
-          amountPhp: dto.amountPhp,
-          userEmail: user?.email ?? null,
-        },
-      });
-    } catch {
-      // notification failure must not break the request flow
-    }
-
-    return saved;
   }
 
   async approveTopUp(transactionId: number): Promise<CreditTransaction> {
@@ -204,7 +661,6 @@ export class CreditsService {
       throw new BadRequestException('Transaction is not pending');
     }
 
-    // Add credits to user
     const user = await this.usersService.findById(tx.userId);
     if (!user) throw new NotFoundException('User not found');
 
@@ -219,7 +675,6 @@ export class CreditsService {
     tx.status = CreditTransactionStatus.APPROVED;
     const savedTx = await this.transactionRepo.save(tx);
 
-    // Notify the user
     await this.notificationsService.create({
       userId: user.id,
       title: 'Top-Up Approved',
@@ -302,6 +757,7 @@ export class CreditsService {
     });
   }
 
+  /** Legacy order debit — maps to spend-like DEDUCTION row. */
   async subtractCredits(
     userId: number,
     amountCredits: number,
@@ -345,7 +801,8 @@ export class CreditsService {
       throw new BadRequestException('Insufficient credits');
     }
 
-    user.credits = Number(user.credits) - amountCredits;
+    const balanceBefore = Number(user.credits);
+    user.credits = balanceBefore - amountCredits;
     await userRepo.save(user);
     const transaction = await transactionRepo.save(
       transactionRepo.create({
@@ -354,6 +811,8 @@ export class CreditsService {
         amountCredits,
         status: CreditTransactionStatus.APPROVED,
         referenceId,
+        balanceBefore,
+        balanceAfter: Number(user.credits),
       }),
     );
     return {
@@ -458,7 +917,8 @@ export class CreditsService {
     }
 
     const remainingCredits = amountCredits - existingTotal;
-    user.credits = Number(user.credits) + remainingCredits;
+    const balanceBefore = Number(user.credits);
+    user.credits = balanceBefore + remainingCredits;
     await userRepo.save(user);
     const transaction = await transactionRepo.save(
       transactionRepo.create({
@@ -467,6 +927,9 @@ export class CreditsService {
         amountCredits: remainingCredits,
         status: CreditTransactionStatus.APPROVED,
         referenceId,
+        balanceBefore,
+        balanceAfter: Number(user.credits),
+        reason: 'Order/batch refund',
       }),
     );
     return {

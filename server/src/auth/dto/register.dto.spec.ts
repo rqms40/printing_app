@@ -83,4 +83,63 @@ describe('RegisterDto', () => {
 
     expect(errors.some((error) => error.property === 'ageRange')).toBe(true);
   });
+
+  it('accepts optional clientAccountType values business|organization|teacher', () => {
+    for (const clientAccountType of [
+      'business',
+      'organization',
+      'teacher',
+    ] as const) {
+      const dto = Object.assign(new RegisterDto(), {
+        email: 'test@example.com',
+        password: 'password123',
+        fullName: 'Maria Santos',
+        profileCategory: 'professional',
+        profileField: 'business_corporate',
+        clientAccountType,
+      });
+
+      const errors = validateSync(dto, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      });
+
+      expect(errors).toHaveLength(0);
+    }
+  });
+
+  it('allows omitting clientAccountType during registration', () => {
+    const dto = Object.assign(new RegisterDto(), {
+      email: 'test@example.com',
+      password: 'password123',
+      fullName: 'Maria Santos',
+      profileCategory: 'student',
+      profileField: 'architecture',
+    });
+
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+
+    expect(errors).toHaveLength(0);
+    expect(dto.clientAccountType).toBeUndefined();
+  });
+
+  it('rejects an invalid clientAccountType during registration', () => {
+    const dto = Object.assign(new RegisterDto(), {
+      email: 'test@example.com',
+      password: 'password123',
+      fullName: 'Maria Santos',
+      profileCategory: 'professional',
+      profileField: 'business_corporate',
+      clientAccountType: 'enterprise',
+    });
+
+    const errors = validateSync(dto);
+
+    expect(errors.some((error) => error.property === 'clientAccountType')).toBe(
+      true,
+    );
+  });
 });

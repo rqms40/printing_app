@@ -21,6 +21,8 @@ import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
+import 'package:printing_app/features/customer/orders/widgets/marketplace_order_actions.dart';
+import 'package:printing_app/features/customer/orders/widgets/order_claims_section.dart';
 import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
 import 'package:printing_app/utils/formatters.dart';
 
@@ -119,13 +121,18 @@ class OrderDetailScreen extends ConsumerWidget {
       );
     }
 
-    final statusHistory =
-        MockData.orderStatusHistory.where((h) => h.orderId == order.id).toList()
-          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    // Prefer live history from the API (includes logistics: rider assigned →
+    // delivered). Fall back to mock history only for offline demo orders.
+    final statusHistory = order.statusHistory.isNotEmpty
+        ? List.of(order.statusHistory)
+        : (MockData.orderStatusHistory
+              .where((h) => h.orderId == order.id)
+              .toList()
+            ..sort((a, b) => a.createdAt.compareTo(b.createdAt)));
 
     final isCancellable = cancellableStatuses.contains(order.orderStatus);
 
-    final isOnTheWay = order.orderStatus == OrderStatus.onTheWay;
+    final isOnTheWay = order.orderStatus == OrderStatus.outForDelivery;
 
     // Find the delivery address if applicable.
     Address? address;
@@ -155,6 +162,103 @@ class OrderDetailScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // --- Current status (all marketplace statuses) ---
+            AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Status',
+                        style: AppTypography.overline.copyWith(
+                          color: colors.onSurfaceDim,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      StatusBadge(
+                        label: order.orderStatus.displayName,
+                        variant: _orderStatusBadgeVariant(order.orderStatus),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        order.orderStatus.customerSummary,
+                        style: AppTypography.body.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                      if (order.deliveryOtp != null &&
+                          order.deliveryOtp!.trim().isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: colors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: colors.primary.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'DELIVERY OTP',
+                                style: AppTypography.overline.copyWith(
+                                  color: colors.primary,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                order.deliveryOtp!.trim(),
+                                style: AppTypography.h2.copyWith(
+                                  color: colors.onBackground,
+                                  letterSpacing: 4,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                'Show this code to the rider when your order arrives.',
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (order.assignedSupplier != null &&
+                          order.assignedSupplier!.businessName
+                              .trim()
+                              .isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        _SupplierShopDropdown(
+                          supplier: order.assignedSupplier!,
+                          orderStatus: order.orderStatus,
+                        ),
+                      ],
+                    ],
+                  ),
+                )
+                .animate()
+                .fadeIn(duration: 350.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
+            const SizedBox(height: AppSpacing.md),
+
+            // --- Supplier quality-check evidence (own card for visibility) ---
+            if (_showSelfQcEvidence(order)) ...[
+              AppCard(
+                    child: _SelfQcEvidenceSection(
+                      urls: order.assignedSupplier!.selfQcEvidenceUrls,
+                    ),
+                  )
+                  .animate()
+                  .fadeIn(duration: 350.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
+              const SizedBox(height: AppSpacing.md),
+            ],
+
             // --- Admin Status Banner ---
             if (order.adminStatusNote != null) ...[
               AdminStatusBanner(
@@ -164,11 +268,56 @@ class OrderDetailScreen extends ConsumerWidget {
               const SizedBox(height: 16),
             ],
 
+            // --- Marketplace QA / payment actions (Phases 3–4) ---
+            MarketplaceOrderActions(order: order)
+                .animate()
+                .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+            if (order.orderStatus == OrderStatus.clientCorrection ||
+                order.orderStatus == OrderStatus.proofApproval ||
+                order.orderStatus == OrderStatus.awaitingPayment ||
+                order.orderStatus == OrderStatus.supplierAccepted ||
+                order.orderStatus == OrderStatus.supplierAssigned ||
+                order.orderStatus == OrderStatus.collectedByCustomer ||
+                order.orderStatus == OrderStatus.issueWindowOpen ||
+                order.orderStatus == OrderStatus.delivered)
+              const SizedBox(height: AppSpacing.md),
+
+            // --- Claims / concern outcomes from ops ---
+            if (order.claims.isNotEmpty) ...[
+              OrderClaimsSection(claims: order.claims)
+                  .animate()
+                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+              const SizedBox(height: AppSpacing.md),
+            ],
+
             // --- Status Timeline ---
             AppCard(
-                  child: OrderStatusTimeline(
-                    order: order,
-                    statusHistory: statusHistory,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Progress',
+                        style: AppTypography.overline.copyWith(
+                          color: colors.onSurfaceDim,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Delivery process after Ready for dispatch: '
+                        'Rider assigned → Picked up → Out for delivery → Delivered',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      OrderStatusTimeline(
+                        order: order,
+                        statusHistory: statusHistory,
+                      ),
+                    ],
                   ),
                 )
                 .animate()
@@ -623,6 +772,59 @@ class OrderDetailScreen extends ConsumerWidget {
     }
   }
 
+  bool _showSelfQcEvidence(Order order) {
+    if (order.assignedSupplier == null) return false;
+    if (order.assignedSupplier!.selfQcEvidenceUrls.isEmpty) return false;
+    // Show once the order has reached (or passed) supplier quality check.
+    switch (order.orderStatus) {
+      case OrderStatus.supplierSelfQc:
+      case OrderStatus.readyForDispatch:
+      case OrderStatus.riderAssigned:
+      case OrderStatus.pickedUp:
+      case OrderStatus.outForDelivery:
+      case OrderStatus.delivered:
+      case OrderStatus.collectedByCustomer:
+      case OrderStatus.issueWindowOpen:
+      case OrderStatus.completed:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  StatusBadgeVariant _orderStatusBadgeVariant(OrderStatus status) {
+    switch (status) {
+      case OrderStatus.delivered:
+      case OrderStatus.collectedByCustomer:
+      case OrderStatus.issueWindowOpen:
+      case OrderStatus.completed:
+        return StatusBadgeVariant.success;
+      case OrderStatus.cancelled:
+      case OrderStatus.fileRejected:
+      case OrderStatus.deliveryFailed:
+        return StatusBadgeVariant.error;
+      case OrderStatus.outForDelivery:
+      case OrderStatus.pickedUp:
+      case OrderStatus.riderAssigned:
+        return StatusBadgeVariant.info;
+      case OrderStatus.supplierAssigned:
+      case OrderStatus.supplierAccepted:
+      case OrderStatus.awaitingPayment:
+      case OrderStatus.paymentAuthorized:
+      case OrderStatus.production:
+      case OrderStatus.supplierSelfQc:
+      case OrderStatus.readyForDispatch:
+      case OrderStatus.clientCorrection:
+      case OrderStatus.proofApproval:
+        return StatusBadgeVariant.warning;
+      case OrderStatus.draft:
+      case OrderStatus.submitted:
+      case OrderStatus.needsQa:
+      case OrderStatus.approvedForMatching:
+        return StatusBadgeVariant.neutral;
+    }
+  }
+
   Widget _buildDeliverySection(
     Order order,
     Address? address,
@@ -697,6 +899,281 @@ class OrderDetailScreen extends ConsumerWidget {
               'Delivery address not available',
               style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Expandable shop card: logo, name, broad address (e.g. San Pedro, Davao City).
+class _SupplierShopDropdown extends StatelessWidget {
+  const _SupplierShopDropdown({
+    required this.supplier,
+    required this.orderStatus,
+  });
+
+  final AssignedSupplierContact supplier;
+  final OrderStatus orderStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+    final initial = supplier.businessName.isNotEmpty
+        ? supplier.businessName[0].toUpperCase()
+        : 'S';
+    final location = (supplier.broadAddress?.trim().isNotEmpty == true)
+        ? supplier.broadAddress!.trim()
+        : (supplier.address?.trim().isNotEmpty == true
+              ? supplier.address!.trim()
+              : null);
+    final title = switch (orderStatus) {
+      OrderStatus.supplierAssigned => 'Supplier assigned',
+      OrderStatus.supplierAccepted => 'Supplier accepted',
+      OrderStatus.awaitingPayment ||
+      OrderStatus.paymentAuthorized ||
+      OrderStatus.production ||
+      OrderStatus.supplierSelfQc =>
+        'Supplier shop',
+      _ => 'Assigned supplier',
+    };
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.surfaceVariant,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.xs,
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            0,
+            AppSpacing.md,
+            AppSpacing.md,
+          ),
+          leading: _ShopAvatar(
+            logoUrl: supplier.logoUrl,
+            initial: initial,
+            colors: colors,
+            size: 40,
+          ),
+          title: Text(
+            supplier.businessName,
+            style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
+          ),
+          subtitle: Text(
+            [title, ?location].join(' · '),
+            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ShopAvatar(
+                  logoUrl: supplier.logoUrl,
+                  initial: initial,
+                  colors: colors,
+                  size: 64,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        supplier.businessName,
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onBackground,
+                        ),
+                      ),
+                      if (location != null) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            HugeIcon(
+                              icon: HugeIcons.strokeRoundedLocation01,
+                              size: 16,
+                              color: colors.onSurfaceDim,
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Expanded(
+                              child: Text(
+                                location,
+                                style: AppTypography.body.copyWith(
+                                  color: colors.onSurface,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (supplier.decision != null) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'Assignment: ${supplier.decision}',
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ShopAvatar extends StatelessWidget {
+  const _ShopAvatar({
+    required this.logoUrl,
+    required this.initial,
+    required this.colors,
+    required this.size,
+  });
+
+  final String? logoUrl;
+  final String initial;
+  final AppColorSet colors;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: colors.surface,
+        border: Border.all(color: colors.outline),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: logoUrl != null && logoUrl!.isNotEmpty
+          ? Image.network(
+              logoUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Center(
+                child: Text(
+                  initial,
+                  style: AppTypography.bodyBold.copyWith(
+                    color: colors.accent,
+                    fontSize: size * 0.35,
+                  ),
+                ),
+              ),
+            )
+          : Center(
+              child: Text(
+                initial,
+                style: AppTypography.bodyBold.copyWith(
+                  color: colors.accent,
+                  fontSize: size * 0.35,
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// Supplier quality-check evidence photos for the client order view.
+class _SelfQcEvidenceSection extends StatelessWidget {
+  const _SelfQcEvidenceSection({required this.urls});
+
+  final List<String> urls;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: Text(
+          'Supplier quality check',
+          style: AppTypography.caption.copyWith(
+            color: colors.onSurfaceDim,
+            letterSpacing: 0.4,
+          ),
+        ),
+        subtitle: Text(
+          'Evidence submitted by the print shop',
+          style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
+        ),
+        children: [
+          SizedBox(
+            height: 120,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: urls.length,
+              separatorBuilder: (context, index) =>
+                  const SizedBox(width: AppSpacing.sm),
+              itemBuilder: (context, index) {
+                final url = urls[index];
+                return GestureDetector(
+                  onTap: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (ctx) => Dialog(
+                        backgroundColor: colors.surface,
+                        insetPadding: const EdgeInsets.all(AppSpacing.lg),
+                        child: InteractiveViewer(
+                          child: Image.network(
+                            url,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Padding(
+                              padding: const EdgeInsets.all(AppSpacing.xl),
+                              child: Text(
+                                'Could not load evidence photo',
+                                style: AppTypography.body.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: colors.surfaceVariant,
+                          alignment: Alignment.center,
+                          child: HugeIcon(
+                            icon: HugeIcons.strokeRoundedImage01,
+                            size: 28,
+                            color: colors.onSurfaceDim,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );

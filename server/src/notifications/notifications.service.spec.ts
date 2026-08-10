@@ -26,7 +26,11 @@ describe('NotificationsService', () => {
     createdAt: new Date(),
   } as Notification;
 
-  const mockAdmin = { id: 10, email: 'admin@gridgo.ph', role: 'admin' } as User;
+  const mockAdmin = {
+    id: 10,
+    email: 'admin@gridgo.ph',
+    role: 'ops_admin',
+  } as User;
 
   beforeEach(async () => {
     repo = {
@@ -37,7 +41,7 @@ describe('NotificationsService', () => {
       update: jest.fn(),
       count: jest.fn(),
     };
-    usersService = { findAllByRole: jest.fn() };
+    usersService = { findAdminUsers: jest.fn(), findAllByRole: jest.fn() };
     gateway = { broadcastToAdmins: jest.fn() };
 
     const marketingRepo = {
@@ -162,9 +166,9 @@ describe('NotificationsService', () => {
     it('batch-inserts one row per admin and broadcasts', async () => {
       const admins = [
         mockAdmin,
-        { id: 11, email: 'admin2@gridgo.ph', role: 'admin' } as User,
+        { id: 11, email: 'admin2@gridgo.ph', role: 'ops_admin' } as User,
       ];
-      usersService.findAllByRole.mockResolvedValue(admins);
+      usersService.findAdminUsers.mockResolvedValue(admins);
 
       const row1 = { ...mockNotification, userId: 10 } as Notification;
       const row2 = { ...mockNotification, userId: 11, id: 2 } as Notification;
@@ -179,14 +183,14 @@ describe('NotificationsService', () => {
         metadata: { orderId: 42, amount: 450 },
       });
 
-      expect(usersService.findAllByRole).toHaveBeenCalledWith('admin');
+      expect(usersService.findAdminUsers).toHaveBeenCalled();
       expect(repo.create).toHaveBeenCalledTimes(2);
       expect(repo.save).toHaveBeenCalledWith([row1, row2]);
       expect(gateway.broadcastToAdmins).toHaveBeenCalledWith(row1);
     });
 
     it('calls broadcastToAdmins with the first saved row', async () => {
-      usersService.findAllByRole.mockResolvedValue([mockAdmin]);
+      usersService.findAdminUsers.mockResolvedValue([mockAdmin]);
       const saved = { ...mockNotification, userId: 10 } as Notification;
       repo.create.mockReturnValue(saved);
       repo.save.mockResolvedValue([saved] as any);
@@ -201,7 +205,7 @@ describe('NotificationsService', () => {
     });
 
     it('no-ops silently when no admin users exist', async () => {
-      usersService.findAllByRole.mockResolvedValue([]);
+      usersService.findAdminUsers.mockResolvedValue([]);
 
       await service.createForAllAdmins({
         title: 'Test',

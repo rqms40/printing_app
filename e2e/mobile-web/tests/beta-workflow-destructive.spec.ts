@@ -289,7 +289,7 @@ async function placeCreditOrder(
   expect(created.orders[0]).toMatchObject({
     paymentMethod: "gridCredits",
     paymentStatus: "paid",
-    orderStatus: "order_placed",
+    orderStatus: "submitted",
   });
   return created.orders[0];
 }
@@ -572,11 +572,12 @@ test.describe("destructive GRIDGO beta workflow", () => {
       }
 
       for (const order of [markOrder, venOrder]) {
+        // Ops dual-actor fast-track (marketplace graph) until supplier/QA modules land.
         for (const status of [
-          "file_verified",
-          "printing_in_progress",
-          "finishing_mounting",
-          "quality_checked",
+          "approved_for_matching",
+          "payment_authorized",
+          "production",
+          "supplier_self_qc",
           "ready_for_dispatch",
         ]) {
           await responseJson(

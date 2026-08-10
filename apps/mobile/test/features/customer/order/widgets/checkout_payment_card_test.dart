@@ -46,7 +46,7 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: CheckoutPaymentCard())),
       ),
     );
-    expect(find.textContaining('GRIDGO Credits'), findsOneWidget);
+    expect(find.textContaining('Pilot Credits'), findsOneWidget);
     expect(find.text('Change'), findsOneWidget);
   });
 
@@ -63,9 +63,9 @@ void main() {
                 id: '1',
                 email: 'maria@test.com',
                 fullName: 'Maria Santos',
-                role: 'customer',
+                role: 'client',
                 isProfileComplete: true,
-                defaultPaymentMethod: PaymentMethod.maya,
+                defaultPaymentMethod: PaymentMethod.cod,
               ),
             ),
           ),
@@ -86,8 +86,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(container.read(checkoutProvider).paymentMethod, PaymentMethod.maya);
-    expect(find.text('Maya'), findsOneWidget);
+    expect(container.read(checkoutProvider).paymentMethod, PaymentMethod.cod);
+    expect(find.text('Cash on Delivery'), findsOneWidget);
   });
 
   testWidgets('credits-only mode clears an unavailable e-wallet selection', (
@@ -116,7 +116,7 @@ void main() {
 
     expect(container.read(checkoutProvider).paymentMethod, isNull);
     expect(find.text('Choose payment method'), findsOneWidget);
-    expect(find.text('Beta orders use GRIDGO Credits only.'), findsOneWidget);
+    expect(find.text('Beta orders use Pilot Credits only.'), findsOneWidget);
   });
 
   testWidgets('credits-only mode clears unavailable COD selection', (
@@ -145,7 +145,7 @@ void main() {
 
     expect(container.read(checkoutProvider).paymentMethod, isNull);
     expect(find.text('Choose payment method'), findsOneWidget);
-    expect(find.text('Beta orders use GRIDGO Credits only.'), findsOneWidget);
+    expect(find.text('Beta orders use Pilot Credits only.'), findsOneWidget);
   });
 }
 

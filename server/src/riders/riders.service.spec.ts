@@ -6,7 +6,7 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { RidersService } from './riders.service';
+import { hashDeliveryOtp, RidersService } from './riders.service';
 import { RiderProfile } from './entities/rider-profile.entity';
 import {
   DeliveryAssignment,
@@ -29,6 +29,8 @@ import { DispatchPlanService } from './dispatch-plan.service';
 import { DispatchPlanStatus } from './entities/dispatch-plan.entity';
 import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
 import { OrdersGateway } from '../orders/orders.gateway';
+import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('RidersService', () => {
   let service: RidersService;
@@ -63,6 +65,8 @@ describe('RidersService', () => {
     advanceStop: jest.Mock;
     skipStopIfPlanned: jest.Mock;
   };
+  let auditService: { recordOrderStatusTransition: jest.Mock };
+  let notificationsService: { createForAllAdmins: jest.Mock };
   const validSignatureProof = JSON.stringify({
     format: 'gridgo-signature-v1',
     points: [
@@ -70,11 +74,15 @@ describe('RidersService', () => {
       [2, 2],
     ],
   });
+  const TEST_OTP = '123456';
+  const TEST_OTP_HASH = hashDeliveryOtp(TEST_OTP);
+  const WRONG_OTP = '000000';
 
   const mockProfile = {
     id: 10,
     userId: 1,
     isAvailable: true,
+    verificationStatus: 'verified' as any,
     lastLatitude: 14.5,
     lastLongitude: 121.0,
     lastLocationUpdate: new Date(),
@@ -86,6 +94,12 @@ describe('RidersService', () => {
     riderId: 10,
     status: DeliveryStatus.ASSIGNED,
     assignedAt: new Date(),
+    pickupOtpCode: TEST_OTP,
+    pickupOtpHash: TEST_OTP_HASH,
+    pickupOtpVerifiedAt: null,
+    deliveryOtpCode: TEST_OTP,
+    deliveryOtpHash: TEST_OTP_HASH,
+    deliveryOtpVerifiedAt: null,
   } as DeliveryAssignment;
 
   const makeAssignment = (
@@ -133,6 +147,7 @@ describe('RidersService', () => {
     assignmentRepo = {
       findOne: jest.fn(),
       find: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
       save: jest.fn(),
       create: jest.fn((value) => value as DeliveryAssignment),
       createQueryBuilder: jest.fn(),
@@ -217,6 +232,12 @@ describe('RidersService', () => {
       advanceStop: jest.fn().mockResolvedValue(undefined),
       skipStopIfPlanned: jest.fn().mockResolvedValue(undefined),
     };
+    auditService = {
+      recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
+    };
+    notificationsService = {
+      createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -233,6 +254,8 @@ describe('RidersService', () => {
         { provide: ChatGateway, useValue: chatGateway },
         { provide: DataSource, useValue: dataSource },
         { provide: DispatchPlanService, useValue: dispatchPlanService },
+        { provide: AuditService, useValue: auditService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -265,7 +288,7 @@ describe('RidersService', () => {
     it('rejects assignment before the order is ready for dispatch', async () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
-        orderStatus: OrderStatus.PRINTING_IN_PROGRESS,
+        orderStatus: OrderStatus.PRODUCTION,
       } as Order);
       profileRepo.findOne.mockResolvedValue({
         ...mockProfile,
@@ -324,12 +347,18 @@ describe('RidersService', () => {
         7,
       );
 
-      expect(assignmentRepo.create).toHaveBeenCalledWith({
-        orderId: readyOrder.id,
-        riderId: rider.id,
-        status: DeliveryStatus.ASSIGNED,
-        isCurrent: true,
-      });
+      expect(assignmentRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: readyOrder.id,
+          riderId: rider.id,
+          status: DeliveryStatus.ASSIGNED,
+          isCurrent: true,
+          pickupOtpCode: expect.stringMatching(/^\d{6}$/),
+          pickupOtpHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          deliveryOtpCode: null,
+          deliveryOtpHash: null,
+        }),
+      );
       expect(assignmentRepo.save).toHaveBeenCalled();
       expect(orderRepo.update).toHaveBeenCalledWith(
         {
@@ -348,11 +377,75 @@ describe('RidersService', () => {
         changedByUserId: 7,
         notes: `Admin assigned rider ${rider.id}`,
       });
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        {
+          orderId: readyOrder.id,
+          fromStatus: OrderStatus.READY_FOR_DISPATCH,
+          toStatus: OrderStatus.RIDER_ASSIGNED,
+          actorUserId: 7,
+          actorRole: UserRole.OPS_ADMIN,
+          reason: `Admin assigned rider ${rider.id}`,
+        },
+        expect.anything(),
+      );
+      expect(
+        auditService.recordOrderStatusTransition.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(historyRepo.insert.mock.invocationCallOrder[0]);
       expect(result).toMatchObject({
         assignment: savedAssignment,
         riderProfile: rider,
         order: { orderStatus: OrderStatus.RIDER_ASSIGNED },
       });
+    });
+
+    it('records super_admin actor role on assign when provided from JWT', async () => {
+      const readyOrder = {
+        id: 1,
+        orderId: 'ORD-1',
+        batchOrderId: null,
+        deliveryOption: 'delivery',
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      } as Order;
+      const rider = {
+        ...mockProfile,
+        userId: 21,
+        user: {
+          id: 21,
+          role: UserRole.RIDER,
+          isActive: true,
+        } as User,
+      } as RiderProfile;
+      orderRepo.findOneOrFail.mockResolvedValue(readyOrder);
+      orderRepo.update.mockResolvedValue({ affected: 1 } as never);
+      assignmentRepo.findOne.mockResolvedValue(null);
+      profileRepo.findOne.mockResolvedValue(rider);
+      assignmentRepo.save.mockResolvedValue({
+        id: 301,
+        orderId: readyOrder.id,
+        riderId: rider.id,
+        status: DeliveryStatus.ASSIGNED,
+        isCurrent: true,
+      } as DeliveryAssignment);
+      ordersService.publishStatusUpdate.mockResolvedValue({
+        ...readyOrder,
+        orderStatus: OrderStatus.RIDER_ASSIGNED,
+      } as Order);
+
+      await service.assignOrderToRider(
+        readyOrder.id,
+        rider.id,
+        7,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorRole: UserRole.SUPER_ADMIN,
+          actorUserId: 7,
+          toStatus: OrderStatus.RIDER_ASSIGNED,
+        }),
+        expect.anything(),
+      );
     });
 
     it('returns the committed assignment when post-commit customer publication fails', async () => {
@@ -432,10 +525,19 @@ describe('RidersService', () => {
         new Error('Customer publication failed'),
       );
 
-      await expect(
-        service.assignOrderToRider(readyOrder.id, rider.id, 7),
-      ).resolves.toEqual({
-        assignment: savedAssignment,
+      const result = await service.assignOrderToRider(
+        readyOrder.id,
+        rider.id,
+        7,
+      );
+      expect(result).toEqual({
+        assignment: expect.objectContaining({
+          id: savedAssignment.id,
+          orderId: savedAssignment.orderId,
+          riderId: savedAssignment.riderId,
+          status: DeliveryStatus.ASSIGNED,
+          isCurrent: true,
+        }),
         riderProfile: rider,
         order: {
           ...readyOrder,
@@ -443,6 +545,10 @@ describe('RidersService', () => {
           orderStatus: OrderStatus.RIDER_ASSIGNED,
         },
       });
+      expect(result.assignment).not.toHaveProperty('pickupOtpCode');
+      expect(result.assignment).not.toHaveProperty('pickupOtpHash');
+      expect(result.assignment).not.toHaveProperty('deliveryOtpCode');
+      expect(result.assignment).not.toHaveProperty('deliveryOtpHash');
     });
 
     it('returns a deterministic conflict for a repeated assignment', async () => {
@@ -500,7 +606,7 @@ describe('RidersService', () => {
     it.each([
       ['offline', false, true, UserRole.RIDER],
       ['inactive', true, false, UserRole.RIDER],
-      ['non-rider', true, true, UserRole.CUSTOMER],
+      ['non-rider', true, true, UserRole.CLIENT],
     ])(
       'rejects an %s rider profile',
       async (_label, isAvailable, isActive, role) => {
@@ -585,7 +691,7 @@ describe('RidersService', () => {
       ['eligible', true, true, UserRole.RIDER, true],
       ['unavailable', false, true, UserRole.RIDER, false],
       ['inactive', true, false, UserRole.RIDER, false],
-      ['wrong role', true, true, UserRole.CUSTOMER, false],
+      ['wrong role', true, true, UserRole.CLIENT, false],
     ])(
       'projects %s assignment eligibility from server-owned identity state',
       async (_label, isAvailable, isActive, role, expected) => {
@@ -593,6 +699,7 @@ describe('RidersService', () => {
           {
             ...mockProfile,
             isAvailable,
+            verificationStatus: 'verified' as any,
             user: {
               id: mockProfile.userId,
               fullName: 'Juan Rider',
@@ -612,6 +719,30 @@ describe('RidersService', () => {
         ]);
       },
     );
+
+    it('requires verified status for assignment eligibility', async () => {
+      profileRepo.find.mockResolvedValue([
+        {
+          ...mockProfile,
+          isAvailable: true,
+          verificationStatus: 'pending' as any,
+          user: {
+            id: mockProfile.userId,
+            fullName: 'Juan Rider',
+            email: 'juan@example.test',
+            isActive: true,
+            role: UserRole.RIDER,
+          } as User,
+        } as RiderProfile,
+      ]);
+
+      await expect(service.getAllRidersWithUser()).resolves.toEqual([
+        expect.objectContaining({
+          assignment_eligible: false,
+          verification_status: 'pending',
+        }),
+      ]);
+    });
   });
 
   describe('setAvailability', () => {
@@ -665,14 +796,24 @@ describe('RidersService', () => {
         ...assignedOrder,
         orderStatus: OrderStatus.PICKED_UP,
       } as Order);
+      filesService.resolveDeliveryProofFile.mockResolvedValue({
+        id: 55,
+        objectKey: 'uploads/proof_of_delivery/pickup-55.jpg',
+      });
 
       const result = await service.updateDeliveryStatus(
         mockProfile.userId,
         acceptedAssignment.id,
         DeliveryStatus.PICKED_UP,
+        undefined,
+        { type: 'photo', fileId: 55 } as any,
+        TEST_OTP,
       );
 
       expect(result.status).toBe(DeliveryStatus.PICKED_UP);
+      expect(result.pickupOtpCode).toBeUndefined();
+      expect(result.pickupOtpHash).toBeUndefined();
+      expect(result.deliveryOtpCode).toBeUndefined();
       expect(orderRepo.update).toHaveBeenCalledWith(
         {
           id: assignedOrder.id,
@@ -687,6 +828,20 @@ describe('RidersService', () => {
         changedByUserId: mockProfile.userId,
         notes: 'Rider updated delivery to picked_up',
       });
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        {
+          orderId: assignedOrder.id,
+          fromStatus: OrderStatus.RIDER_ASSIGNED,
+          toStatus: OrderStatus.PICKED_UP,
+          actorUserId: mockProfile.userId,
+          actorRole: UserRole.RIDER,
+          reason: 'Rider updated delivery to picked_up',
+        },
+        expect.anything(),
+      );
+      expect(
+        auditService.recordOrderStatusTransition.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(historyRepo.insert.mock.invocationCallOrder[0]);
       expect(ordersService.updateStatus).not.toHaveBeenCalled();
       expect(ordersService.publishStatusUpdate).toHaveBeenCalledWith(
         assignedOrder,
@@ -720,12 +875,19 @@ describe('RidersService', () => {
       ordersGateway.notifyRiderAssignment.mockImplementation(() => {
         throw new Error('Rider socket unavailable');
       });
+      filesService.resolveDeliveryProofFile.mockResolvedValue({
+        id: 55,
+        objectKey: 'uploads/proof_of_delivery/pickup-55.jpg',
+      });
 
       await expect(
         service.updateDeliveryStatus(
           mockProfile.userId,
           acceptedAssignment.id,
           DeliveryStatus.PICKED_UP,
+          undefined,
+          { type: 'photo', fileId: 55 } as any,
+          TEST_OTP,
         ),
       ).resolves.toMatchObject({ status: DeliveryStatus.PICKED_UP });
 
@@ -743,7 +905,7 @@ describe('RidersService', () => {
         id: arrivedAssignment.orderId,
         orderId: 'ORD-1',
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order;
       profileRepo.findOne.mockResolvedValue(mockProfile);
       assignmentRepo.findOne.mockResolvedValue(arrivedAssignment);
@@ -762,6 +924,7 @@ describe('RidersService', () => {
           DeliveryStatus.DELIVERED,
           undefined,
           { type: 'signature', signatureData: validSignatureProof } as any,
+          TEST_OTP,
         ),
       ).rejects.toThrow('survey insert failed');
 
@@ -839,6 +1002,17 @@ describe('RidersService', () => {
           toStatus: OrderStatus.READY_FOR_DISPATCH,
           notes: 'Rider declined assignment: Too far',
         }),
+      );
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        {
+          orderId: assignedOrder.id,
+          fromStatus: OrderStatus.RIDER_ASSIGNED,
+          toStatus: OrderStatus.READY_FOR_DISPATCH,
+          actorUserId: mockProfile.userId,
+          actorRole: UserRole.RIDER,
+          reason: 'Rider declined assignment: Too far',
+        },
+        expect.anything(),
       );
       expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledWith(
         mockProfile.userId,
@@ -950,10 +1124,123 @@ describe('RidersService', () => {
       } as DeliveryAssignment);
 
       await expect(
-        service.updateDeliveryStatus(1, 100, DeliveryStatus.DELIVERED),
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          undefined,
+          TEST_OTP,
+        ),
       ).rejects.toThrow('Proof of delivery is required');
       expect(assignmentRepo.save).not.toHaveBeenCalled();
       expect(ordersService.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('rejects delivered when OTP is wrong', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment);
+
+      await expect(
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          { type: 'signature', signatureData: validSignatureProof } as any,
+          WRONG_OTP,
+        ),
+      ).rejects.toThrow('Invalid OTP');
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
+      expect(ordersService.completeDelivery).not.toHaveBeenCalled();
+    });
+
+    it('rejects delivered when OTP is missing', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment);
+
+      await expect(
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          { type: 'signature', signatureData: validSignatureProof } as any,
+        ),
+      ).rejects.toThrow('Delivery OTP is required');
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects double-complete after delivery', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.DELIVERED,
+        deliveryOtpVerifiedAt: new Date(),
+      } as DeliveryAssignment);
+
+      await expect(
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          { type: 'signature', signatureData: validSignatureProof } as any,
+          TEST_OTP,
+        ),
+      ).rejects.toThrow(/Cannot transition from 'delivered'/);
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
+      expect(ordersService.completeDelivery).not.toHaveBeenCalled();
+    });
+
+    it('rejects pickup with wrong OTP', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ACCEPTED,
+      } as DeliveryAssignment);
+      filesService.resolveDeliveryProofFile.mockResolvedValue({
+        id: 55,
+        objectKey: 'uploads/proof_of_delivery/pickup-55.jpg',
+      });
+
+      await expect(
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.PICKED_UP,
+          undefined,
+          { type: 'photo', fileId: 55 } as any,
+          WRONG_OTP,
+        ),
+      ).rejects.toThrow('Invalid OTP');
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects pickup without photo proof', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ACCEPTED,
+      } as DeliveryAssignment);
+
+      await expect(
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.PICKED_UP,
+          undefined,
+          { type: 'signature', signatureData: validSignatureProof } as any,
+          TEST_OTP,
+        ),
+      ).rejects.toThrow('Photo proof is required');
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
     });
 
     it('uses OrdersService status side effects when marking an assignment delivered with photo proof', async () => {
@@ -969,14 +1256,14 @@ describe('RidersService', () => {
         id: 1,
         orderId: 'ORD-1',
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       const surveyRequirement = { id: 70 };
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
           id: 1,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement,
       });
@@ -1004,6 +1291,7 @@ describe('RidersService', () => {
         DeliveryStatus.DELIVERED,
         undefined,
         { type: 'photo', fileId: 55, objectKey: 'spoofed/client-key.jpg' },
+        TEST_OTP,
       );
 
       expect(result.status).toBe(DeliveryStatus.DELIVERED);
@@ -1024,7 +1312,7 @@ describe('RidersService', () => {
       expect(ordersService.publishStatusUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 1,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         }),
         1,
         OrderStatus.DELIVERED,
@@ -1072,7 +1360,7 @@ describe('RidersService', () => {
         orderId: 'VEN-1',
         userId: 21,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
@@ -1080,7 +1368,7 @@ describe('RidersService', () => {
           orderId: 'VEN-1',
           userId: 21,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: { id: 70 },
       });
@@ -1117,6 +1405,7 @@ describe('RidersService', () => {
         DeliveryStatus.DELIVERED,
         undefined,
         { type: 'signature', signatureData: validSignatureProof } as any,
+        TEST_OTP,
       );
 
       expect(ordersGateway.notifyDeliveryQueueUpdated).toHaveBeenCalledWith(
@@ -1181,7 +1470,7 @@ describe('RidersService', () => {
         orderId: 'VEN-1',
         userId: 21,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
@@ -1189,7 +1478,7 @@ describe('RidersService', () => {
           orderId: 'VEN-1',
           userId: 21,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: null,
       });
@@ -1217,6 +1506,7 @@ describe('RidersService', () => {
           DeliveryStatus.DELIVERED,
           undefined,
           { type: 'signature', signatureData: validSignatureProof } as any,
+          TEST_OTP,
         ),
       ).resolves.toMatchObject({ status: DeliveryStatus.DELIVERED });
 
@@ -1268,14 +1558,14 @@ describe('RidersService', () => {
           orderId: 'VEN-1',
           userId: 21,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         } as Order);
         const previous = {
           id: 1,
           orderId: 'VEN-1',
           userId: 21,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         } as Order;
         ordersService.completeDelivery.mockResolvedValue({
           previous,
@@ -1302,6 +1592,7 @@ describe('RidersService', () => {
             DeliveryStatus.DELIVERED,
             undefined,
             { type: 'signature', signatureData: validSignatureProof } as any,
+            TEST_OTP,
           ),
         ).resolves.toMatchObject({ status: DeliveryStatus.DELIVERED });
 
@@ -1323,13 +1614,13 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
           id: 1,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: null,
       });
@@ -1344,6 +1635,7 @@ describe('RidersService', () => {
           DeliveryStatus.DELIVERED,
           undefined,
           { type: 'photo', fileId: 44 } as any,
+          TEST_OTP,
         ),
       ).rejects.toThrow('Proof file does not belong to this rider');
 
@@ -1362,13 +1654,13 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
           id: 1,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: null,
       });
@@ -1379,6 +1671,7 @@ describe('RidersService', () => {
         DeliveryStatus.DELIVERED,
         undefined,
         { type: 'signature', signatureData: validSignatureProof },
+        TEST_OTP,
       );
 
       expect(result.status).toBe(DeliveryStatus.DELIVERED);
@@ -1400,7 +1693,7 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
 
       await expect(
@@ -1413,6 +1706,7 @@ describe('RidersService', () => {
             type: 'signature',
             signatureData: ` ${'🙂'.repeat(16_385)} `,
           } as any,
+          TEST_OTP,
         ),
       ).rejects.toThrow('Signature proof is too large');
 
@@ -1444,26 +1738,22 @@ describe('RidersService', () => {
       'rejects malformed or empty signature proof %#',
       async (signatureData) => {
         await expect(
-          (service as any).validateProofOfDelivery({
-            type: 'signature',
-            signatureData,
-          }),
+          (service as any).validateProofOfDelivery(
+            {
+              type: 'signature',
+              signatureData,
+            },
+            mockProfile.userId,
+            {
+              requirePhoto: false,
+              allowOptionalSignatureWithPhoto: true,
+            },
+          ),
         ).rejects.toThrow('Invalid signature proof');
       },
     );
 
-    it.each([
-      {
-        type: 'photo',
-        fileId: 55,
-        signatureData: 'mixed-signature',
-      },
-      {
-        type: 'signature',
-        signatureData: 'signature',
-        fileId: 55,
-      },
-    ])('rejects unsupported mixed proof payload %#', async (proof) => {
+    it('rejects signature proof that also includes a file id', async () => {
       profileRepo.findOne.mockResolvedValue(mockProfile);
       assignmentRepo.findOne.mockResolvedValue({
         ...mockAssignment,
@@ -1472,7 +1762,7 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
 
       await expect(
@@ -1481,9 +1771,48 @@ describe('RidersService', () => {
           100,
           DeliveryStatus.DELIVERED,
           undefined,
-          proof as any,
+          {
+            type: 'signature',
+            signatureData: validSignatureProof,
+            fileId: 55,
+          } as any,
+          TEST_OTP,
         ),
       ).rejects.toThrow('Unsupported mixed proof payload');
+
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid optional signature attached to photo proof', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment);
+      orderRepo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        batchOrderId: null,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
+      } as Order);
+      filesService.resolveDeliveryProofFile.mockResolvedValue({
+        id: 55,
+        objectKey: 'uploads/proof_of_delivery/server-55.jpg',
+      });
+
+      await expect(
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          {
+            type: 'photo',
+            fileId: 55,
+            signatureData: 'not-json-signature',
+          } as any,
+          TEST_OTP,
+        ),
+      ).rejects.toThrow('Invalid signature proof');
 
       expect(assignmentRepo.save).not.toHaveBeenCalled();
     });
@@ -1513,6 +1842,83 @@ describe('RidersService', () => {
           orderStatus: OrderStatus.READY_FOR_DISPATCH,
         },
       );
+    });
+
+    it('records failed delivery with evidence, does not deliver, notifies ops', async () => {
+      const arrived = {
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment;
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue(arrived);
+      assignmentRepo.save.mockImplementation(
+        async (a) => a as DeliveryAssignment,
+      );
+      orderRepo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        orderId: 'ORD-FAIL-1',
+        batchOrderId: null,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
+      } as Order);
+      filesService.resolveDeliveryProofFile.mockResolvedValue({
+        id: 88,
+        objectKey: 'proofs/fail.jpg',
+      });
+      dispatchPlanService.skipStopIfPlanned.mockResolvedValue({
+        planId: 1,
+        riderId: 10,
+        planVersion: 1,
+        planStatus: DispatchPlanStatus.ACTIVE,
+        assignmentId: 100,
+        stopStatus: DispatchStopStatus.SKIPPED,
+      });
+
+      const result = await (service.updateDeliveryStatus as any)(
+        1,
+        100,
+        DeliveryStatus.FAILED,
+        'Customer unreachable',
+        { type: 'photo', fileId: 88 },
+      );
+
+      expect(result.status).toBe(DeliveryStatus.FAILED);
+      expect(result.isCurrent).toBe(false);
+      expect(result.proofFileId).toBe(88);
+      expect(result.failedAt).toBeInstanceOf(Date);
+      expect(orderRepo.update).toHaveBeenCalledWith(
+        { id: 1, orderStatus: OrderStatus.OUT_FOR_DELIVERY },
+        expect.objectContaining({
+          assignedRiderId: null,
+          orderStatus: OrderStatus.DELIVERY_FAILED,
+        }),
+      );
+      expect(ordersService.completeDelivery).not.toHaveBeenCalled();
+      expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'failed_delivery',
+          orderRef: 'ORD-FAIL-1',
+          metadata: expect.objectContaining({
+            redeliveryFeeRequired: true,
+            redeliveryFeeApproval: 'ops_stub',
+          }),
+        }),
+      );
+    });
+
+    it('rejects failed delivery without evidence reason or photo', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ON_THE_WAY,
+      } as DeliveryAssignment);
+
+      await expect(
+        service.updateDeliveryStatus(1, 100, DeliveryStatus.FAILED, ''),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'failed_delivery_reason_required',
+        }),
+      });
     });
 
     it('should throw BadRequestException on invalid transition ASSIGNED -> DELIVERED', async () => {
@@ -1548,8 +1954,8 @@ describe('RidersService', () => {
         OrderStatus.RIDER_ASSIGNED,
         OrderStatus.RIDER_ASSIGNED,
         OrderStatus.PICKED_UP,
-        OrderStatus.ON_THE_WAY,
-        OrderStatus.ARRIVED_AT_DESTINATION,
+        OrderStatus.OUT_FOR_DELIVERY,
+        OrderStatus.OUT_FOR_DELIVERY,
       ];
       let orderRead = 0;
       orderRepo.findOneOrFail.mockImplementation(
@@ -1574,16 +1980,23 @@ describe('RidersService', () => {
       );
       expect(accepted.status).toBe(DeliveryStatus.ACCEPTED);
 
-      // ACCEPTED -> PICKED_UP
+      // ACCEPTED -> PICKED_UP (OTP + photo)
       const acceptedAssignment = {
         ...mockAssignment,
         status: DeliveryStatus.ACCEPTED,
       } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(acceptedAssignment);
+      filesService.resolveDeliveryProofFile.mockResolvedValue({
+        id: 55,
+        objectKey: 'uploads/proof_of_delivery/pickup-55.jpg',
+      });
       const pickedUp = await service.updateDeliveryStatus(
         1,
         100,
         DeliveryStatus.PICKED_UP,
+        undefined,
+        { type: 'photo', fileId: 55 } as any,
+        TEST_OTP,
       );
       expect(pickedUp.status).toBe(DeliveryStatus.PICKED_UP);
 
@@ -1602,7 +2015,7 @@ describe('RidersService', () => {
       expect(ordersService.publishStatusUpdate).toHaveBeenLastCalledWith(
         expect.objectContaining({ orderStatus: OrderStatus.PICKED_UP }),
         1,
-        OrderStatus.ON_THE_WAY,
+        OrderStatus.OUT_FOR_DELIVERY,
       );
 
       // ON_THE_WAY -> ARRIVED
@@ -1628,7 +2041,7 @@ describe('RidersService', () => {
         previous: {
           id: 1,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: null,
       });
@@ -1638,6 +2051,7 @@ describe('RidersService', () => {
         DeliveryStatus.DELIVERED,
         undefined,
         { type: 'signature', signatureData: validSignatureProof },
+        TEST_OTP,
       );
       expect(delivered.status).toBe(DeliveryStatus.DELIVERED);
       expect(delivered.deliveredAt).toBeDefined();
@@ -1668,7 +2082,7 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: later.orderId,
         batchOrderId: null,
-        orderStatus: OrderStatus.ON_THE_WAY,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       dispatchPlanService.assertCurrentStop.mockRejectedValueOnce(
         new BadRequestException(
@@ -1870,12 +2284,13 @@ describe('RidersService', () => {
     });
   });
 
-  describe('getActiveAssignments', () => {
+  describe('updateLocation active-trip window', () => {
     it('broadcasts the persisted plan version with current-stop location updates', async () => {
       profileRepo.findOne.mockResolvedValue({ ...mockProfile });
       profileRepo.save.mockImplementation(
         async (profile) => profile as RiderProfile,
       );
+      assignmentRepo.count = jest.fn().mockResolvedValue(1);
       dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
         stop: {
           assignmentId: 100,
@@ -1906,6 +2321,60 @@ describe('RidersService', () => {
       });
     });
 
+    it('rejects location pings when no active trip (picked_up / out_for_delivery)', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...mockProfile });
+      assignmentRepo.count = jest.fn().mockResolvedValue(0);
+
+      await expect(
+        service.updateLocation(1, {
+          latitude: 7.06405,
+          longitude: 125.60795,
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'tracking_inactive' }),
+      });
+      expect(profileRepo.save).not.toHaveBeenCalled();
+      expect(locationGateway.broadcastLocation).not.toHaveBeenCalled();
+    });
+
+    it('accepts pings at picked_up and broadcasts for the current stop', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...mockProfile });
+      profileRepo.save.mockImplementation(
+        async (profile) => profile as RiderProfile,
+      );
+      assignmentRepo.count = jest.fn().mockResolvedValue(1);
+      dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
+        stop: {
+          assignmentId: 100,
+          sequence: 1,
+          status: DispatchStopStatus.PENDING,
+        },
+        planVersion: 2,
+      });
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        isCurrent: true,
+        status: DeliveryStatus.PICKED_UP,
+      } as DeliveryAssignment);
+
+      await service.updateLocation(1, {
+        latitude: 7.07,
+        longitude: 125.61,
+      });
+
+      expect(locationGateway.broadcastLocation).toHaveBeenCalledWith(
+        '100',
+        expect.objectContaining({
+          assignmentId: '100',
+          planVersion: 2,
+          latitude: 7.07,
+          longitude: 125.61,
+        }),
+      );
+    });
+  });
+
+  describe('getActiveAssignments', () => {
     it('orders active assignments by the persisted dispatch plan', async () => {
       profileRepo.findOne.mockResolvedValue({
         ...mockProfile,

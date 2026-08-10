@@ -46,9 +46,32 @@ type OrderTypeMeta = {
 };
 
 const TAB_STATUSES: Record<TabFilter, OrderStatus[] | null> = {
-  new: ["order_placed", "file_verified"],
-  production: ["printing_in_progress", "finishing_mounting", "quality_checked"],
-  done: ["delivered", "completed_pickup"],
+  new: [
+    "submitted",
+    "needs_qa",
+    "client_correction",
+    "proof_approval",
+    "approved_for_matching",
+    "supplier_assigned",
+    "supplier_accepted",
+    "awaiting_payment",
+  ],
+  production: [
+    "payment_authorized",
+    "production",
+    "supplier_self_qc",
+    "ready_for_dispatch",
+    "rider_assigned",
+    "picked_up",
+    "out_for_delivery",
+  ],
+  done: [
+    "delivered",
+    "delivery_failed",
+    "collected_by_customer",
+    "issue_window_open",
+    "completed",
+  ],
   all: null,
 };
 
@@ -105,7 +128,7 @@ function getOrderCategoryLabel(order: Order) {
 function exportDeliveredCSV(orders: Order[]) {
   const delivered = orders.filter(
     (o) =>
-      o.order_status === "delivered" || o.order_status === "completed_pickup",
+      o.order_status === "delivered" || o.order_status === "collected_by_customer",
   );
   const headers = [
     "Order ID",
@@ -200,7 +223,7 @@ export function OrderList() {
   };
 
   const handleStatusChange = (order: Order, newStatus: OrderStatus) => {
-    if (newStatus === "file_declined") {
+    if (newStatus === "file_rejected") {
       setDeclineTarget(order);
       setDeclineReason("");
       return;
@@ -228,7 +251,7 @@ export function OrderList() {
     if (!declineTarget || !declineReason.trim()) return;
     try {
       await apiClient.patch(`/admin/orders/${declineTarget.id}/status`, {
-        status: "file_declined",
+        status: "file_rejected",
         notes: declineReason.trim(),
       });
       const response = await apiClient.get(`/admin/orders/${declineTarget.id}`);

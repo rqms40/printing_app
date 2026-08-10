@@ -1,7 +1,17 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --app-primary: #D4A000; /* Darker yellow for light mode readability */
+}
+
+.dark {
+  --app-primary: #FFDE58; /* Original yellow for dark mode */
+}
+
 @theme {
-  --color-primary: #FFDE58;
+  --color-primary: var(--app-primary);
   --font-sans: "Montserrat", sans-serif;
   --font-heading: "Evolve Sans", sans-serif;
 }
@@ -13,8 +23,6 @@ html {
 body {
   margin: 0;
   padding: 0;
-  background-color: #000;
-  color: #fff;
   overflow-x: hidden;
   font-family: var(--font-sans);
 }
@@ -28,20 +36,31 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
+  background: #fff;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-track {
   background: #000;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #333;
+  background: #ccc;
   border-radius: 4px;
 }
 
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #333;
+}
+
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
 
 .bg-map {
-  background-image: url('/GRIDGO_BG.png');
   background-size: cover;
   background-position: center;
   background-attachment: fixed;

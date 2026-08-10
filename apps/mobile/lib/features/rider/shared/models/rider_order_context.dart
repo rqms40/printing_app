@@ -94,6 +94,9 @@ class RiderOrderContext {
     this.customerName,
     this.customerPhone,
     this.destination,
+    this.paymentMethod,
+    this.finalTotalMinor,
+    this.codCollectionStatus,
   });
 
   final String orderRef;
@@ -105,6 +108,36 @@ class RiderOrderContext {
   final String? customerName;
   final String? customerPhone;
   final RiderDestinationContext? destination;
+
+  /// Wire payment method (`cod`, `pilot_credit`, …).
+  final String? paymentMethod;
+
+  /// Final amount in PHP centavos when provided by API.
+  final String? finalTotalMinor;
+
+  /// COD collection lifecycle when loaded: pending / collected / failed.
+  final String? codCollectionStatus;
+
+  bool get isCod {
+    final method = (paymentMethod ?? '').toLowerCase().trim();
+    return method == 'cod' ||
+        method == 'cash' ||
+        method == 'cash_on_delivery' ||
+        method == 'cashondelivery';
+  }
+
+  /// Exact COD amount in major units (pesos) for display.
+  double get codAmountMajor {
+    final minor = int.tryParse(finalTotalMinor ?? '');
+    if (minor != null) return minor / 100.0;
+    return totalPrice + deliveryFee;
+  }
+
+  bool get codCollected =>
+      codCollectionStatus == 'collected' ||
+      codCollectionStatus == 'reconciled';
+
+  bool get codFailed => codCollectionStatus == 'failed';
 }
 
 /// Full rider-facing view of an assignment.
@@ -132,6 +165,12 @@ class RiderAssignmentView {
   bool get isCurrentPlanStop =>
       planStop?.status == RiderDispatchStopStatus.pending && routePosition == 1;
 
+  /// Pin used on rider maps — same coordinates as the order destination shown
+  /// in delivery info. Prefer the live order snapshot over a stale plan stop
+  /// so the pin always matches the address text.
+  LatLng? get pinDestination =>
+      order.destination?.latLng ?? planStop?.destination;
+
   String get id => assignment.id;
   DeliveryStatus get status => assignment.status;
 
@@ -143,8 +182,18 @@ class RiderAssignmentView {
     DeliveryStatus.arrived,
   ].contains(status);
   bool get isTerminal =>
-      status == DeliveryStatus.delivered || status == DeliveryStatus.declined;
+      status == DeliveryStatus.delivered ||
+      status == DeliveryStatus.declined ||
+      status == DeliveryStatus.failed;
 
+  /// Active-trip GPS window: confirmed pickup through pre-delivery handoff.
   bool get shouldTrackLocation =>
-      status == DeliveryStatus.onTheWay || status == DeliveryStatus.arrived;
+      status == DeliveryStatus.pickedUp ||
+      status == DeliveryStatus.onTheWay ||
+      status == DeliveryStatus.arrived;
+
+  bool get canMarkFailed =>
+      status == DeliveryStatus.pickedUp ||
+      status == DeliveryStatus.onTheWay ||
+      status == DeliveryStatus.arrived;
 }

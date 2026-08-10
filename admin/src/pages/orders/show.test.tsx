@@ -60,8 +60,8 @@ const baseOrder = {
   delivery_fee: 0,
   payment_method: "grid_credits",
   payment_status: "paid",
-  order_status: "order_placed",
-  allowed_next_statuses: ["file_verified", "file_declined"],
+  order_status: "submitted",
+  allowed_next_statuses: ["approved_for_matching", "file_rejected"],
   delivery_option: "delivery",
   delivery_proof: {
     type: "signature",
@@ -72,8 +72,8 @@ const baseOrder = {
   status_history: [{
     id: 1,
     order_id: 42,
-    from_status: "order_placed",
-    to_status: "file_declined",
+    from_status: "submitted",
+    to_status: "file_rejected",
     changed_by_user_id: 31,
     notes: "Customer file is corrupted",
     created_at: "2026-07-10T10:15:00.000Z",
@@ -107,7 +107,7 @@ describe("OrderShow", () => {
     });
     fireEvent.mouseDown(action);
 
-    expect(await screen.findByText("File Verified")).toBeInTheDocument();
+    expect(await screen.findByText("Approved for Matching")).toBeInTheDocument();
     expect(screen.queryByText("Cancelled")).not.toBeInTheDocument();
     expect(screen.getByText(/Actor #31/)).toBeInTheDocument();
     expect(screen.getByText(/Customer file is corrupted/)).toBeInTheDocument();
