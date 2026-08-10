@@ -50,6 +50,9 @@ export class ProductCategory {
   })
   mobileDescription: string | null;
 
+  @Column({ type: 'jsonb', nullable: true })
+  examples: string[] | null;
+
   @Column({ type: 'varchar', length: 50, nullable: true })
   icon: string | null;
 

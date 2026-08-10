@@ -52,19 +52,20 @@ export async function upsertCatalogV110(
     for (const product of group.products) {
       await executor.query(
         `INSERT INTO "product_categories" (
-           "slug", "name", "description", "mobile_description",
+           "slug", "name", "description", "mobile_description", "examples",
            "group_slug", "group_name", "group_description",
            "group_sort_order", "file_processing_type", "pricing_model",
            "base_rate", "quantity_unit", "max_file_size_mb",
            "allowed_extensions", "is_active", "sort_order"
          ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-           $14::jsonb, $15, $16
+           $1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12,
+           $13, $14, $15::jsonb, $16, $17
          )
          ON CONFLICT ("slug") DO UPDATE SET
            "name" = EXCLUDED."name",
            "description" = EXCLUDED."description",
            "mobile_description" = EXCLUDED."mobile_description",
+           "examples" = EXCLUDED."examples",
            "group_slug" = EXCLUDED."group_slug",
            "group_name" = EXCLUDED."group_name",
            "group_description" = EXCLUDED."group_description",
@@ -83,6 +84,7 @@ export async function upsertCatalogV110(
           product.name,
           product.description,
           product.mobileDescription,
+          JSON.stringify(product.examples),
           group.slug,
           group.name,
           group.description,
@@ -230,13 +232,35 @@ export async function upsertCatalogV110(
   }
 
   await executor.query(
+    `UPDATE "product_spec_options" option_record
+     SET "is_active" = false, "updated_at" = NOW()
+     FROM "product_spec_definitions" spec,
+          "product_categories" category
+     WHERE option_record."spec_definition_id" = spec."id"
+       AND spec."category_id" = category."id"
+       AND category."group_slug" = ANY($1::varchar[])
+       AND NOT (category."slug" = ANY($2::varchar[]))`,
+    [groupSlugs, productSlugs],
+  );
+  await executor.query(
+    `UPDATE "product_spec_definitions" spec
+     SET "is_active" = false, "updated_at" = NOW()
+     FROM "product_categories" category
+     WHERE spec."category_id" = category."id"
+       AND category."group_slug" = ANY($1::varchar[])
+       AND NOT (category."slug" = ANY($2::varchar[]))`,
+    [groupSlugs, productSlugs],
+  );
+  await executor.query(
+    `UPDATE "product_categories" category
+     SET "is_active" = false, "updated_at" = NOW()
+     WHERE category."group_slug" = ANY($1::varchar[])
+       AND NOT (category."slug" = ANY($2::varchar[]))`,
+    [groupSlugs, productSlugs],
+  );
+  await executor.query(
     `UPDATE "product_categories"
      SET "is_active" = false, "updated_at" = NOW()
-     WHERE "slug" IN ('paper', '3d')
-        OR (
-          "group_slug" = ANY($1::varchar[])
-          AND NOT ("slug" = ANY($2::varchar[]))
-        )`,
-    [groupSlugs, productSlugs],
+     WHERE "slug" IN ('paper', '3d')`,
   );
 }

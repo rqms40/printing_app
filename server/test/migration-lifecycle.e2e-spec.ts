@@ -687,13 +687,14 @@ describe('production migration lifecycle (e2e)', () => {
         active_groups: 4,
         active_quote_products: 17,
         active_legacy_products: 0,
-        categories: 19,
-        specs: 83,
-        options: 0,
+        categories: 21,
+        specs: 85,
+        options: 2,
         duplicate_categories: 0,
         duplicate_specs: 0,
         duplicate_options: 0,
       });
+      await expectStaleCatalogRowsDeactivated(dataSource);
 
       await dataSource.undoLastMigration();
       await expect(
@@ -714,13 +715,14 @@ describe('production migration lifecycle (e2e)', () => {
         active_groups: 4,
         active_quote_products: 17,
         active_legacy_products: 0,
-        categories: 19,
-        specs: 83,
-        options: 0,
+        categories: 21,
+        specs: 85,
+        options: 2,
         duplicate_categories: 0,
         duplicate_specs: 0,
         duplicate_options: 0,
       });
+      await expectStaleCatalogRowsDeactivated(dataSource);
     } finally {
       await dataSource.destroy();
     }
@@ -2004,17 +2006,51 @@ describe('production migration lifecycle (e2e)', () => {
     dataSource: DataSource,
   ): Promise<void> {
     await dataSource.query(`
+      ALTER TABLE product_categories
+      ADD COLUMN IF NOT EXISTS group_slug varchar(50)
+    `);
+    await dataSource.query(`
       INSERT INTO product_categories (
         name, slug, description, mobile_description, icon,
         file_processing_type, pricing_model, base_rate, quantity_unit,
-        max_file_size_mb, allowed_extensions, is_active, sort_order
+        max_file_size_mb, allowed_extensions, is_active, sort_order,
+        group_slug
       ) VALUES
         ('Paper Printing', 'paper', 'Historical paper', NULL, NULL,
-         'document', 'per_page_modifiers', 2, 'copy', 50, '[]'::jsonb, true, 1),
+         'document', 'per_page_modifiers', 2, 'copy', 50, '[]'::jsonb, true, 1,
+         NULL),
         ('3D Printing', '3d', 'Historical 3D', NULL, NULL,
          'model_3d', 'base_plus_material_estimate', 50, 'model', 200,
-         '[]'::jsonb, false, 2)
+         '[]'::jsonb, false, 2, NULL),
+        ('Removed v1.10 leaf', 'removed-v110-leaf', 'Stale canonical leaf',
+         NULL, NULL, 'generic_file', 'quote_required', 0, 'piece', 100,
+         '[]'::jsonb, true, 99, 'marketing-promo'),
+        ('Unrelated historical leaf', 'unrelated-historical-leaf',
+         'Unrelated historical catalog row', NULL, NULL, 'generic_file',
+         'per_page_modifiers', 5, 'piece', 50, '[]'::jsonb, true, 100, NULL)
       ON CONFLICT (slug) DO UPDATE SET is_active = EXCLUDED.is_active
+    `);
+    await dataSource.query(`
+      INSERT INTO product_spec_definitions (
+        category_id, key, label, input_type, value_type, is_required,
+        is_active, pricing_role, sort_order
+      )
+      SELECT id, 'legacy_spec', 'Legacy spec', 'text', 'string', true, true,
+             'none', 1
+      FROM product_categories
+      WHERE slug IN ('removed-v110-leaf', 'unrelated-historical-leaf')
+    `);
+    await dataSource.query(`
+      INSERT INTO product_spec_options (
+        spec_definition_id, label, value, is_active, sort_order
+      )
+      SELECT spec.id, 'Legacy option', 'legacy-option', true, 1
+      FROM product_spec_definitions spec
+      JOIN product_categories category ON category.id = spec.category_id
+      WHERE category.slug IN (
+        'removed-v110-leaf',
+        'unrelated-historical-leaf'
+      )
     `);
   }
 
@@ -2105,8 +2141,8 @@ describe('production migration lifecycle (e2e)', () => {
   async function expectExactCatalog(dataSource: DataSource): Promise<void> {
     const products = await dataSource.query(`
       SELECT
-        slug, name, description, mobile_description, group_slug, group_name,
-        group_description, group_sort_order, file_processing_type,
+        slug, name, description, mobile_description, examples, group_slug,
+        group_name, group_description, group_sort_order, file_processing_type,
         pricing_model, base_rate::float8 AS base_rate, quantity_unit,
         max_file_size_mb, allowed_extensions, is_active, sort_order
       FROM product_categories
@@ -2120,6 +2156,7 @@ describe('production migration lifecycle (e2e)', () => {
           name: product.name,
           description: product.description,
           mobile_description: product.mobileDescription,
+          examples: [...product.examples],
           group_slug: group.slug,
           group_name: group.name,
           group_description: group.description,
@@ -2204,6 +2241,41 @@ describe('production migration lifecycle (e2e)', () => {
     );
   }
 
+  async function expectStaleCatalogRowsDeactivated(
+    dataSource: DataSource,
+  ): Promise<void> {
+    await expect(
+      dataSource.query(`
+        SELECT category.slug,
+               category.is_active AS category_active,
+               spec.is_active AS spec_active,
+               option_record.is_active AS option_active
+        FROM product_categories category
+        JOIN product_spec_definitions spec ON spec.category_id = category.id
+        JOIN product_spec_options option_record
+          ON option_record.spec_definition_id = spec.id
+        WHERE category.slug IN (
+          'removed-v110-leaf',
+          'unrelated-historical-leaf'
+        )
+        ORDER BY category.slug
+      `),
+    ).resolves.toEqual([
+      {
+        slug: 'removed-v110-leaf',
+        category_active: false,
+        spec_active: false,
+        option_active: false,
+      },
+      {
+        slug: 'unrelated-historical-leaf',
+        category_active: true,
+        spec_active: true,
+        option_active: true,
+      },
+    ]);
+  }
+
   async function undoAllMigrations(dataSource: DataSource): Promise<void> {
     const [row] = await dataSource.query<CountRow[]>(
       `SELECT count(*)::int AS count FROM migrations`,
@@ -2270,6 +2342,17 @@ describe('production migration lifecycle (e2e)', () => {
   }
 
   function runSeed(database: string) {
+    const minioEndpoint = requiredLifecycleEnv(
+      'GRIDGO_LIFECYCLE_MINIO_ENDPOINT',
+    );
+    const minioPort = requiredLifecycleEnv('GRIDGO_LIFECYCLE_MINIO_PORT');
+    const minioAccessKey = requiredLifecycleEnv(
+      'GRIDGO_LIFECYCLE_MINIO_ACCESS_KEY',
+    );
+    const minioSecretKey = requiredLifecycleEnv(
+      'GRIDGO_LIFECYCLE_MINIO_SECRET_KEY',
+    );
+    const minioBucket = `gridgo-${database.replaceAll('_', '-')}`;
     return spawnSync('npm', ['run', 'seed', '--silent'], {
       cwd: join(__dirname, '..'),
       encoding: 'utf8',
@@ -2282,17 +2365,24 @@ describe('production migration lifecycle (e2e)', () => {
         DATABASE_USER: adminConfig.user,
         DATABASE_PASSWORD: adminConfig.password,
         JWT_SECRET: 'catalog-lifecycle-test-jwt-secret',
-        MINIO_ENDPOINT: process.env.MINIO_ENDPOINT ?? '127.0.0.1',
-        MINIO_PORT: process.env.MINIO_PORT ?? '9000',
-        MINIO_USE_SSL: process.env.MINIO_USE_SSL ?? 'false',
-        MINIO_ACCESS_KEY:
-          process.env.MINIO_ACCESS_KEY ?? 'catalog-lifecycle-test-access',
-        MINIO_SECRET_KEY:
-          process.env.MINIO_SECRET_KEY ?? 'catalog-lifecycle-test-secret',
+        MINIO_ENDPOINT: minioEndpoint,
+        MINIO_PORT: minioPort,
+        MINIO_USE_SSL: 'false',
+        MINIO_ACCESS_KEY: minioAccessKey,
+        MINIO_SECRET_KEY: minioSecretKey,
+        MINIO_BUCKET: minioBucket,
         GRIDGO_SEED_CUSTOMER_PASSWORD: 'catalog-test-customer-password',
         GRIDGO_SEED_RIDER_PASSWORD: 'catalog-test-rider-password',
         GRIDGO_SEED_ADMIN_PASSWORD: 'catalog-test-admin-password',
       },
     });
+  }
+
+  function requiredLifecycleEnv(name: string): string {
+    const value = process.env[name];
+    if (!value) {
+      throw new Error(`${name} is required for isolated seed lifecycle tests`);
+    }
+    return value;
   }
 });

@@ -32,6 +32,7 @@ describe('upsertCatalogV110', () => {
       'Flyers',
       'Single sheets, event promos, and product announcements.',
       'Single sheets, event promos, and product announcements.',
+      '["Single sheets","Event promos","Product announcements"]',
       'marketing-promo',
       'Marketing & Promotional Collateral',
       'Best for businesses, startups, and events looking to promote services or distribute physical marketing material.',
@@ -45,11 +46,12 @@ describe('upsertCatalogV110', () => {
       true,
       1,
     ]);
-    expect(categoryUpserts.at(-1)?.parameters.slice(0, 7)).toEqual([
+    expect(categoryUpserts.at(-1)?.parameters.slice(0, 8)).toEqual([
       'packaging-box-production',
       'Packaging & Box Production',
       'Custom product boxes, mailer boxes, and food-grade packaging.',
       'Custom product boxes, mailer boxes, and food-grade packaging.',
+      '["Custom product boxes","Mailer boxes","Food-grade packaging"]',
       'specialized-prototyping',
       'Specialized & Prototyping Services',
       'Best for architecture students, engineers, industrial designers, and specialized builds.',
@@ -78,6 +80,55 @@ describe('upsertCatalogV110', () => {
     expect(sql).not.toContain('DELETE FROM "product_categories"');
 
     expect(CATALOG_V1_10_GROUPS).toHaveLength(4);
+  });
+
+  it('deactivates stale nested rows before stale v1.10 leaves without touching unrelated groups', async () => {
+    const executor = new RecordingExecutor();
+
+    await upsertCatalogV110(executor);
+
+    const staleOptionIndex = executor.queries.findIndex(
+      (query) =>
+        query.sql.includes('UPDATE "product_spec_options" option_record') &&
+        query.sql.includes('category."group_slug" = ANY'),
+    );
+    const staleSpecIndex = executor.queries.findIndex(
+      (query) =>
+        query.sql.includes('UPDATE "product_spec_definitions" spec') &&
+        query.sql.includes('category."group_slug" = ANY'),
+    );
+    const staleCategoryIndex = executor.queries.findIndex(
+      (query) =>
+        query.sql.includes('UPDATE "product_categories" category') &&
+        query.sql.includes('category."group_slug" = ANY'),
+    );
+    expect(staleOptionIndex).toBeGreaterThanOrEqual(0);
+    expect(staleSpecIndex).toBeGreaterThan(staleOptionIndex);
+    expect(staleCategoryIndex).toBeGreaterThan(staleSpecIndex);
+
+    for (const index of [
+      staleOptionIndex,
+      staleSpecIndex,
+      staleCategoryIndex,
+    ]) {
+      expect(executor.queries[index]?.sql).toContain(
+        '"group_slug" = ANY($1::varchar[])',
+      );
+      expect(executor.queries[index]?.sql).toContain(
+        'NOT (category."slug" = ANY($2::varchar[]))',
+      );
+      expect(executor.queries[index]?.parameters).toEqual([
+        [
+          'marketing-promo',
+          'corporate-merch',
+          'awards-signages',
+          'specialized-prototyping',
+        ],
+        CATALOG_V1_10_GROUPS.flatMap((group) =>
+          group.products.map((product) => product.slug),
+        ),
+      ]);
+    }
   });
 
   it('uses conflict-safe category, specification, and option writes on every run', async () => {

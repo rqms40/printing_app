@@ -55,6 +55,10 @@ describe('product entity column metadata', () => {
       type: 'int',
       nullable: true,
     });
+    expect(columnOptions(ProductCategory, 'examples')).toMatchObject({
+      type: 'jsonb',
+      nullable: true,
+    });
   });
 
   it('maps nullable RFQ quote metadata with an accepted legacy default', () => {

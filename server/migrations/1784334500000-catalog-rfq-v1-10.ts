@@ -121,6 +121,7 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
       `);
 
       const groupColumns = [
+        ['examples', 'jsonb'],
         ['group_slug', 'varchar(50)'],
         ['group_name', 'varchar(100)'],
         ['group_description', 'text'],
@@ -375,6 +376,7 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
         'group_description',
         'group_name',
         'group_slug',
+        'examples',
       ]) {
         if (await queryRunner.hasColumn('product_categories', column)) {
           await queryRunner.query(

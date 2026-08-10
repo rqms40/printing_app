@@ -42,6 +42,7 @@ describe('CatalogRfqV1101784334500000', () => {
     );
 
     expect(source).toContain('group_slug');
+    expect(source).toContain('examples');
     expect(source).toContain('pricing_status');
     expect(source).toContain('quoted_total_minor');
     expect(source).toContain('required_at');
@@ -69,6 +70,7 @@ describe('CatalogRfqV1101784334500000', () => {
       /ALTER COLUMN "pricing_status" SET DEFAULT 'accepted'[\s\S]*ALTER COLUMN "pricing_status" SET NOT NULL/,
     );
     expect(sql).toContain('TYPE varchar(1000)');
+    expect(sql).toContain('ADD COLUMN "examples" jsonb');
     expect(sql).toContain(`WHERE "slug" IN ('paper', '3d')`);
   });
 
@@ -201,6 +203,7 @@ describe('CatalogRfqV1101784334500000', () => {
     );
     expect(sql).toContain('TYPE varchar(120)');
     expect(sql).toContain('activation_snapshot."was_active"');
+    expect(sql).toContain('DROP COLUMN "examples"');
     expect(sql).not.toContain('SET "is_active" = true');
 
     const indexOf = (fragment: string) =>
