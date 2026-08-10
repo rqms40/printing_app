@@ -12,9 +12,13 @@ import 'package:printing_app/features/customer/order/providers/delivery_slot_pro
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/screens/checkout_screen.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/delivery_slot_provider_test.mocks.dart';
 
@@ -30,6 +34,57 @@ void main() {
           "That's the Submit quote request button — tap it whenever you're ready to send your requirements.",
     ));
   });
+
+  testWidgets(
+    'post-pipeline RFQ multidrop tutorial guides to quote submission without payment copy',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final container = ProviderContainer(
+        overrides: [
+          dioProvider.overrideWithValue(MockDio()),
+          productCatalogLoaderProvider.overrideWithValue(
+            () async => _catalogWire(),
+          ),
+          webSocketServiceProvider.overrideWithValue(MockWebSocketService()),
+          ordersProvider.overrideWith((_) => _RfqOrdersNotifier()),
+          tutorialProvider.overrideWith((_) => _PipelineSeenTutorialNotifier()),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(checkoutProvider.notifier)
+        ..addItem(_rfqItem())
+        ..setMode(DeliveryMode.pickup);
+      final router = _router();
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Multi-drop Delivery'), findsOneWidget);
+      await tester.tap(find.textContaining('Got it'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("tap 'Choose payment method'"), findsNothing);
+      expect(
+        find.text(
+          "One more thing — tap 'Submit quote request' when your requirements are ready.",
+        ),
+        findsOneWidget,
+      );
+      expect(
+        container.read(tutorialProvider),
+        contains(TutorialKey.checkoutFeatures),
+      );
+    },
+  );
 
   testWidgets('RFQ review exposes pending copy without payment or totals', (
     tester,
@@ -239,6 +294,13 @@ class _FailingRfqOrdersNotifier extends OrdersNotifier {
       ),
     ),
   );
+}
+
+class _PipelineSeenTutorialNotifier extends TutorialNotifier {
+  _PipelineSeenTutorialNotifier()
+    : super(TutorialRepository(patchServer: (_) async {})) {
+    state = {TutorialKey.pipeline};
+  }
 }
 
 GoRouter _router() => GoRouter(

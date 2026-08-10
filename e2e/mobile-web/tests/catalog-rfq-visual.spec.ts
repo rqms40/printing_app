@@ -7,6 +7,7 @@ import { CATALOG_V1_10_GROUPS } from "../../../server/src/products/catalog-v1-10
 import {
   enableFlutterSemantics,
   navigateMobile,
+  refreshExternallyUpdatedOrder,
 } from "../fixtures/beta-actors";
 import {
   sanitizeEvidenceText,
@@ -194,6 +195,69 @@ test.describe("GRIDGO catalog RFQ visual contract", () => {
     );
     await expect(page.locator("body")).toContainText("Quote accepted");
     expect((await page.screenshot()).byteLength).toBeGreaterThan(0);
+  });
+
+  test("keeps an external quote invisible until the provider-backed page reloads", async ({
+    page,
+  }) => {
+    let externalOrder = pendingOrderFixture();
+    await page.route("**/api/orders", (route) =>
+      route.fulfill({ json: [externalOrder] }),
+    );
+    await page.route("**/api/orders/910001/accept-quote", (route) =>
+      route.fulfill({
+        json: {
+          ...quotedOrderFixture(),
+          pricingStatus: "accepted",
+          orderStatus: "awaiting_payment",
+        },
+      }),
+    );
+    await page.route("https://mobile.gridgo.test/provider-refresh", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: providerRefreshFixture(),
+      }),
+    );
+    await page.goto("https://mobile.gridgo.test/provider-refresh");
+    await expect(page.locator("body")).toContainText("pending_quote");
+    await expect(
+      page.getByRole("button", { name: "Accept quote" }),
+    ).toHaveCount(0);
+
+    externalOrder = quotedOrderFixture();
+    await expect(page.locator("body")).toContainText("pending_quote");
+    await expect(
+      page.getByRole("button", { name: "Accept quote" }),
+    ).toHaveCount(0);
+
+    await refreshExternallyUpdatedOrder({
+      page,
+      readOrderState: () =>
+        page.evaluate(async () => {
+          const [order] = await fetch("/api/orders").then((response) =>
+            response.json(),
+          );
+          return {
+            orderStatus: order.orderStatus,
+            pricingStatus: order.pricingStatus,
+            quoteAssignmentId: Number(order.quoteAssignmentId),
+          };
+        }),
+      expectedOrderState: {
+        orderStatus: "supplier_accepted",
+        pricingStatus: "quoted",
+        quoteAssignmentId: 77,
+      },
+      enableSemantics: false,
+      message: "fixture quote transition is durable before provider reload",
+    });
+    await expect(page.locator("body")).toContainText("quoted");
+    await expect(
+      page.getByRole("button", { name: "Accept quote" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Accept quote" }).click();
+    await expect(page.locator("body")).toContainText("awaiting_payment");
   });
 });
 
@@ -496,6 +560,45 @@ async function bootstrapQuotedCustomerEvidence(
 ): Promise<void> {
   await mockQuotedOrder(page);
   await bootstrapProvider();
+}
+
+function pendingOrderFixture() {
+  return {
+    ...quotedOrderFixture(),
+    pricingStatus: "pending_quote",
+    orderStatus: "submitted",
+    quotedTotalMinor: null,
+    promisedCompletionAt: null,
+    quoteAssignmentId: null,
+  };
+}
+
+function providerRefreshFixture(): string {
+  return `
+    <main id="order"></main>
+    <script>
+      fetch("/api/orders")
+        .then((response) => response.json())
+        .then(([order]) => {
+          const root = document.querySelector("#order");
+          root.append(order.pricingStatus);
+          if (order.pricingStatus === "quoted") {
+            root.insertAdjacentHTML("beforeend", '<button id="accept">Accept quote</button>');
+            document.querySelector("#accept").addEventListener("click", async () => {
+              const accepted = await fetch("/api/orders/910001/accept-quote", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  supplierAssignmentId: order.quoteAssignmentId,
+                  paymentMethod: "pilot_credit",
+                }),
+              }).then((response) => response.json());
+              root.append(accepted.orderStatus);
+            });
+          }
+        });
+    </script>
+  `;
 }
 
 async function mockAdminDynamicOrder(page: Page): Promise<void> {

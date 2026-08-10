@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -309,18 +311,28 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       () {
         // Mark Step A done for this session so the sheet knows to fire Step B.
         ref.read(checkoutMultidropSeenInSessionProvider.notifier).state = true;
-        // Hint the user to open the payment sheet for the next coach mark.
+        final isRfq = ref.read(checkoutProvider).hasPendingQuoteItems;
+        if (isRfq) {
+          unawaited(
+            ref
+                .read(tutorialProvider.notifier)
+                .markSeen(TutorialKey.checkoutFeatures),
+          );
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                "One more thing — tap 'Choose payment method' to see GRIDGO Credits.",
+                isRfq
+                    ? "One more thing — tap 'Submit quote request' when your requirements are ready."
+                    : "One more thing — tap 'Choose payment method' to see GRIDGO Credits.",
               ),
-              duration: Duration(seconds: 4),
+              duration: const Duration(seconds: 4),
             ),
           );
         }
-        // Do NOT mark checkoutFeatures seen here — Step B (in the sheet) does that.
+        // Priced checkout still completes Step B in the payment sheet. RFQs
+        // have no payment sheet, so Step A completes this standalone tutorial.
       },
     );
   }

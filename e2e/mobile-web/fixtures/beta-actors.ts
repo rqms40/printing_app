@@ -1,9 +1,10 @@
-import type {
-  Browser,
-  BrowserContext,
-  BrowserContextOptions,
-  ConsoleMessage,
-  Page,
+import {
+  expect,
+  type Browser,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type ConsoleMessage,
+  type Page,
 } from "@playwright/test";
 
 import { betaPreStoreLocation } from "./beta-locations";
@@ -41,6 +42,37 @@ export type BetaActorRuntime = {
   console: ActorConsoleEntry[];
   network: ActorNetworkEntry[];
 };
+
+export async function reloadProviderBackedPage(
+  page: Page,
+  options: { enableSemantics?: boolean } = {},
+): Promise<void> {
+  await page.reload({ waitUntil: "domcontentloaded" });
+  if (options.enableSemantics !== false) await enableFlutterSemantics(page);
+}
+
+export type ExternallyUpdatedOrderState = {
+  orderStatus: unknown;
+  pricingStatus: unknown;
+  quoteAssignmentId: number;
+};
+
+export async function refreshExternallyUpdatedOrder(options: {
+  page: Page;
+  readOrderState: () => Promise<ExternallyUpdatedOrderState>;
+  expectedOrderState: ExternallyUpdatedOrderState;
+  afterReload?: () => Promise<void>;
+  enableSemantics?: boolean;
+  message: string;
+}): Promise<void> {
+  await expect
+    .poll(options.readOrderState, { message: options.message })
+    .toEqual(options.expectedOrderState);
+  await reloadProviderBackedPage(options.page, {
+    enableSemantics: options.enableSemantics,
+  });
+  await options.afterReload?.();
+}
 
 export const betaActors: Record<BetaActorName, BetaActorDefinition> = {
   admin: {

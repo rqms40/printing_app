@@ -18,6 +18,7 @@ import {
   createBetaActorContexts,
   enableFlutterSemantics,
   navigateMobile,
+  refreshExternallyUpdatedOrder,
   type BetaActorRuntime,
 } from "../fixtures/beta-actors";
 import {
@@ -766,6 +767,7 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(orderFlow).toContain("Submit quote request");
     expect(orderFlow).toContain("/api/orders/requests/batch");
     expect(orderFlow).toContain("prepareCatalogOrderForProduction");
+    expect(orderFlow).toContain("refreshQuotedCustomerOrder");
     expect(orderFlow).not.toContain("Pick Paper Printing");
     expect(orderFlow).not.toContain("Paper Specs");
     expect(orderFlow).not.toContain(
@@ -2345,11 +2347,13 @@ async function prepareCatalogOrderForProduction(options: {
     `${customer.name} quoted total must fit the fresh beta credit budget`,
   ).toBeLessThanOrEqual(10_000);
 
-  await navigateMobile(
-    customer.actor.page,
+  await refreshQuotedCustomerOrder({
+    request,
+    apiBaseURL,
+    customer,
     mobileURL,
-    `/customer/orders/${customer.orderId}`,
-  );
+    supplierAssignmentId,
+  });
   await expect(customer.actor.page.locator("body")).toContainText(
     /Supplier quote/i,
   );
@@ -2445,6 +2449,45 @@ async function prepareCatalogOrderForProduction(options: {
   });
   expect(ready).toMatchObject({
     order: { orderStatus: "ready_for_dispatch" },
+  });
+}
+
+async function refreshQuotedCustomerOrder(options: {
+  request: APIRequestContext;
+  apiBaseURL: string;
+  customer: CustomerRun;
+  mobileURL: string;
+  supplierAssignmentId: number;
+}): Promise<void> {
+  const { request, apiBaseURL, customer, mobileURL, supplierAssignmentId } =
+    options;
+  await refreshExternallyUpdatedOrder({
+    page: customer.actor.page,
+    readOrderState: async () => {
+      const order = await authenticatedGet<JsonRecord>(
+        request,
+        apiBaseURL,
+        `/orders/${customer.orderId}`,
+        customer.token,
+      );
+      return {
+        orderStatus: order.orderStatus,
+        pricingStatus: order.pricingStatus,
+        quoteAssignmentId: Number(order.quoteAssignmentId),
+      };
+    },
+    expectedOrderState: {
+      orderStatus: "supplier_accepted",
+      pricingStatus: "quoted",
+      quoteAssignmentId: supplierAssignmentId,
+    },
+    message: `${customer.name} externally quoted RFQ is durable`,
+    afterReload: () =>
+      navigateMobile(
+        customer.actor.page,
+        mobileURL,
+        `/customer/orders/${customer.orderId}`,
+      ),
   });
 }
 
