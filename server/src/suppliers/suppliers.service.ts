@@ -7,7 +7,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { SupplierProfile } from './entities/supplier-profile.entity';
 import { SupplierCapability } from './entities/supplier-capability.entity';
 import {
@@ -128,6 +128,7 @@ export class SuppliersService {
     private readonly fileRepo: Repository<FileMetadata>,
     @InjectRepository(SupplierAssignment)
     private readonly assignmentRepo: Repository<SupplierAssignment>,
+    private readonly dataSource: DataSource,
     @Optional() private readonly filesService?: FilesService,
   ) {}
 
@@ -178,7 +179,15 @@ export class SuppliersService {
       relations: { verification: true, capabilities: true },
       order: { id: 'ASC' },
     });
-    return Promise.all(rows.map((row) => this.withLogoUrl(row)));
+    const profiles = await Promise.all(
+      rows.map((row) => this.withLogoUrl(row)),
+    );
+    for (const profile of profiles) {
+      profile.capabilities = (profile.capabilities ?? []).filter(
+        (capability) => capability.isActive,
+      );
+    }
+    return profiles;
   }
 
   /**
@@ -326,13 +335,15 @@ export class SuppliersService {
       ratingCount: Number(profile.ratingCount ?? 0),
       ordersReceived: stats?.ordersReceived ?? 0,
       ordersAccepted: stats?.ordersAccepted ?? 0,
-      capabilities: (profile.capabilities ?? []).map((cap) => ({
-        id: cap.id,
-        productFamily: cap.productFamily,
-        materials: cap.materials ?? [],
-        maxCapacity: cap.maxCapacity,
-        leadTimeDays: cap.leadTimeDays,
-      })),
+      capabilities: (profile.capabilities ?? [])
+        .filter((capability) => capability.isActive)
+        .map((cap) => ({
+          id: cap.id,
+          productFamily: cap.productFamily,
+          materials: cap.materials ?? [],
+          maxCapacity: cap.maxCapacity,
+          leadTimeDays: cap.leadTimeDays,
+        })),
       updatedAt: profile.updatedAt,
     };
   }
@@ -396,13 +407,15 @@ export class SuppliersService {
       verification_status: profile.verification?.status ?? null,
       rating_average: Number(profile.ratingAverage ?? 0),
       rating_count: Number(profile.ratingCount ?? 0),
-      capabilities: (profile.capabilities ?? []).map((cap) => ({
-        id: cap.id,
-        product_family: cap.productFamily,
-        materials: cap.materials ?? [],
-        max_capacity: cap.maxCapacity,
-        lead_time_days: cap.leadTimeDays,
-      })),
+      capabilities: (profile.capabilities ?? [])
+        .filter((capability) => capability.isActive)
+        .map((cap) => ({
+          id: cap.id,
+          product_family: cap.productFamily,
+          materials: cap.materials ?? [],
+          max_capacity: cap.maxCapacity,
+          lead_time_days: cap.leadTimeDays,
+        })),
       updated_at: profile.updatedAt,
     };
   }
@@ -732,46 +745,65 @@ export class SuppliersService {
     supplierId: number,
     dto: CreateSupplierCapabilityDto,
   ): Promise<SupplierCapability> {
-    await this.findById(supplierId);
     const productFamily = dto.productFamily.trim().toLowerCase();
-    const product = productFamily
-      ? await this.categoryRepo.findOne({ where: { slug: productFamily } })
-      : null;
-    if (!product || !isActiveOrderableRfqLeaf(product)) {
-      throw new BadRequestException({
-        code: 'invalid_supplier_capability_product',
-        message:
-          'Supplier capability must reference an active orderable RFQ product slug',
+    return this.dataSource.transaction(async (manager) => {
+      const categoryRepo = manager.getRepository(ProductCategory);
+      const profileRepo = manager.getRepository(SupplierProfile);
+      const capabilityRepo = manager.getRepository(SupplierCapability);
+
+      const product = productFamily
+        ? await categoryRepo.findOne({
+            where: { slug: productFamily },
+            lock: { mode: 'pessimistic_read' },
+          })
+        : null;
+      if (!product || !isActiveOrderableRfqLeaf(product)) {
+        throw new BadRequestException({
+          code: 'invalid_supplier_capability_product',
+          message:
+            'Supplier capability must reference an active orderable RFQ product slug',
+        });
+      }
+
+      const supplier = await profileRepo.findOne({
+        where: { id: supplierId },
+        lock: { mode: 'pessimistic_write' },
       });
-    }
+      if (!supplier) {
+        throw new NotFoundException(`Supplier profile ${supplierId} not found`);
+      }
 
-    const existingCapabilities = await this.capabilityRepo.find({
-      where: { supplierId },
-    });
-    const existing = existingCapabilities.some(
-      (capability) =>
-        capability.productFamily.trim().toLowerCase() === productFamily,
-    );
-    if (existing) {
-      throw this.capabilityConflict(supplierId, productFamily);
-    }
-
-    const capability = this.capabilityRepo.create({
-      supplierId,
-      productFamily,
-      materials: dto.materials ?? [],
-      maxCapacity: dto.maxCapacity ?? 0,
-      leadTimeDays: dto.leadTimeDays ?? 1,
-      isActive: true,
-    });
-    try {
-      return await this.capabilityRepo.save(capability);
-    } catch (error) {
-      if (isSupplierCapabilityUniqueViolation(error)) {
+      const existingCapabilities = await capabilityRepo.find({
+        where: { supplierId },
+        order: { id: 'ASC' },
+        lock: { mode: 'pessimistic_read' },
+      });
+      if (
+        existingCapabilities.some(
+          (capability) =>
+            capability.productFamily.trim().toLowerCase() === productFamily,
+        )
+      ) {
         throw this.capabilityConflict(supplierId, productFamily);
       }
-      throw error;
-    }
+
+      const capability = capabilityRepo.create({
+        supplierId,
+        productFamily,
+        materials: dto.materials ?? [],
+        maxCapacity: dto.maxCapacity ?? 0,
+        leadTimeDays: dto.leadTimeDays ?? 1,
+        isActive: true,
+      });
+      try {
+        return await capabilityRepo.save(capability);
+      } catch (error) {
+        if (isSupplierCapabilityUniqueViolation(error)) {
+          throw this.capabilityConflict(supplierId, productFamily);
+        }
+        throw error;
+      }
+    });
   }
 
   private capabilityConflict(

@@ -40,6 +40,7 @@ import {
 import { SupplierCapability } from '../suppliers/entities/supplier-capability.entity';
 import { ProductCategory } from '../products/entities/product-category.entity';
 import { isActiveOrderableRfqLeaf } from '../products/catalog-v1-10.definition';
+import { Address } from '../addresses/entities/address.entity';
 
 export type MatchingActor = {
   userId: number;
@@ -197,19 +198,28 @@ export class MatchingService {
   ): Promise<AssignResult> {
     assertOpsActor(actor);
 
+    const supplier = await this.supplierRepo.findOne({
+      where: { id: supplierId },
+      select: { id: true },
+    });
+    if (!supplier) {
+      throw new NotFoundException(`Supplier ${supplierId} not found`);
+    }
+
     const ranked = await this.getCandidates(orderId);
     const candidate = ranked.candidates.find(
       (entry) => entry.supplierId === supplierId,
     );
     if (!candidate) {
-      const knownSupplier = ranked.verifiedSuppliers.some(
-        (entry) => entry.supplierId === supplierId,
-      );
-      if (knownSupplier) throw this.supplierNotEligible(supplierId, orderId);
-      throw new BadRequestException(this.noEligibleSupplierOutcome(orderId));
+      throw this.supplierNotEligible(supplierId, orderId);
     }
 
-    return this.createAssignment(orderId, candidate, actor, notes);
+    return this.createAssignment(
+      orderId,
+      { mode: 'manual', supplierId },
+      actor,
+      notes,
+    );
   }
 
   /**
@@ -229,9 +239,9 @@ export class MatchingService {
 
     return this.createAssignment(
       orderId,
-      top,
+      { mode: 'auto' },
       actor,
-      'auto_match top candidate',
+      'auto_match',
     );
   }
 
@@ -404,7 +414,7 @@ export class MatchingService {
 
   private async createAssignment(
     orderId: number,
-    candidate: RankedSupplierCandidate,
+    selection: { mode: 'auto' } | { mode: 'manual'; supplierId: number },
     actor: MatchingActor,
     notes?: string,
   ): Promise<AssignResult> {
@@ -429,11 +439,24 @@ export class MatchingService {
         });
       }
 
-      const assignmentCandidate = await this.revalidateCandidate(
+      const currentCandidates = await this.lockAndRankCandidates(
         manager,
         locked,
-        candidate,
       );
+      const assignmentCandidate =
+        selection.mode === 'auto'
+          ? currentCandidates[0]
+          : currentCandidates.find(
+              (candidate) => candidate.supplierId === selection.supplierId,
+            );
+      if (!assignmentCandidate) {
+        if (selection.mode === 'manual') {
+          throw this.supplierNotEligible(selection.supplierId, locked.id);
+        }
+        throw new BadRequestException(
+          this.noEligibleSupplierOutcome(locked.id),
+        );
+      }
 
       assertTransition(
         OrderStatus.APPROVED_FOR_MATCHING,
@@ -635,7 +658,9 @@ export class MatchingService {
             ? (excludeById.get(profile.id) ?? null)
             : 'product_not_orderable',
         serviceZones: profile.serviceZones ?? [],
-        capabilities: (profile.capabilities ?? []).map((c) => c.productFamily),
+        capabilities: (profile.capabilities ?? [])
+          .filter((capability) => capability.isActive)
+          .map((capability) => capability.productFamily),
       });
     }
 
@@ -700,19 +725,23 @@ export class MatchingService {
     return true;
   }
 
-  /**
-   * Recheck every hard eligibility input while the order and supplier rows are
-   * locked. This prevents a capability/verification/capacity change between
-   * the Operations ranking screen and the assignment write.
-   */
-  private async revalidateCandidate(
+  /** Lock the complete eligibility graph in deterministic table/id order. */
+  private async lockAndRankCandidates(
     manager: EntityManager,
     order: Order,
-    rankedCandidate: RankedSupplierCandidate,
-  ): Promise<RankedSupplierCandidate> {
+  ): Promise<RankedSupplierCandidate[]> {
+    if (order.deliveryAddressId) {
+      order.deliveryAddress = (await manager.getRepository(Address).findOne({
+        where: { id: order.deliveryAddressId },
+        lock: { mode: 'pessimistic_read' },
+      })) as Address;
+    } else {
+      order.deliveryAddress = undefined as unknown as Address;
+    }
+
     const categoryRepo = manager.getRepository(ProductCategory);
     if (!(await this.categoryAllowsNewAssignment(order, categoryRepo, true))) {
-      throw new BadRequestException(this.noEligibleSupplierOutcome(order.id));
+      return [];
     }
 
     const supplierRepo = manager.getRepository(SupplierProfile);
@@ -720,43 +749,53 @@ export class MatchingService {
     const verificationRepo = manager.getRepository(SupplierVerification);
     const assignmentRepo = manager.getRepository(SupplierAssignment);
 
-    const profile = await supplierRepo.findOne({
-      where: { id: rankedCandidate.supplierId },
+    const profiles = await supplierRepo.find({
+      order: { id: 'ASC' },
       lock: { mode: 'pessimistic_write' },
     });
-    if (!profile) {
-      throw this.supplierNotEligible(rankedCandidate.supplierId, order.id);
-    }
+    const supplierIds = profiles.map((profile) => profile.id);
+    if (supplierIds.length === 0) return [];
 
     const capabilities = await capabilityRepo.find({
-      where: { supplierId: profile.id },
-      order: { id: 'ASC' },
+      where: { supplierId: In(supplierIds) },
+      order: { supplierId: 'ASC', id: 'ASC' },
       lock: { mode: 'pessimistic_read' },
     });
-    const verification = await verificationRepo.findOne({
-      where: { supplierId: profile.id },
+    const verifications = await verificationRepo.find({
+      where: { supplierId: In(supplierIds) },
+      order: { supplierId: 'ASC', id: 'ASC' },
       lock: { mode: 'pessimistic_read' },
     });
-    profile.capabilities = capabilities;
-    profile.verification = verification as SupplierVerification;
-
-    const openLoads = await this.loadOpenLoads([profile.id], assignmentRepo);
-    const acceptanceStats = await this.loadAcceptanceStats(
-      [profile.id],
-      assignmentRepo,
+    const capabilitiesBySupplier = new Map<number, SupplierCapability[]>();
+    for (const capability of capabilities) {
+      const rows = capabilitiesBySupplier.get(capability.supplierId) ?? [];
+      rows.push(capability);
+      capabilitiesBySupplier.set(capability.supplierId, rows);
+    }
+    const verificationBySupplier = new Map(
+      verifications.map((verification) => [
+        verification.supplierId,
+        verification,
+      ]),
     );
-    const current = rankSupplierCandidates(
-      this.toMatchContext(order),
-      [profile],
-      openLoads,
-      acceptanceStats,
-    ).candidates[0];
-    if (!current) {
-      throw this.supplierNotEligible(rankedCandidate.supplierId, order.id);
+    for (const profile of profiles) {
+      profile.capabilities = capabilitiesBySupplier.get(profile.id) ?? [];
+      profile.verification = verificationBySupplier.get(
+        profile.id,
+      ) as SupplierVerification;
     }
 
-    current.rankPosition = rankedCandidate.rankPosition;
-    return current;
+    const openLoads = await this.loadOpenLoads(supplierIds, assignmentRepo);
+    const acceptanceStats = await this.loadAcceptanceStats(
+      supplierIds,
+      assignmentRepo,
+    );
+    return rankSupplierCandidates(
+      this.toMatchContext(order),
+      profiles,
+      openLoads,
+      acceptanceStats,
+    ).candidates;
   }
 
   private toMatchContext(order: Order): OrderMatchContext {
