@@ -70,6 +70,14 @@ export class FileMetadata {
   uploadedBy: number;
 
   @Column({
+    name: 'catalog_product_slug',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+  })
+  catalogProductSlug: string | null;
+
+  @Column({
     type: 'enum',
     enum: FilePurpose,
     enumName: 'file_metadata_purpose_enum',

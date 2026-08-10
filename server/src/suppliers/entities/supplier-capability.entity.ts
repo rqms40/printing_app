@@ -7,11 +7,13 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
+  Unique,
 } from 'typeorm';
 import { SupplierProfile } from './supplier-profile.entity';
 
 @Entity('supplier_capabilities')
 @Index('idx_supplier_capabilities_supplier_id', ['supplierId'])
+@Unique('uq_supplier_capability_product', ['supplierId', 'productFamily'])
 export class SupplierCapability {
   @PrimaryGeneratedColumn()
   id: number;
@@ -40,6 +42,9 @@ export class SupplierCapability {
   /** Typical lead time in working days. */
   @Column({ name: 'lead_time_days', type: 'int', default: 1 })
   leadTimeDays: number;
+
+  @Column({ name: 'is_active', type: 'boolean', default: true })
+  isActive: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

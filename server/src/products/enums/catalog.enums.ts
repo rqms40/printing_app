@@ -7,6 +7,7 @@ export enum FileProcessingType {
 export enum PricingModel {
   PER_PAGE_MODIFIERS = 'per_page_modifiers',
   BASE_PLUS_MATERIAL_ESTIMATE = 'base_plus_material_estimate',
+  QUOTE_REQUIRED = 'quote_required',
 }
 
 export enum InputType {

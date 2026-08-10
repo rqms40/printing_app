@@ -30,6 +30,18 @@ export class ProductCategory {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
+  @Column({ name: 'group_slug', type: 'varchar', length: 50, nullable: true })
+  groupSlug: string | null;
+
+  @Column({ name: 'group_name', type: 'varchar', length: 100, nullable: true })
+  groupName: string | null;
+
+  @Column({ name: 'group_description', type: 'text', nullable: true })
+  groupDescription: string | null;
+
+  @Column({ name: 'group_sort_order', type: 'int', nullable: true })
+  groupSortOrder: number | null;
+
   @Column({
     name: 'mobile_description',
     type: 'varchar',

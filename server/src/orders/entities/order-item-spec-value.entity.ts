@@ -39,10 +39,10 @@ export class OrderItemSpecValue {
   @Column({ name: 'input_type', length: 30 })
   inputType: string;
 
-  @Column({ length: 120 })
+  @Column({ length: 1000 })
   value: string;
 
-  @Column({ name: 'display_value', length: 120 })
+  @Column({ name: 'display_value', length: 1000 })
   displayValue: string;
 
   @Column({ name: 'option_id', type: 'int', nullable: true })
