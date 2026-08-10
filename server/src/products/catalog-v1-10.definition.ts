@@ -482,3 +482,36 @@ export const CATALOG_V1_10_GROUPS = [
     ],
   },
 ] as const;
+
+export type CatalogOrderableLeaf = {
+  isActive: boolean;
+  pricingModel: string;
+  groupSlug: string | null;
+  groupName: string | null;
+  groupDescription: string | null;
+  groupSortOrder: number | null;
+};
+
+/** The persistence fields which distinguish an orderable RFQ leaf from a group. */
+export const isActiveOrderableRfqLeaf = (
+  product: CatalogOrderableLeaf,
+): boolean =>
+  product.isActive === true &&
+  product.pricingModel === 'quote_required' &&
+  Boolean(product.groupSlug?.trim()) &&
+  Boolean(product.groupName?.trim()) &&
+  Boolean(product.groupDescription?.trim()) &&
+  Number.isInteger(product.groupSortOrder);
+
+export const catalogV110ProductPolicy = (slug: string) => {
+  for (const group of CATALOG_V1_10_GROUPS) {
+    const product = group.products.find((candidate) => candidate.slug === slug);
+    if (product) {
+      return {
+        allowedExtensions: product.allowedExtensions,
+        maxFileSizeMb: product.maxFileSizeMb,
+      } as const;
+    }
+  }
+  return null;
+};

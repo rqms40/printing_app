@@ -265,8 +265,13 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
         await queryRunner.query(`
           ALTER TABLE "file_metadata"
           ADD COLUMN "catalog_product_slug" varchar(50)
-        `);
+          `);
       }
+
+      await queryRunner.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "uq_file_metadata_object_key"
+        ON "file_metadata" ("object_key")
+      `);
     }
 
     if (await queryRunner.hasTable('supplier_capabilities')) {
@@ -312,12 +317,46 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
       }
     }
 
-    if (
-      (await queryRunner.hasTable('file_metadata')) &&
-      (await queryRunner.hasColumn('file_metadata', 'catalog_product_slug'))
-    ) {
+    if (await queryRunner.hasTable('file_metadata')) {
       await queryRunner.query(`
-        ALTER TABLE "file_metadata" DROP COLUMN "catalog_product_slug"
+        DROP INDEX IF EXISTS "uq_file_metadata_object_key"
+      `);
+      if (
+        await queryRunner.hasColumn('file_metadata', 'catalog_product_slug')
+      ) {
+        await queryRunner.query(`
+          ALTER TABLE "file_metadata" DROP COLUMN "catalog_product_slug"
+        `);
+      }
+      await queryRunner.query(`
+        DO $catalog_enum_down$
+        BEGIN
+          IF EXISTS (
+            SELECT 1
+            FROM pg_enum enum_value
+            JOIN pg_type enum_type ON enum_type.oid = enum_value.enumtypid
+            WHERE enum_type.typname = 'file_metadata_purpose_enum'
+              AND enum_value.enumlabel = 'catalog_artwork'
+          ) THEN
+            ALTER TABLE "file_metadata"
+            ALTER COLUMN "purpose" DROP DEFAULT;
+
+            UPDATE "file_metadata"
+            SET "purpose" = 'general'
+            WHERE "purpose"::text = 'catalog_artwork';
+
+            ALTER TYPE "public"."file_metadata_purpose_enum"
+            RENAME TO "file_metadata_purpose_enum_with_catalog";
+
+            EXECUTE $enum_sql$CREATE TYPE "public"."file_metadata_purpose_enum" AS ENUM ('general', 'paper', 'proof_of_delivery', 'beta_testimonial', 'legacy')$enum_sql$;
+            EXECUTE $enum_sql$ALTER TABLE "file_metadata" ALTER COLUMN "purpose" TYPE "public"."file_metadata_purpose_enum" USING "purpose"::text::"public"."file_metadata_purpose_enum"$enum_sql$;
+
+            ALTER TABLE "file_metadata"
+            ALTER COLUMN "purpose" SET DEFAULT 'general';
+
+            DROP TYPE "public"."file_metadata_purpose_enum_with_catalog";
+          END IF;
+        END $catalog_enum_down$;
       `);
     }
 

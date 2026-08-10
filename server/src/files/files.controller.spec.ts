@@ -149,14 +149,14 @@ describe('FilesController', () => {
     );
   });
 
-  it('keeps the held-user rejection when no multipart file is present', async () => {
+  it('returns a stable bad request when no multipart file is present', async () => {
     await expect(
       controller.uploadFile(
         undefined as unknown as Express.Multer.File,
         makeRequest(42, 'client', true),
         { purpose: 'general' },
       ),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow('Multipart file is required');
   });
 });
 
@@ -254,6 +254,16 @@ describe('FilesController upload HTTP cleanup', () => {
 
     expect(leaked).toEqual([]);
     expect(filesService.storeMetadata).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when the multipart file field is missing', async () => {
+    await request(app.getHttpServer())
+      .post('/files/upload')
+      .field('purpose', 'general')
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toBe('Multipart file is required');
+      });
   });
 
   async function readUploadTmpDir(): Promise<string[]> {

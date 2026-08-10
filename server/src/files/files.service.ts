@@ -58,11 +58,15 @@ export class FilesService {
     purpose = 'general',
     productSlug?: string,
   ): Promise<FileMetadata> {
+    const createdObjectKeys: string[] = [];
     try {
       const normalizedPurpose = this.normalizeUploadPurpose(purpose);
       const fileExt = extname(file.originalname).toLowerCase();
       let catalogProductSlug: string | null = null;
       if (normalizedPurpose === FilePurpose.CATALOG_ARTWORK) {
+        if (!Number.isInteger(uploadedBy)) {
+          throw new BadRequestException('Catalog artwork owner required');
+        }
         catalogProductSlug = productSlug?.trim() || null;
         const category = catalogProductSlug
           ? await this.categoryRepo.findOne({
@@ -128,6 +132,7 @@ export class FilesService {
       const now = new Date();
       const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
       const objectKey = `uploads/${normalizedPurpose}/${datePath}/${randomUUID()}${fileExt}`;
+      createdObjectKeys.push(objectKey);
 
       // Run the original-file upload concurrently with content analysis.
       // Disk-backed uploads stream to object storage so large files do not sit
@@ -151,22 +156,24 @@ export class FilesService {
       });
 
       const analysisPromise =
-        evidenceAnalysis !== undefined
-          ? Promise.resolve(evidenceAnalysis)
-          : this.readUploadBuffer(file)
-              .then((buffer) =>
-                this.analysisService.analyze(
-                  buffer,
-                  file.mimetype,
-                  file.originalname,
-                ),
-              )
-              .catch((err: unknown) => {
-                this.logger.warn(
-                  `File analysis failed (non-fatal): ${String(err)}`,
-                );
-                return null;
-              });
+        normalizedPurpose === FilePurpose.CATALOG_ARTWORK
+          ? Promise.resolve(null)
+          : evidenceAnalysis !== undefined
+            ? Promise.resolve(evidenceAnalysis)
+            : this.readUploadBuffer(file)
+                .then((buffer) =>
+                  this.analysisService.analyze(
+                    buffer,
+                    file.mimetype,
+                    file.originalname,
+                  ),
+                )
+                .catch((err: unknown) => {
+                  this.logger.warn(
+                    `File analysis failed (non-fatal): ${String(err)}`,
+                  );
+                  return null;
+                });
 
       const [url, analysis] = await Promise.all([
         uploadPromise,
@@ -178,6 +185,7 @@ export class FilesService {
       let previewGlbObjectKey: string | null = null;
       if (analysis?.glbBuffer && analysis.glbBuffer.length > 0) {
         const previewKey = `${objectKey}.preview.glb`;
+        createdObjectKeys.push(previewKey);
         try {
           await this.storageService.upload(
             analysis.glbBuffer,
@@ -189,6 +197,8 @@ export class FilesService {
           this.logger.warn(
             `Preview GLB upload failed for ${objectKey}: ${err}`,
           );
+          await this.compensateCreatedObjects([previewKey]);
+          createdObjectKeys.splice(createdObjectKeys.indexOf(previewKey), 1);
         }
       }
 
@@ -214,7 +224,30 @@ export class FilesService {
         model3dTriangleCount: analysis?.model3dTriangleCount ?? null,
         previewGlbObjectKey,
       });
-      return this.fileRepo.save(meta);
+      try {
+        const saved = await this.fileRepo.save(meta);
+        createdObjectKeys.length = 0;
+        return saved;
+      } catch (saveError) {
+        try {
+          const committed = await this.fileRepo.findOne({
+            where: { objectKey },
+          });
+          if (committed) {
+            createdObjectKeys.length = 0;
+            return committed;
+          }
+        } catch (lookupError) {
+          this.logger.error(
+            `Could not resolve ambiguous metadata save for ${objectKey}; retaining objects for reconciliation (${this.errorLabel(lookupError)})`,
+          );
+          createdObjectKeys.length = 0;
+        }
+        throw saveError;
+      }
+    } catch (error) {
+      await this.compensateCreatedObjects(createdObjectKeys);
+      throw error;
     } finally {
       await removeUploadedTempFile(file);
     }
@@ -235,12 +268,20 @@ export class FilesService {
     return normalized as FilePurpose;
   }
 
-  async validateCatalogArtwork(
-    file: FileMetadata,
+  async resolveCatalogArtwork(
+    fileId: number,
     category: ProductCategory,
-    ownerUserId?: number,
+    ownerUserId: number,
+    manager: EntityManager,
   ): Promise<FileMetadata> {
-    if (ownerUserId != null && file.uploadedBy !== ownerUserId) {
+    if (!Number.isInteger(ownerUserId)) {
+      throw new BadRequestException('Invalid catalog artwork reference');
+    }
+    const file = await manager.getRepository(FileMetadata).findOne({
+      where: { id: fileId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!file || file.uploadedBy !== ownerUserId) {
       throw new BadRequestException('Invalid catalog artwork reference');
     }
     if (
@@ -249,7 +290,10 @@ export class FilesService {
     ) {
       throw new BadRequestException('Invalid catalog artwork reference');
     }
-    if (!file.objectKey?.trim()) {
+    if (
+      !file.objectKey?.startsWith('uploads/catalog_artwork/') ||
+      file.objectKey.includes('..')
+    ) {
       throw new BadRequestException('Catalog artwork has no storage object');
     }
 
@@ -260,6 +304,18 @@ export class FilesService {
       'Could not verify catalog artwork storage',
     );
     return file;
+  }
+
+  private async compensateCreatedObjects(objectKeys: string[]): Promise<void> {
+    for (const objectKey of [...objectKeys].reverse()) {
+      try {
+        await this.storageService.delete(objectKey);
+      } catch (cleanupError) {
+        this.logger.error(
+          `Orphan upload cleanup failed for ${objectKey} (${this.errorLabel(cleanupError)})`,
+        );
+      }
+    }
   }
 
   async resolveDeliveryProofFile(

@@ -107,6 +107,9 @@ export const MIME_ALLOWED_EXTENSIONS: Record<string, string[]> = {
 export const CATALOG_MIME_ALLOWED_EXTENSIONS: Readonly<
   Record<string, readonly string[]>
 > = {
+  // Browser/OS MIME aliases are client-compatibility hints only. Catalog
+  // uploads must also pass the extension ceiling and bounded structural
+  // inspection; aliases never authorize content by themselves.
   'application/pdf': ['.pdf', '.ai'],
   'image/png': ['.png'],
   'image/jpeg': ['.jpg', '.jpeg'],

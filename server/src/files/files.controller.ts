@@ -11,6 +11,7 @@ import {
   ParseIntPipe,
   Request,
   ForbiddenException,
+  BadRequestException,
   HttpCode,
   Body,
 } from '@nestjs/common';
@@ -76,6 +77,9 @@ export class FilesController {
     @Request() req: RequestWithUser,
     @Body() upload: CatalogUploadDto,
   ) {
+    if (!file) {
+      throw new BadRequestException('Multipart file is required');
+    }
     const purpose = upload?.purpose;
     if (req.user.betaTestimonialPending && purpose !== 'beta_testimonial') {
       await removeUploadedTempFile(file);

@@ -100,6 +100,13 @@ describe('product entity column metadata', () => {
       length: 50,
       nullable: true,
     });
+    const objectKeyIndex = getMetadataArgsStorage().indices.find(
+      (entry) =>
+        entry.target === FileMetadata &&
+        entry.name === 'uq_file_metadata_object_key',
+    );
+    expect(objectKeyIndex?.columns).toEqual(['objectKey']);
+    expect(objectKeyIndex?.unique).toBe(true);
     expect(columnOptions(OrderItemSpecValue, 'value')?.length).toBe(1000);
     expect(columnOptions(OrderItemSpecValue, 'displayValue')?.length).toBe(
       1000,

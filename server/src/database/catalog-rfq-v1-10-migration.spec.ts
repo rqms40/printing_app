@@ -48,6 +48,7 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(source).toContain('required_at');
     expect(source).toContain('catalog_product_slug');
     expect(source).toContain('catalog_artwork');
+    expect(source).toContain('uq_file_metadata_object_key');
     expect(source).toContain('uq_supplier_capability_product');
   });
 
@@ -205,6 +206,19 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(sql).toContain('TYPE varchar(120)');
     expect(sql).toContain('activation_snapshot."was_active"');
     expect(sql).toContain('DROP COLUMN "examples"');
+    expect(sql).toContain(
+      `CREATE TYPE "public"."file_metadata_purpose_enum" AS ENUM ('general', 'paper', 'proof_of_delivery', 'beta_testimonial', 'legacy')`,
+    );
+    expect(sql).toMatch(
+      /UPDATE "file_metadata"[\s\S]*SET "purpose" = 'general'[\s\S]*WHERE "purpose"::text = 'catalog_artwork'/,
+    );
+    expect(sql).toMatch(
+      /ALTER TYPE "public"\."file_metadata_purpose_enum"\s+RENAME TO "file_metadata_purpose_enum_with_catalog"/,
+    );
+    expect(sql).toContain('ALTER COLUMN "purpose" SET DEFAULT \'general\'');
+    expect(sql).toContain(
+      'DROP TYPE "public"."file_metadata_purpose_enum_with_catalog"',
+    );
     expect(sql).not.toContain('SET "is_active" = true');
 
     const indexOf = (fragment: string) =>
@@ -221,5 +235,14 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(indexOf('activation_snapshot."was_active"')).toBeLessThan(
       indexOf('DROP TABLE "catalog_v1_10_legacy_activation_snapshot"'),
     );
+    expect(sql.indexOf('ALTER COLUMN "purpose" DROP DEFAULT')).toBeLessThan(
+      sql.indexOf('RENAME TO "file_metadata_purpose_enum_with_catalog"'),
+    );
+    expect(sql.indexOf('SET "purpose" = \'general\'')).toBeLessThan(
+      sql.indexOf('RENAME TO "file_metadata_purpose_enum_with_catalog"'),
+    );
+    expect(
+      indexOf('DROP INDEX IF EXISTS "uq_file_metadata_object_key"'),
+    ).toBeLessThan(indexOf('DROP COLUMN "catalog_product_slug"'));
   });
 });
