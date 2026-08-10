@@ -29,7 +29,11 @@ import { PaperSizeValidatorService } from './paper-size-validator.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { PT_TO_MM } from './files.constants';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
-import { removeUploadedTempFile } from './upload-temp-file';
+import {
+  removeUploadedTempFile,
+  UploadTempFileCleanupInterceptor,
+} from './upload-temp-file';
+import { CatalogUploadDto } from './dto/catalog-upload.dto';
 
 const UPLOAD_TMP_DIR = join(tmpdir(), 'gridgo-uploads');
 
@@ -65,19 +69,26 @@ export class FilesController {
       // rejects anything larger before it reaches application code.
       limits: { fileSize: 200 * 1024 * 1024 },
     }),
+    new UploadTempFileCleanupInterceptor(),
   )
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Request() req: RequestWithUser,
-    @Body('purpose') purpose?: string,
+    @Body() upload: CatalogUploadDto,
   ) {
+    const purpose = upload?.purpose;
     if (req.user.betaTestimonialPending && purpose !== 'beta_testimonial') {
       await removeUploadedTempFile(file);
       throw new ForbiddenException(
         'Only a beta testimonial photo may be uploaded',
       );
     }
-    return this.filesService.storeMetadata(file, req.user?.sub, purpose);
+    return this.filesService.storeMetadata(
+      file,
+      req.user?.sub,
+      purpose,
+      upload?.productSlug,
+    );
   }
 
   // NOTE: 'my-uploads' must be declared before ':id' so the literal string

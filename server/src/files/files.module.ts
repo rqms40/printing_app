@@ -8,9 +8,14 @@ import { FileAnalysisService } from './file-analysis.service';
 import { Model3dAnalysisService } from './model-3d-analysis.service';
 import { PaperSizeValidatorService } from './paper-size-validator.service';
 import { PrinterProfileModule } from '../printer-profile/printer-profile.module';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([FileMetadata]), PrinterProfileModule],
+  imports: [
+    TypeOrmModule.forFeature([FileMetadata, ProductCategory]),
+    PrinterProfileModule,
+  ],
   controllers: [FilesController],
   providers: [
     FilesService,
@@ -18,6 +23,7 @@ import { PrinterProfileModule } from '../printer-profile/printer-profile.module'
     FileAnalysisService,
     Model3dAnalysisService,
     PaperSizeValidatorService,
+    CatalogUploadPolicyService,
   ],
   exports: [FilesService, FileAnalysisService, PaperSizeValidatorService],
 })

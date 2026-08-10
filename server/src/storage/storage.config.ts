@@ -98,3 +98,50 @@ export const MIME_ALLOWED_EXTENSIONS: Record<string, string[]> = {
   'application/octet-stream': ALLOWED_EXTENSIONS,
   'application/zip': ['.3mf'],
 };
+
+/**
+ * Product-aware catalog uploads have a separate allowlist from the legacy
+ * upload endpoint. Keep this table constrained to the canonical v1.10
+ * product definition; notably, GLB/GLTF and STEP/STP are not accepted.
+ */
+export const CATALOG_MIME_ALLOWED_EXTENSIONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  'application/pdf': ['.pdf', '.ai'],
+  'image/png': ['.png'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/tiff': ['.tif', '.tiff'],
+  'image/tif': ['.tif', '.tiff'],
+  'application/postscript': ['.ai'],
+  'application/illustrator': ['.ai'],
+  'application/vnd.adobe.illustrator': ['.ai'],
+  'image/vnd.adobe.photoshop': ['.psd'],
+  'image/x-photoshop': ['.psd'],
+  'model/stl': ['.stl'],
+  'application/sla': ['.stl'],
+  'application/vnd.ms-pki.stl': ['.stl'],
+  'model/obj': ['.obj'],
+  'application/x-tgif': ['.obj'],
+  'model/3mf': ['.3mf'],
+  'application/vnd.ms-package.3dmanufacturing-3dmodel+xml': ['.3mf'],
+  'application/zip': ['.3mf'],
+  'image/vnd.dwg': ['.dwg'],
+  'application/acad': ['.dwg'],
+  'application/x-acad': ['.dwg'],
+  'application/autocad_dwg': ['.dwg'],
+  'application/dwg': ['.dwg'],
+  'application/x-dwg': ['.dwg'],
+  'image/vnd.dxf': ['.dxf'],
+  'application/dxf': ['.dxf'],
+  'application/x-dxf': ['.dxf'],
+  'text/plain': ['.obj', '.dxf'],
+  'application/octet-stream': [
+    '.ai',
+    '.psd',
+    '.stl',
+    '.obj',
+    '.3mf',
+    '.dwg',
+    '.dxf',
+  ],
+};

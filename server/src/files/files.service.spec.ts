@@ -15,6 +15,12 @@ import { FileMetadata, FilePurpose } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
 import { FileAnalysisService } from './file-analysis.service';
 import { DataSource, EntityManager } from 'typeorm';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import {
+  FileProcessingType,
+  PricingModel,
+} from '../products/enums/catalog.enums';
+import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
 
 const mockFileRepo = {
   create: jest.fn(),
@@ -35,6 +41,10 @@ const mockStorageService = {
 
 const mockAnalysisService = {
   analyze: jest.fn(),
+};
+
+const mockCategoryRepo = {
+  findOne: jest.fn(),
 };
 
 const makeFile = (
@@ -63,6 +73,7 @@ const makeFileMeta = (overrides: Partial<FileMetadata> = {}): FileMetadata =>
     objectKey: 'uploads/general/2026/04/21/uuid.jpg',
     uploadedBy: 42,
     purpose: FilePurpose.GENERAL,
+    catalogProductSlug: null,
     expiresAt: null,
     createdAt: new Date(),
     widthPt: null,
@@ -85,6 +96,7 @@ describe('FilesService', () => {
     jest.clearAllMocks();
     mockAnalysisService.analyze.mockResolvedValue(null);
     mockStorageService.objectExists.mockResolvedValue(true);
+    mockCategoryRepo.findOne.mockResolvedValue(null);
     transactionQuery = jest.fn().mockResolvedValue([{ referenced: false }]);
     transactionManager = {
       getRepository: jest.fn(() => mockFileRepo),
@@ -100,8 +112,13 @@ describe('FilesService', () => {
       providers: [
         FilesService,
         { provide: getRepositoryToken(FileMetadata), useValue: mockFileRepo },
+        {
+          provide: getRepositoryToken(ProductCategory),
+          useValue: mockCategoryRepo,
+        },
         { provide: StorageService, useValue: mockStorageService },
         { provide: FileAnalysisService, useValue: mockAnalysisService },
+        CatalogUploadPolicyService,
         { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
@@ -109,6 +126,27 @@ describe('FilesService', () => {
   });
 
   describe('storeMetadata', () => {
+    const flyers = {
+      id: 20,
+      name: 'Flyers',
+      slug: 'flyers',
+      groupSlug: 'marketing-promo',
+      isActive: true,
+      fileProcessingType: FileProcessingType.DOCUMENT,
+      pricingModel: PricingModel.QUOTE_REQUIRED,
+      maxFileSizeMb: 100,
+      allowedExtensions: [
+        'pdf',
+        'png',
+        'jpg',
+        'jpeg',
+        'tif',
+        'tiff',
+        'ai',
+        'psd',
+      ],
+    } as ProductCategory;
+
     it('uploads file to MinIO and returns metadata with objectKey and url', async () => {
       const file = makeFile();
       const fakeUrl =
@@ -147,6 +185,77 @@ describe('FilesService', () => {
         file.originalname,
       );
     });
+
+    it('stores catalog purpose and exact active leaf slug after product validation', async () => {
+      const file = makeFile({
+        originalname: 'artwork.pdf',
+        mimetype: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.7\n'),
+      });
+      mockCategoryRepo.findOne.mockResolvedValue(flyers);
+      mockStorageService.upload.mockResolvedValue('http://x/artwork.pdf');
+      mockFileRepo.create.mockImplementation(
+        (value: Partial<FileMetadata>) => value as FileMetadata,
+      );
+      mockFileRepo.save.mockImplementation(
+        async (value: FileMetadata): Promise<FileMetadata> => value,
+      );
+
+      const result = await service.storeMetadata(
+        file,
+        42,
+        'catalog_artwork',
+        ' flyers ',
+      );
+
+      expect(mockCategoryRepo.findOne).toHaveBeenCalledWith({
+        where: { slug: 'flyers' },
+      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          uploadedBy: 42,
+          purpose: 'catalog_artwork',
+          catalogProductSlug: 'flyers',
+        }),
+      );
+      expect(mockStorageService.upload).toHaveBeenCalledWith(
+        file.buffer,
+        expect.stringMatching(/^uploads\/catalog_artwork\/.+\.pdf$/),
+        'application/pdf',
+      );
+    });
+
+    it.each([
+      ['missing product', undefined, null],
+      ['unknown product', 'unknown-product', null],
+      ['inactive product', 'flyers', { ...flyers, isActive: false }],
+      [
+        'high-level group',
+        'marketing-promo',
+        { ...flyers, slug: 'marketing-promo', groupSlug: null },
+      ],
+    ])(
+      'rejects catalog artwork for a %s',
+      async (_case, productSlug, category) => {
+        if (category) mockCategoryRepo.findOne.mockResolvedValue(category);
+
+        await expect(
+          service.storeMetadata(
+            makeFile({
+              originalname: 'artwork.pdf',
+              mimetype: 'application/pdf',
+              buffer: Buffer.from('%PDF-1.7\n'),
+            }),
+            42,
+            'catalog_artwork',
+            productSlug,
+          ),
+        ).rejects.toThrow('Active catalog product required');
+
+        expect(mockStorageService.upload).not.toHaveBeenCalled();
+        expect(mockFileRepo.save).not.toHaveBeenCalled();
+      },
+    );
 
     it('processes disk-backed uploads without requiring an in-memory multer buffer', async () => {
       const dir = await mkdtemp(join(tmpdir(), 'gridgo-test-upload-'));
@@ -470,6 +579,81 @@ describe('FilesService', () => {
           model3dTriangleCount: 12,
         }),
       );
+    });
+  });
+
+  describe('validateCatalogArtwork', () => {
+    const category = {
+      id: 20,
+      name: 'Flyers',
+      slug: 'flyers',
+      groupSlug: 'marketing-promo',
+      isActive: true,
+      fileProcessingType: FileProcessingType.DOCUMENT,
+      pricingModel: PricingModel.QUOTE_REQUIRED,
+      maxFileSizeMb: 100,
+      allowedExtensions: [
+        'pdf',
+        'png',
+        'jpg',
+        'jpeg',
+        'tif',
+        'tiff',
+        'ai',
+        'psd',
+      ],
+    } as ProductCategory;
+
+    const catalogFile = (overrides: Partial<FileMetadata> = {}) =>
+      makeFileMeta({
+        originalName: 'artwork.pdf',
+        mimeType: 'application/pdf',
+        objectKey: 'uploads/catalog_artwork/artwork.pdf',
+        uploadedBy: 42,
+        purpose: FilePurpose.CATALOG_ARTWORK,
+        catalogProductSlug: 'flyers',
+        ...overrides,
+      });
+
+    it('accepts owned, bound catalog metadata whose object still exists', async () => {
+      const file = catalogFile();
+
+      await expect(
+        service.validateCatalogArtwork(file, category, 42),
+      ).resolves.toBe(file);
+      expect(mockStorageService.objectExists).toHaveBeenCalledWith(
+        file.objectKey,
+      );
+    });
+
+    it.each([
+      ['foreign owner', { uploadedBy: 99 }, category],
+      ['bypassed purpose', { purpose: FilePurpose.GENERAL }, category],
+      ['wrong product', { catalogProductSlug: 'brochures' }, category],
+      ['missing object key', { objectKey: null }, category],
+      ['inactive product', {}, { ...category, isActive: false }],
+      ['high-level group', {}, { ...category, groupSlug: null }],
+      ['MIME mismatch', { mimeType: 'image/png' }, category],
+      ['oversized metadata', { size: 100 * 1024 * 1024 + 1 }, category],
+    ])(
+      'rejects %s metadata even when upload validation was bypassed',
+      async (_case, fileOverrides, selectedCategory) => {
+        await expect(
+          service.validateCatalogArtwork(
+            catalogFile(fileOverrides as Partial<FileMetadata>),
+            selectedCategory as ProductCategory,
+            42,
+          ),
+        ).rejects.toThrow();
+      },
+    );
+
+    it('rejects metadata when the configured storage object is missing', async () => {
+      mockStorageService.objectExists.mockResolvedValue(false);
+
+      await expect(
+        service.validateCatalogArtwork(catalogFile(), category, 42),
+      ).rejects.toThrow('Catalog artwork storage object not found');
     });
   });
 

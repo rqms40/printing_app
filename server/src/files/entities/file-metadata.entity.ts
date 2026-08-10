@@ -8,6 +8,7 @@ import {
 export enum FilePurpose {
   GENERAL = 'general',
   PAPER = 'paper',
+  CATALOG_ARTWORK = 'catalog_artwork',
   PROOF_OF_DELIVERY = 'proof_of_delivery',
   BETA_TESTIMONIAL = 'beta_testimonial',
   LEGACY = 'legacy',

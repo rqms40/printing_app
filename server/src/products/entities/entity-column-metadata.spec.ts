@@ -1,6 +1,9 @@
 import { getMetadataArgsStorage } from 'typeorm';
 
-import { FileMetadata } from '../../files/entities/file-metadata.entity';
+import {
+  FileMetadata,
+  FilePurpose,
+} from '../../files/entities/file-metadata.entity';
 import { OrderItemSpecValue } from '../../orders/entities/order-item-spec-value.entity';
 import { OrderItem } from '../../orders/entities/order-item.entity';
 import { Order, PricingStatus } from '../../orders/entities/order.entity';
@@ -85,6 +88,7 @@ describe('product entity column metadata', () => {
   });
 
   it('maps RFQ requirement and upload bindings and widened spec snapshots', () => {
+    expect(FilePurpose.CATALOG_ARTWORK).toBe('catalog_artwork');
     expect(columnOptions(OrderItem, 'requiredAt')).toMatchObject({
       name: 'required_at',
       type: 'timestamptz',

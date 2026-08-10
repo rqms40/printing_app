@@ -47,6 +47,7 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(source).toContain('quoted_total_minor');
     expect(source).toContain('required_at');
     expect(source).toContain('catalog_product_slug');
+    expect(source).toContain('catalog_artwork');
     expect(source).toContain('uq_supplier_capability_product');
   });
 

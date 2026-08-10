@@ -240,14 +240,33 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
       `);
     }
 
-    if (
-      (await queryRunner.hasTable('file_metadata')) &&
-      !(await queryRunner.hasColumn('file_metadata', 'catalog_product_slug'))
-    ) {
+    if (await queryRunner.hasTable('file_metadata')) {
       await queryRunner.query(`
-        ALTER TABLE "file_metadata"
-        ADD COLUMN "catalog_product_slug" varchar(50)
+        DO $$
+        BEGIN
+          IF to_regtype('public.file_metadata_purpose_enum') IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM pg_enum enum_value
+              JOIN pg_type enum_type ON enum_type.oid = enum_value.enumtypid
+              WHERE enum_type.typname = 'file_metadata_purpose_enum'
+                AND enum_value.enumlabel = 'catalog_artwork'
+            )
+          THEN
+            ALTER TYPE "public"."file_metadata_purpose_enum"
+            ADD VALUE 'catalog_artwork';
+          END IF;
+        END $$;
       `);
+
+      if (
+        !(await queryRunner.hasColumn('file_metadata', 'catalog_product_slug'))
+      ) {
+        await queryRunner.query(`
+          ALTER TABLE "file_metadata"
+          ADD COLUMN "catalog_product_slug" varchar(50)
+        `);
+      }
     }
 
     if (await queryRunner.hasTable('supplier_capabilities')) {

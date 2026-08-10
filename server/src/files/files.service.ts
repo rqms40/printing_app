@@ -34,6 +34,8 @@ import {
   THREE_D_MAX_FILE_SIZE_MB,
 } from '../storage/storage.config';
 import { removeUploadedTempFile } from './upload-temp-file';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
 
 @Injectable()
 export class FilesService {
@@ -42,8 +44,11 @@ export class FilesService {
   constructor(
     @InjectRepository(FileMetadata)
     private readonly fileRepo: Repository<FileMetadata>,
+    @InjectRepository(ProductCategory)
+    private readonly categoryRepo: Repository<ProductCategory>,
     private readonly storageService: StorageService,
     private readonly analysisService: FileAnalysisService,
+    private readonly catalogUploadPolicy: CatalogUploadPolicyService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -51,28 +56,43 @@ export class FilesService {
     file: Express.Multer.File,
     uploadedBy?: number,
     purpose = 'general',
+    productSlug?: string,
   ): Promise<FileMetadata> {
     try {
       const normalizedPurpose = this.normalizeUploadPurpose(purpose);
       const fileExt = extname(file.originalname).toLowerCase();
-      const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
-      const extOk =
-        MIME_ALLOWED_EXTENSIONS[file.mimetype]?.includes(fileExt) ?? false;
-      const fileTypeAllowed = mimeOk && extOk;
-      // Match MIME and filename extension. Generic browser fallbacks are still
-      // accepted through MIME_ALLOWED_EXTENSIONS, but only for known extensions.
-      if (!fileTypeAllowed) {
-        throw new BadRequestException('File type not allowed');
-      }
-      const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
-      const maxSizeBytes = isThreeDFile
-        ? THREE_D_MAX_FILE_SIZE_BYTES
-        : PAPER_MAX_FILE_SIZE_BYTES;
-      const maxSizeMb = isThreeDFile
-        ? THREE_D_MAX_FILE_SIZE_MB
-        : PAPER_MAX_FILE_SIZE_MB;
-      if (file.size > maxSizeBytes) {
-        throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
+      let catalogProductSlug: string | null = null;
+      if (normalizedPurpose === FilePurpose.CATALOG_ARTWORK) {
+        catalogProductSlug = productSlug?.trim() || null;
+        const category = catalogProductSlug
+          ? await this.categoryRepo.findOne({
+              where: { slug: catalogProductSlug },
+            })
+          : null;
+        if (!category) {
+          throw new BadRequestException('Active catalog product required');
+        }
+        this.catalogUploadPolicy.validate(category, file);
+      } else {
+        const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
+        const extOk =
+          MIME_ALLOWED_EXTENSIONS[file.mimetype]?.includes(fileExt) ?? false;
+        const fileTypeAllowed = mimeOk && extOk;
+        // Match MIME and filename extension. Generic browser fallbacks are
+        // still accepted for the legacy endpoint through its existing table.
+        if (!fileTypeAllowed) {
+          throw new BadRequestException('File type not allowed');
+        }
+        const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
+        const maxSizeBytes = isThreeDFile
+          ? THREE_D_MAX_FILE_SIZE_BYTES
+          : PAPER_MAX_FILE_SIZE_BYTES;
+        const maxSizeMb = isThreeDFile
+          ? THREE_D_MAX_FILE_SIZE_MB
+          : PAPER_MAX_FILE_SIZE_MB;
+        if (file.size > maxSizeBytes) {
+          throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
+        }
       }
 
       let evidenceAnalysis:
@@ -180,6 +200,7 @@ export class FilesService {
         objectKey,
         uploadedBy,
         purpose: normalizedPurpose,
+        catalogProductSlug,
         widthPt: analysis?.widthPt ?? null,
         heightPt: analysis?.heightPt ?? null,
         widthPx: analysis?.widthPx ?? null,
@@ -204,6 +225,7 @@ export class FilesService {
     const allowed = new Set<FilePurpose>([
       FilePurpose.GENERAL,
       FilePurpose.PAPER,
+      FilePurpose.CATALOG_ARTWORK,
       FilePurpose.PROOF_OF_DELIVERY,
       FilePurpose.BETA_TESTIMONIAL,
     ]);
@@ -211,6 +233,33 @@ export class FilesService {
       throw new BadRequestException('File purpose not allowed');
     }
     return normalized as FilePurpose;
+  }
+
+  async validateCatalogArtwork(
+    file: FileMetadata,
+    category: ProductCategory,
+    ownerUserId?: number,
+  ): Promise<FileMetadata> {
+    if (ownerUserId != null && file.uploadedBy !== ownerUserId) {
+      throw new BadRequestException('Invalid catalog artwork reference');
+    }
+    if (
+      file.purpose !== FilePurpose.CATALOG_ARTWORK ||
+      file.catalogProductSlug !== category.slug
+    ) {
+      throw new BadRequestException('Invalid catalog artwork reference');
+    }
+    if (!file.objectKey?.trim()) {
+      throw new BadRequestException('Catalog artwork has no storage object');
+    }
+
+    this.catalogUploadPolicy.validateMetadata(category, file);
+    await this.requireStoredObject(
+      file,
+      new BadRequestException('Catalog artwork storage object not found'),
+      'Could not verify catalog artwork storage',
+    );
+    return file;
   }
 
   async resolveDeliveryProofFile(
@@ -282,6 +331,7 @@ export class FilesService {
   private async requireStoredObject(
     file: FileMetadata,
     missingError: Error,
+    unavailableMessage = 'Could not verify evidence storage',
   ): Promise<void> {
     try {
       if (!(await this.storageService.objectExists(file.objectKey!))) {
@@ -289,9 +339,7 @@ export class FilesService {
       }
     } catch (error) {
       if (error === missingError) throw error;
-      throw new InternalServerErrorException(
-        'Could not verify evidence storage',
-      );
+      throw new InternalServerErrorException(unavailableMessage);
     }
   }
 
@@ -477,7 +525,8 @@ export class FilesService {
       }
       if (
         file.purpose !== FilePurpose.GENERAL &&
-        file.purpose !== FilePurpose.PAPER
+        file.purpose !== FilePurpose.PAPER &&
+        file.purpose !== FilePurpose.CATALOG_ARTWORK
       ) {
         throw new ConflictException('Evidence files are retained');
       }
