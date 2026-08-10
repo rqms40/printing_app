@@ -1,7 +1,7 @@
 // admin/src/pages/products/list.tsx
 import React, { useState, useEffect } from 'react';
 import {
-  Row, Col, Card, Typography, Switch, Button, Drawer, Form, Input,
+  Row, Col, Card, Typography, Switch, Button, Drawer, Form, Input, Alert,
   InputNumber, Select, Space, Tag, Divider, Spin, App, Popconfirm
 } from 'antd';
 import {
@@ -10,11 +10,11 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { mockCategories } from '@/providers/mock-data';
 import { apiClient } from '@/providers/api-client';
 import type { ServiceCategory } from '@/types/products';
 import { formatCurrency } from '@/utils/format';
 import { normalizeServiceCategories } from '@/utils/api-normalizers';
+import { buildCategoryPayload, catalogAdminCategories, groupCatalogCategories } from './catalog-groups';
 
 const { Text, Title } = Typography;
 
@@ -35,17 +35,21 @@ export function ProductList() {
   const { message } = App.useApp();
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ServiceCategory | null>(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
 
   const fetchCategories = async () => {
+    setLoading(true);
+    setLoadError(false);
     try {
       const res = await apiClient.get("/products/categories?include_inactive=true");
       setCategories(normalizeServiceCategories(res.data));
     } catch {
-      setCategories(mockCategories);
+      setCategories([]);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -58,12 +62,13 @@ export function ProductList() {
     form.resetFields();
     form.setFieldsValue({
       file_processing_type: 'document',
-      pricing_model: 'per_page_modifiers',
+      pricing_model: 'quote_required',
       quantity_unit: 'page',
-      base_rate: 2,
+      base_rate: 0,
       max_file_size_mb: 50,
       allowed_extensions: 'pdf, png, jpg, jpeg, tif, tiff, docx',
       sort_order: categories.length + 1,
+      is_active: true,
     });
     setDrawerOpen(true);
   };
@@ -76,6 +81,11 @@ export function ProductList() {
       description: cat.description,
       mobile_description: cat.mobile_description,
       icon: cat.icon,
+      group_slug: cat.group_slug,
+      group_name: cat.group_name,
+      group_description: cat.group_description,
+      group_sort_order: cat.group_sort_order,
+      examples: cat.examples?.join(', '),
       file_processing_type: cat.file_processing_type,
       pricing_model: cat.pricing_model,
       base_rate: cat.base_rate,
@@ -83,6 +93,7 @@ export function ProductList() {
       max_file_size_mb: cat.max_file_size_mb,
       allowed_extensions: cat.allowed_extensions.join(', '),
       sort_order: cat.sort_order,
+      is_active: cat.is_active,
     });
     setDrawerOpen(true);
   };
@@ -91,25 +102,7 @@ export function ProductList() {
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const payload = {
-        name: values.name,
-        slug: values.slug,
-        description: values.description,
-        icon: values.icon,
-        allowedExtensions: JSON.stringify(
-          (values.allowed_extensions as string)
-            .split(',')
-            .map((e: string) => e.trim().toLowerCase())
-            .filter(Boolean),
-        ),
-        mobileDescription: values.mobile_description,
-        fileProcessingType: values.file_processing_type,
-        pricingModel: values.pricing_model,
-        baseRate: values.base_rate,
-        quantityUnit: values.quantity_unit,
-        maxFileSizeMb: values.max_file_size_mb,
-        sortOrder: values.sort_order ?? 0,
-      };
+      const payload = { ...buildCategoryPayload(values), icon: values.icon };
       if (editTarget) {
         await apiClient.patch(`/products/categories/${editTarget.id}`, payload);
         void message.success('Category updated');
@@ -165,9 +158,25 @@ export function ProductList() {
         </Button>
       </div>
 
+      {loadError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="Unable to load catalog"
+          description="The saved catalog remains unchanged. Try loading it again."
+          action={<Button onClick={() => void fetchCategories()}>Retry</Button>}
+        />
+      ) : null}
+
       {/* Category Cards */}
       <Row gutter={[16, 16]}>
-        {categories.map((cat) => (
+        {groupCatalogCategories(catalogAdminCategories(categories)).map((group) => (
+          <React.Fragment key={group.slug}>
+          <Col span={24}>
+            <Title level={4} style={{ color: '#F0F0F0', margin: '12px 0 0' }}>{group.name}</Title>
+            {group.description ? <Text style={{ color: '#808080' }}>{group.description}</Text> : null}
+          </Col>
+          {group.products.map((cat) => (
           <Col xs={24} sm={12} lg={8} key={cat.id}>
             <Card
               style={{ ...S.card, opacity: cat.is_active ? 1 : 0.6 }}
@@ -199,7 +208,9 @@ export function ProductList() {
               <Row gutter={[12, 10]}>
                 <Col span={12}>
                   <Text style={S.label}>Base Rate</Text>
-                  <Text style={{ ...S.value, color: '#34d399', display: 'block' }}>{formatCurrency(cat.base_rate)}/{cat.quantity_unit}</Text>
+                  <Text style={{ ...S.value, color: '#34d399', display: 'block' }}>
+                    {cat.pricing_model === 'quote_required' ? 'Quote required' : `${formatCurrency(cat.base_rate)}/${cat.quantity_unit}`}
+                  </Text>
                 </Col>
                 <Col span={12}>
                   <Text style={S.label}>Max File</Text>
@@ -256,6 +267,8 @@ export function ProductList() {
               </Space>
             </Card>
           </Col>
+          ))}
+          </React.Fragment>
         ))}
       </Row>
 
@@ -290,6 +303,21 @@ export function ProductList() {
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Icon (Ant Design icon name)</Text>} name="icon">
             <Input placeholder="FileTextOutlined" />
           </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Group slug</Text>} name="group_slug">
+            <Input placeholder="marketing-promo" />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Group name</Text>} name="group_name">
+            <Input placeholder="Marketing & Promotional Collateral" />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Group description</Text>} name="group_description">
+            <Input.TextArea rows={2} />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Group order</Text>} name="group_sort_order">
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Examples (comma separated)</Text>} name="examples">
+            <Input />
+          </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>File Processing</Text>} name="file_processing_type" rules={[{ required: true }]}>
             <Select
               options={[
@@ -304,11 +332,12 @@ export function ProductList() {
               options={[
                 { value: 'per_page_modifiers', label: 'Per page + spec modifiers' },
                 { value: 'base_plus_material_estimate', label: 'Base + material estimate' },
+                { value: 'quote_required', label: 'Quote required (RFQ)' },
               ]}
             />
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Base Rate (₱)</Text>} name="base_rate" rules={[{ required: true }]}>
-            <InputNumber min={0.01} step={0.01} style={{ width: '100%' }} prefix="₱" />
+            <InputNumber min={0} step={0.01} style={{ width: '100%' }} prefix="₱" />
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Quantity Unit</Text>} name="quantity_unit" rules={[{ required: true }]}>
             <Input placeholder="page, gram, copy" />
@@ -323,6 +352,9 @@ export function ProductList() {
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Sort Order</Text>} name="sort_order">
             <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Active</Text>} name="is_active" valuePropName="checked">
+            <Switch />
           </Form.Item>
         </Form>
       </Drawer>

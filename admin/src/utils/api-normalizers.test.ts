@@ -47,6 +47,106 @@ const validDispatchPlan = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("api normalizers", () => {
+  it("preserves RFQ catalog groups, arbitrary leaves, specs, and nullable quote money", () => {
+    const category = normalizeServiceCategory({
+      id: 41,
+      slug: "custom-apparel",
+      name: "Custom Apparel",
+      groupSlug: "business-merchandise",
+      groupName: "Business Merchandise",
+      groupDescription: "Branded goods",
+      groupSortOrder: 2,
+      examples: ["Shirts", "Uniforms"],
+      pricingModel: "quote_required",
+      baseRate: 0,
+      quantityUnit: "piece",
+      maxFileSizeMb: 100,
+      allowedExtensions: ["pdf", "png"],
+      isActive: true,
+      sortOrder: 3,
+    });
+    const order = normalizeOrder({
+      id: 77,
+      orderId: "ORD-RFQ",
+      userId: 9,
+      category: "custom-apparel",
+      pricingStatus: "pending_quote",
+      quotedTotalMinor: null,
+      totalPrice: null,
+      deliveryFee: null,
+      paymentMethod: "pending_quote",
+      paymentStatus: "pending",
+      orderStatus: "approved_for_matching",
+      deliveryOption: "pickup",
+      unmetCoverage: true,
+      matchingOutcome: { code: "no_eligible_supplier", message: "No coverage" },
+      items: [{
+        id: 88,
+        category: "custom-apparel",
+        categorySlug: "custom-apparel",
+        categoryName: "Custom Apparel",
+        groupSlug: "business-merchandise",
+        groupName: "Business Merchandise",
+        examples: ["Shirts"],
+        pricingModel: "quote_required",
+        quantity: 25,
+        totalPrice: null,
+        specs: [{ key: "placement", label: "UV-DTF / CMYK+W", value: "front", displayValue: "Front chest" }],
+      }],
+    });
+
+    expect(category).toMatchObject({
+      group_slug: "business-merchandise",
+      group_name: "Business Merchandise",
+      group_description: "Branded goods",
+      group_sort_order: 2,
+      examples: ["Shirts", "Uniforms"],
+      pricing_model: "quote_required",
+    });
+    expect(order).toMatchObject({
+      category: "custom-apparel",
+      pricing_status: "pending_quote",
+      quoted_total_minor: null,
+      total_price: null,
+      delivery_fee: null,
+      unmet_coverage: true,
+      matching_outcome: { code: "no_eligible_supplier" },
+      items: [{
+        category: "custom-apparel",
+        category_slug: "custom-apparel",
+        category_name: "Custom Apparel",
+        specs: [{ label: "UV-DTF / CMYK+W", display_value: "Front chest" }],
+      }],
+    });
+    expect(order.paper_specs).toBeUndefined();
+    expect(order.three_d_specs).toBeUndefined();
+  });
+
+  it("keeps quote minor units as exact strings and legacy branches exact-only", () => {
+    const fixture = {
+      id: 78,
+      orderId: "ORD-BIG",
+      userId: 9,
+      category: "future-leaf",
+      pricingStatus: "quoted",
+      quotedTotalMinor: "900719925474099312345",
+      totalPrice: 1,
+      deliveryFee: 0,
+      paymentMethod: "pending_quote",
+      paymentStatus: "pending",
+      orderStatus: "supplier_accepted",
+      deliveryOption: "pickup",
+      paperSpecs: { paper_size: "a4" },
+      threeDSpec: { file_format: "stl" },
+    };
+    const quoted = normalizeOrder(fixture);
+    const accepted = normalizeOrder({ ...fixture, pricingStatus: "accepted" });
+    expect(quoted.quoted_total_minor).toBe("900719925474099312345");
+    expect(accepted.pricing_status).toBe("accepted");
+    expect(quoted.category).toBe("future-leaf");
+    expect(quoted.paper_specs).toBeUndefined();
+    expect(quoted.three_d_specs).toBeUndefined();
+  });
   it("preserves only server-provided admin status capabilities", () => {
     const order = normalizeOrder({
       id: 7,

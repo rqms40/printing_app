@@ -13,6 +13,7 @@ import type {
   OrderStatusHistory,
   PaperSpecs,
   ThreeDSpecs,
+  PricingStatus,
 } from "@/types/order";
 import type {
   DispatchPlan,
@@ -829,21 +830,68 @@ function normalizeOrderItems(value: unknown): OrderItem[] | undefined {
     return {
       id: toRequiredString(record, "", "id"),
       order_id: toOptionalString(record, "order_id", "orderId"),
-      category: category === "3d" ? "3d" : "paper",
+      category,
+      category_id:
+        read(record, "category_id", "categoryId") == null
+          ? null
+          : toNumberValue(record, 0, "category_id", "categoryId"),
+      category_slug:
+        toOptionalString(record, "category_slug", "categorySlug") ?? category,
+      category_name:
+        toOptionalString(record, "category_name", "categoryName") ?? null,
+      group_slug: toOptionalString(record, "group_slug", "groupSlug") ?? null,
+      group_name: toOptionalString(record, "group_name", "groupName") ?? null,
+      group_description:
+        toOptionalString(record, "group_description", "groupDescription") ?? null,
+      examples: toStringArray(read(record, "examples")),
+      pricing_model:
+        toOptionalString(record, "pricing_model", "pricingModel") ?? null,
+      required_at: toOptionalString(record, "required_at", "requiredAt") ?? null,
+      special_instructions:
+        toOptionalString(record, "special_instructions", "specialInstructions") ?? null,
+      specs: Array.isArray(read(record, "specs"))
+        ? (read(record, "specs") as unknown[]).map((raw) => {
+            const spec = asRecord(raw);
+            return {
+              key: toRequiredString(spec, "", "key", "spec_key", "specKey"),
+              label: toRequiredString(spec, "", "label", "spec_label", "specLabel"),
+              input_type:
+                toOptionalString(spec, "input_type", "inputType") ?? null,
+              value: toRequiredString(spec, "", "value"),
+              display_value: toRequiredString(
+                spec,
+                toRequiredString(spec, "", "value"),
+                "display_value",
+                "displayValue",
+              ),
+              option_id:
+                read(spec, "option_id", "optionId") == null
+                  ? null
+                  : toNumberValue(spec, 0, "option_id", "optionId"),
+              option_label:
+                toOptionalString(spec, "option_label", "optionLabel") ?? null,
+            };
+          })
+        : [],
       file_url: toOptionalString(record, "file_url", "fileUrl"),
       file_name: toOptionalString(record, "file_name", "fileName"),
       file_metadata_id:
         read(record, "file_metadata_id", "fileMetadataId") !== undefined
           ? toNumberValue(record, 0, "file_metadata_id", "fileMetadataId")
           : undefined,
-      paper_specs: normalizePaperSpecs(
-        read(record, "paper_specs", "paperSpec"),
-      ),
-      three_d_specs: normalizeThreeDSpecs(
-        read(record, "three_d_specs", "threeDSpec"),
-      ),
+      paper_specs:
+        category === "paper"
+          ? normalizePaperSpecs(read(record, "paper_specs", "paperSpec"))
+          : undefined,
+      three_d_specs:
+        category === "3d"
+          ? normalizeThreeDSpecs(read(record, "three_d_specs", "threeDSpec"))
+          : undefined,
       quantity: toNumberValue(record, 1, "quantity"),
-      total_price: toNumberValue(record, 0, "total_price", "totalPrice"),
+      total_price:
+        read(record, "total_price", "totalPrice") == null
+          ? null
+          : toNumberValue(record, 0, "total_price", "totalPrice"),
       delivery_address:
         normalizeOrderDestination(
           read(record, "delivery_address", "deliveryAddress", "destination"),
@@ -876,25 +924,49 @@ export function normalizeOrder(input: unknown): Order & {
     id: toRequiredString(record, "", "id"),
     order_id: toRequiredString(record, "", "order_id", "orderId"),
     user_id: toRequiredString(record, "", "user_id", "userId"),
-    category: (() => {
-      const category = toRequiredString(record, "paper", "category");
-      if (category === "3d") return "3d";
-      if (category === "batch") return "batch";
-      return "paper";
-    })(),
+    category: toRequiredString(record, "paper", "category"),
     file_url: toOptionalString(record, "file_url", "fileUrl"),
     file_name: toOptionalString(record, "file_name", "fileName"),
     file_metadata_id:
       read(record, "file_metadata_id", "fileMetadataId") != null
         ? toNumberValue(record, 0, "file_metadata_id", "fileMetadataId") || null
         : null,
-    paper_specs: normalizePaperSpecs(read(record, "paper_specs", "paperSpec")),
-    three_d_specs: normalizeThreeDSpecs(
-      read(record, "three_d_specs", "threeDSpec"),
-    ),
+    paper_specs:
+      toRequiredString(record, "paper", "category") === "paper"
+        ? normalizePaperSpecs(read(record, "paper_specs", "paperSpec"))
+        : undefined,
+    three_d_specs:
+      toRequiredString(record, "paper", "category") === "3d"
+        ? normalizeThreeDSpecs(read(record, "three_d_specs", "threeDSpec"))
+        : undefined,
     quantity: toNumberValue(record, 0, "quantity"),
-    total_price: toNumberValue(record, 0, "total_price", "totalPrice"),
-    delivery_fee: toNumberValue(record, 0, "delivery_fee", "deliveryFee"),
+    total_price:
+      read(record, "total_price", "totalPrice") == null
+        ? null
+        : toNumberValue(record, 0, "total_price", "totalPrice"),
+    delivery_fee:
+      read(record, "delivery_fee", "deliveryFee") == null
+        ? null
+        : toNumberValue(record, 0, "delivery_fee", "deliveryFee"),
+    pricing_status:
+      (toOptionalString(record, "pricing_status", "pricingStatus") as PricingStatus | undefined),
+    quoted_total_minor:
+      toOptionalString(record, "quoted_total_minor", "quotedTotalMinor") ?? null,
+    quoted_at: toOptionalString(record, "quoted_at", "quotedAt") ?? null,
+    quote_accepted_at:
+      toOptionalString(record, "quote_accepted_at", "quoteAcceptedAt") ?? null,
+    quoted_by_user_id:
+      toOptionalString(record, "quoted_by_user_id", "quotedByUserId") ?? null,
+    promised_completion_at:
+      toOptionalString(record, "promised_completion_at", "promisedCompletionAt") ?? null,
+    unmet_coverage: toBooleanValue(record, false, "unmet_coverage", "unmetCoverage"),
+    matching_outcome: (() => {
+      const raw = read(record, "matching_outcome", "matchingOutcome");
+      if (raw == null) return null;
+      const outcome = asRecord(raw);
+      const code = toOptionalString(outcome, "code");
+      return code ? { code, message: toOptionalString(outcome, "message") ?? null } : null;
+    })(),
     payment_method: toRequiredString(
       record,
       "cod",
@@ -1387,6 +1459,18 @@ export function normalizeServiceCategory(input: unknown): ServiceCategory {
     id: toRequiredString(record, "", "id"),
     name: toRequiredString(record, "", "name"),
     slug: toRequiredString(record, "", "slug"),
+    group_slug: toOptionalString(record, "group_slug", "groupSlug"),
+    group_name: toOptionalString(record, "group_name", "groupName"),
+    group_description: toOptionalString(
+      record,
+      "group_description",
+      "groupDescription",
+    ),
+    group_sort_order:
+      read(record, "group_sort_order", "groupSortOrder") == null
+        ? undefined
+        : toNumberValue(record, 0, "group_sort_order", "groupSortOrder"),
+    examples: toStringArray(read(record, "examples")),
     description: toOptionalString(record, "description"),
     mobile_description: toOptionalString(
       record,

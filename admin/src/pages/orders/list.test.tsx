@@ -67,6 +67,27 @@ describe("OrderList", () => {
     expect(screen.queryByText("thesis_final.pdf")).not.toBeInTheDocument();
   });
 
+  it("shows dynamic RFQ products, pending price, batch lines, and unmet coverage", async () => {
+    mockGet.mockResolvedValue({ data: [{
+      id: 90, order_id: "ORD-RFQ", user_id: 3, customer_name: "Mark",
+      category: "batch", quantity: 2, total_price: null, delivery_fee: null,
+      pricing_status: "pending_quote", quoted_total_minor: null,
+      payment_method: "pending_quote", payment_status: "pending",
+      order_status: "approved_for_matching", delivery_option: "pickup",
+      unmet_coverage: true,
+      items: [
+        { id: 1, category: "flyers", category_name: "Flyers", group_name: "Marketing", quantity: 10, total_price: null },
+        { id: 2, category: "custom-apparel", category_name: "Custom Apparel", group_name: "Merchandise", quantity: 5, total_price: null },
+      ],
+      created_at: "2026-08-10T10:00:00.000Z", updated_at: "2026-08-10T10:00:00.000Z",
+    }] });
+    render(<MemoryRouter><OrderList /></MemoryRouter>);
+    expect(await screen.findByText("Flyers + Custom Apparel")).toBeInTheDocument();
+    expect(screen.getByText("Price pending quote")).toBeInTheDocument();
+    expect(screen.getByText("Unmet supplier coverage")).toBeInTheDocument();
+    expect(screen.queryByText(/₱0\.00/)).not.toBeInTheDocument();
+  });
+
   it(
     "renders only the server-provided order status actions",
     async () => {

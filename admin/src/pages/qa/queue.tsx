@@ -5,7 +5,6 @@ import {
   Button,
   Space,
   Table,
-  Tag,
   Typography,
 } from 'antd';
 import {
@@ -13,8 +12,10 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 import { List } from '@refinedev/antd';
-import { fetchQaQueue, type QaQueueItem } from '@/services/qaApi';
-import { formatCurrency, formatRelativeTime } from '@/utils/format';
+import { fetchQaQueue, qaOrderItems, type QaQueueItem } from '@/services/qaApi';
+import { formatRelativeTime } from '@/utils/format';
+import { OrderProductLabel } from '@/pages/orders/components/order-product-label';
+import { OrderPrice } from '@/pages/orders/components/order-price';
 import { StatusBadge } from '@/components/status-badge';
 import type { OrderStatus } from '@/types/enums';
 
@@ -100,15 +101,15 @@ export function QaQueuePage() {
         <Table.Column
           title="Category"
           dataIndex="category"
-          render={(cat: string) => (
-            <Tag>{cat}</Tag>
-          )}
+          render={(_cat: string, row: QaQueueItem) => <OrderProductLabel item={qaOrderItems(row)[0]} />}
         />
         <Table.Column title="Qty" dataIndex="quantity" width={70} />
         <Table.Column
           title="Total"
           dataIndex="totalPrice"
-          render={(v: number) => formatCurrency(v)}
+          render={(_v: number | null, row: QaQueueItem) => (
+            <OrderPrice pricingStatus={row.pricingStatus} minor={row.quotedTotalMinor} legacyAmount={row.totalPrice} />
+          )}
         />
         <Table.Column
           title="File"

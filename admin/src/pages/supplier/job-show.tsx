@@ -33,12 +33,13 @@ import { ShowPage } from '@/components/show-page';
 import { StatusBadge } from '@/components/status-badge';
 import {
   acceptSupplierJob,
+  buildSupplierQuotePayload,
+  canOperateProduction,
   declineSupplierJob,
   extractApiError,
   fetchSupplierJob,
   formatMinorAsCurrency,
   markSupplierReadyForPickup,
-  pesosToMinor,
   submitSupplierSelfQc,
   updateSupplierProductionStatus,
   type ProductionMilestone,
@@ -180,7 +181,9 @@ export function SupplierJobShowPage() {
 
   const canAccept = hasAction(detail, 'accept');
   const canDecline = hasAction(detail, 'decline');
-  const canProduction = hasAction(detail, 'production-status');
+  const canProduction = detail
+    ? canOperateProduction(detail.allowedActions, detail.order.paymentAuthorizationStatus)
+    : false;
   const canSelfQc = hasAction(detail, 'self-qc');
   const canReady = hasAction(detail, 'ready-for-pickup');
 
@@ -255,7 +258,8 @@ export function SupplierJobShowPage() {
       message.warning('Select a promised ready date');
       return;
     }
-    const finalPriceMinor = pesosToMinor(pricePesos);
+    const payload = buildSupplierQuotePayload(pricePesos, promisedDate.toISOString());
+    const finalPriceMinor = payload.finalPriceMinor;
     modal.confirm({
       title: 'Accept this job?',
       content: (
@@ -274,12 +278,9 @@ export function SupplierJobShowPage() {
       onOk: async () => {
         setSubmitting(true);
         try {
-          const result = await acceptSupplierJob(jobId, {
-            finalPriceMinor,
-            promisedDate: promisedDate.toISOString(),
-          });
+          const result = await acceptSupplierJob(jobId, payload);
           message.success(
-            `Accepted → ${statusLabel(result.toStatus as OrderStatus)}`,
+            `Quote submitted · pricing status ${result.order.pricingStatus ?? 'quoted'}`,
           );
           await load();
         } catch (err) {

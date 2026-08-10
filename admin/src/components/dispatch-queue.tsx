@@ -36,7 +36,7 @@ export const DispatchQueue: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
               <div>
                 <Text strong style={{ display: 'block', color: '#F0F0F0' }}>{order.order_id}</Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>Delivery Fee: ₱{order.delivery_fee.toFixed(2)}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>Delivery Fee: {order.delivery_fee == null ? 'Pending quote' : `₱${order.delivery_fee.toFixed(2)}`}</Text>
               </div>
               <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: '6px 8px', borderRadius: 8, alignSelf: 'flex-start' }}>
                 <DropboxOutlined style={{ color: '#22c55e', fontSize: 18 }} />

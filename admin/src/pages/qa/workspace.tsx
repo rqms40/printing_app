@@ -28,12 +28,16 @@ import { ShowPage } from '@/components/show-page';
 import { StatusBadge } from '@/components/status-badge';
 import {
   fetchQaWorkspace,
+  qaOrderItems,
   submitQaDecision,
   type QaDecision,
   type QaRiskLevel,
   type QaWorkspaceDetail,
 } from '@/services/qaApi';
-import { formatCurrency, formatDateTime, statusLabel } from '@/utils/format';
+import { formatDateTime, statusLabel } from '@/utils/format';
+import { OrderProductLabel } from '@/pages/orders/components/order-product-label';
+import { OrderSpecifications } from '@/pages/orders/components/order-specifications';
+import { OrderPrice } from '@/pages/orders/components/order-price';
 import type { OrderStatus } from '@/types/enums';
 
 const { Text, Title } = Typography;
@@ -232,6 +236,7 @@ export function QaWorkspacePage() {
   }
 
   const { order, artwork, reviews } = workspace;
+  const orderItems = qaOrderItems(order);
 
   return (
     <ShowPage
@@ -253,7 +258,7 @@ export function QaWorkspacePage() {
                 <StatusBadge status={order.orderStatus as OrderStatus} />
               </Descriptions.Item>
               <Descriptions.Item label="Category">
-                <Tag>{order.category}</Tag>
+                <OrderProductLabel item={orderItems[0]} />
               </Descriptions.Item>
               <Descriptions.Item label="Client">
                 {order.user?.fullName || '—'}
@@ -263,7 +268,7 @@ export function QaWorkspacePage() {
                 </Text>
               </Descriptions.Item>
               <Descriptions.Item label="Qty / Total">
-                {order.quantity} · {formatCurrency(order.totalPrice)}
+                {order.quantity} · <OrderPrice pricingStatus={order.pricingStatus} minor={order.quotedTotalMinor} legacyAmount={order.totalPrice} />
               </Descriptions.Item>
               <Descriptions.Item label="Payment">
                 {order.paymentMethod}
@@ -275,6 +280,11 @@ export function QaWorkspacePage() {
                 {formatDateTime(order.createdAt)}
               </Descriptions.Item>
             </Descriptions>
+            {orderItems.map((item) => (
+              <Card key={item.id} type="inner" size="small" title={<OrderProductLabel item={item} />} style={{ marginTop: 12 }}>
+                <OrderSpecifications item={item} />
+              </Card>
+            ))}
           </Card>
 
           <Card
