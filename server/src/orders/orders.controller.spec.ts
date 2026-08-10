@@ -57,3 +57,25 @@ describe('OrdersController RFQ submission', () => {
     expect(submitRfq).toHaveBeenCalledWith(42, dto);
   });
 });
+
+describe('OrdersController quote acceptance', () => {
+  it('routes the authenticated owner and exact quote selection to the service', async () => {
+    const acceptQuote = jest.fn().mockResolvedValue({
+      id: 42,
+      orderStatus: OrderStatus.AWAITING_PAYMENT,
+    });
+    const controller = new OrdersController(
+      { acceptQuote } as unknown as OrdersService,
+      {} as QualityService,
+    );
+    const dto = {
+      supplierAssignmentId: 17,
+      paymentMethod: 'pilot_credit' as const,
+    };
+
+    await expect(
+      controller.acceptQuote({ user: { sub: 9 } }, 42, dto),
+    ).resolves.toMatchObject({ orderStatus: OrderStatus.AWAITING_PAYMENT });
+    expect(acceptQuote).toHaveBeenCalledWith(42, 9, dto);
+  });
+});

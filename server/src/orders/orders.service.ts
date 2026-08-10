@@ -21,6 +21,7 @@ import {
 import {
   Order,
   OrderStatus,
+  MarketplacePaymentMethod,
   PaymentAuthorizationStatus,
   PricingStatus,
 } from './entities/order.entity';
@@ -61,6 +62,12 @@ import {
 } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
 import { SubmitRfqDto } from './dto/submit-rfq.dto';
+import { AcceptQuoteDto, QuotePaymentMethod } from './dto/accept-quote.dto';
+import {
+  minorToCredits,
+  normalizePositiveSafeMinor,
+  subtractSafeMinor,
+} from './order-quote-money';
 import {
   assertUnambiguousArtworkProducts,
   lockRfqCatalog,
@@ -94,6 +101,7 @@ import {
 import { DispatchStopStatus } from '../riders/entities/dispatch-plan-stop.entity';
 import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
 import {
+  assertTransition,
   assertOrderStatusTransition,
   parseOrderStatus,
 } from './order-status-transition';
@@ -2149,6 +2157,215 @@ export class OrdersService {
   }
 
   /**
+   * Customer acceptance freezes the chosen rail, but performs no payment
+   * authorization, ledger mutation, or COD collection creation.
+   */
+  async acceptQuote(
+    orderId: number,
+    userId: number,
+    dto: AcceptQuoteDto,
+  ): Promise<Order> {
+    const precheck = await this.ordersRepo.findOne({ where: { id: orderId } });
+    if (!precheck) throw new NotFoundException(`Order ${orderId} not found`);
+
+    return this.dataSource.transaction(async (manager) => {
+      // Commerce lock order: owner -> batch -> order -> assignments by id.
+      const owner = await manager.getRepository(User).findOne({
+        where: { id: precheck.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!owner) throw new NotFoundException('Order owner not found');
+
+      if (precheck.batchOrderId != null) {
+        const batch = await manager.getRepository(BatchOrder).findOne({
+          where: { id: precheck.batchOrderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!batch) throw new NotFoundException('Batch order not found');
+      }
+
+      const ordersRepo = manager.getRepository(Order);
+      const locked = await ordersRepo.findOneOrFail({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (locked.userId !== userId) {
+        throw new ForbiddenException({
+          code: 'not_order_owner',
+          message: 'You can only accept a quote for your own order',
+        });
+      }
+      if (
+        locked.userId !== precheck.userId ||
+        locked.batchOrderId !== precheck.batchOrderId
+      ) {
+        throw new BadRequestException({
+          code: 'order_changed_during_quote_acceptance',
+          message: 'Order commerce ownership changed during quote acceptance',
+        });
+      }
+
+      const assignments = await manager.getRepository(SupplierAssignment).find({
+        where: { orderId: locked.id },
+        order: { id: 'ASC' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const current = [...assignments]
+        .reverse()
+        .find(({ decision }) =>
+          [
+            SupplierAssignmentDecision.PENDING,
+            SupplierAssignmentDecision.ACCEPTED,
+          ].includes(decision),
+        );
+      if (current?.id !== dto.supplierAssignmentId) {
+        throw new BadRequestException({
+          code: 'stale_quote',
+          message: 'The selected supplier quote is stale or superseded',
+        });
+      }
+      if (current.decision !== SupplierAssignmentDecision.ACCEPTED) {
+        throw new BadRequestException({
+          code: 'quote_not_supplier_accepted',
+          message: 'The current supplier assignment has not been accepted',
+        });
+      }
+
+      const paymentMethod =
+        dto.paymentMethod === QuotePaymentMethod.PILOT_CREDIT
+          ? MarketplacePaymentMethod.PILOT_CREDIT
+          : MarketplacePaymentMethod.COD;
+
+      if (locked.pricingStatus === PricingStatus.ACCEPTED) {
+        if (
+          locked.orderStatus === OrderStatus.AWAITING_PAYMENT &&
+          locked.paymentMethod === String(paymentMethod)
+        ) {
+          return locked;
+        }
+        throw new BadRequestException({
+          code: 'quote_acceptance_conflict',
+          message: 'This quote was already accepted with different terms',
+        });
+      }
+
+      if (
+        locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED ||
+        locked.pricingStatus !== PricingStatus.QUOTED
+      ) {
+        throw new BadRequestException({
+          code: 'quote_not_ready',
+          message: 'The order does not have a current supplier quote',
+        });
+      }
+
+      let goodsMinor: string;
+      let quotedTotalMinor: string;
+      try {
+        goodsMinor = normalizePositiveSafeMinor(
+          current.finalPriceMinor,
+          'finalPriceMinor',
+        );
+        quotedTotalMinor = normalizePositiveSafeMinor(
+          locked.quotedTotalMinor,
+          'quotedTotalMinor',
+        );
+        subtractSafeMinor(quotedTotalMinor, goodsMinor, 'quoted delivery fee');
+      } catch {
+        throw new BadRequestException({
+          code: 'quote_terms_missing',
+          message: 'The supplier quote price is missing or invalid',
+        });
+      }
+      if (
+        current.promisedDate == null ||
+        locked.promisedCompletionAt == null ||
+        locked.quotedAt == null ||
+        locked.quotedByUserId == null
+      ) {
+        throw new BadRequestException({
+          code: 'quote_terms_missing',
+          message: 'The supplier quote turnaround is missing',
+        });
+      }
+
+      if (paymentMethod === MarketplacePaymentMethod.COD) {
+        const codResult =
+          await this.paymentsService.assertCodEligibleForCheckout(
+            {
+              userId: locked.userId,
+              paymentMethod,
+              finalTotalMinor: quotedTotalMinor,
+              excludeOrderId: locked.id,
+            },
+            manager,
+          );
+        locked.codEligible = codResult?.eligible === true;
+      } else {
+        locked.codEligible = false;
+      }
+
+      assertTransition(
+        locked.orderStatus,
+        OrderStatus.AWAITING_PAYMENT,
+        'client',
+      );
+      const acceptedAt = new Date();
+      const fromStatus = locked.orderStatus;
+      locked.pricingStatus = PricingStatus.ACCEPTED;
+      locked.quoteAcceptedAt = acceptedAt;
+      locked.paymentMethod = paymentMethod;
+      locked.orderStatus = OrderStatus.AWAITING_PAYMENT;
+      const saved = await ordersRepo.save(locked);
+
+      const reason = `Customer accepted supplier quote ${current.id} using ${paymentMethod}`;
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: locked.id,
+        fromStatus,
+        toStatus: OrderStatus.AWAITING_PAYMENT,
+        changedByUserId: userId,
+        notes: reason,
+      });
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: locked.id,
+          fromStatus,
+          toStatus: OrderStatus.AWAITING_PAYMENT,
+          actorUserId: userId,
+          actorRole: 'client',
+          reason,
+          metadata: {
+            source: 'orders.acceptQuote',
+            supplierAssignmentId: current.id,
+            paymentMethod,
+          },
+        },
+        manager,
+      );
+      await this.auditService.append(
+        {
+          actorId: userId,
+          actorRole: 'client',
+          action: 'customer_quote_accepted',
+          entityType: 'order',
+          entityId: String(locked.id),
+          orderId: locked.id,
+          fromState: PricingStatus.QUOTED,
+          toState: PricingStatus.ACCEPTED,
+          reason,
+          metadata: {
+            supplierAssignmentId: current.id,
+            paymentMethod,
+            quotedTotalMinor,
+          },
+        },
+        manager,
+      );
+      return saved;
+    });
+  }
+
+  /**
    * Authorize payment for production (Task 3.3).
    *
    * Ops/super only — clients cannot authorize. Allowed from
@@ -2194,7 +2411,21 @@ export class OrdersService {
       return (await this.findById(orderId)) ?? precheck;
     }
 
+    const precheckIsRfq = this.isRfqQuoteOrder(precheck);
     if (
+      precheckIsRfq &&
+      (precheck.orderStatus !== OrderStatus.AWAITING_PAYMENT ||
+        precheck.pricingStatus !== PricingStatus.ACCEPTED)
+    ) {
+      throw new BadRequestException({
+        code: 'rfq_quote_not_accepted',
+        message:
+          'RFQ payment requires customer acceptance of the current quote',
+      });
+    }
+
+    if (
+      !precheckIsRfq &&
       precheck.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
       precheck.orderStatus !== OrderStatus.AWAITING_PAYMENT
     ) {
@@ -2208,10 +2439,31 @@ export class OrdersService {
 
     const result = await this.dataSource.transaction(async (manager) => {
       const ordersRepo = manager.getRepository(Order);
+      const owner = await manager.getRepository(User).findOne({
+        where: { id: precheck.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!owner) throw new NotFoundException('Order owner not found');
+      if (precheck.batchOrderId != null) {
+        const batch = await manager.getRepository(BatchOrder).findOne({
+          where: { id: precheck.batchOrderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!batch) throw new NotFoundException('Batch order not found');
+      }
       const locked = await ordersRepo.findOneOrFail({
         where: { id: orderId },
         lock: { mode: 'pessimistic_write' },
       });
+      if (
+        locked.userId !== precheck.userId ||
+        locked.batchOrderId !== precheck.batchOrderId
+      ) {
+        throw new BadRequestException({
+          code: 'order_changed_during_authorization',
+          message: 'Order commerce ownership changed during authorization',
+        });
+      }
 
       if (
         locked.orderStatus === OrderStatus.PAYMENT_AUTHORIZED &&
@@ -2222,6 +2474,19 @@ export class OrdersService {
       }
 
       if (
+        this.isRfqQuoteOrder(locked) &&
+        (locked.orderStatus !== OrderStatus.AWAITING_PAYMENT ||
+          locked.pricingStatus !== PricingStatus.ACCEPTED)
+      ) {
+        throw new BadRequestException({
+          code: 'rfq_quote_not_accepted',
+          message:
+            'RFQ payment requires customer acceptance of the current quote',
+        });
+      }
+
+      if (
+        !this.isRfqQuoteOrder(locked) &&
         locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
         locked.orderStatus !== OrderStatus.AWAITING_PAYMENT
       ) {
@@ -2247,35 +2512,99 @@ export class OrdersService {
         });
       }
 
+      let rfqSnapshot: FreezeAuthorizationInput | null = null;
+      let authorizationTotalMinor = locked.finalTotalMinor;
+      if (this.isRfqQuoteOrder(locked)) {
+        const assignments = await manager
+          .getRepository(SupplierAssignment)
+          .find({
+            where: { orderId: locked.id },
+            order: { id: 'ASC' },
+            lock: { mode: 'pessimistic_write' },
+          });
+        const current = [...assignments]
+          .reverse()
+          .find(({ decision }) =>
+            [
+              SupplierAssignmentDecision.PENDING,
+              SupplierAssignmentDecision.ACCEPTED,
+            ].includes(decision),
+          );
+        if (
+          current?.decision !== SupplierAssignmentDecision.ACCEPTED ||
+          current.promisedDate == null
+        ) {
+          throw new BadRequestException({
+            code: 'current_quote_missing',
+            message: 'The accepted RFQ no longer has current supplier terms',
+          });
+        }
+        let goodsMinor: string;
+        let quoteMinor: string;
+        let deliveryFeeMinor: string;
+        try {
+          goodsMinor = normalizePositiveSafeMinor(
+            current.finalPriceMinor,
+            'finalPriceMinor',
+          );
+          quoteMinor = normalizePositiveSafeMinor(
+            locked.quotedTotalMinor,
+            'quotedTotalMinor',
+          );
+          deliveryFeeMinor = subtractSafeMinor(
+            quoteMinor,
+            goodsMinor,
+            'quoted delivery fee',
+          );
+        } catch {
+          throw new BadRequestException({
+            code: 'current_quote_missing',
+            message: 'The accepted RFQ money is missing or inconsistent',
+          });
+        }
+        authorizationTotalMinor = quoteMinor;
+        rfqSnapshot = {
+          priceMinor: goodsMinor,
+          deliveryFeeMinor,
+          promisedDate: locked.promisedCompletionAt ?? current.promisedDate,
+          paymentMethod,
+        };
+      }
+
       if (isCredit) {
         creditMutation = await this.settlePilotCreditsForAuthorization(
           locked,
           context.actorUserId,
           manager,
+          authorizationTotalMinor,
         );
         locked.paymentStatus = 'paid';
       } else {
         // COD: authorize for collection — cash remains pending until rider collect.
         const codResult =
-          await this.paymentsService.assertCodEligibleForCheckout({
-            userId: locked.userId,
-            paymentMethod,
-            finalTotalMinor: locked.finalTotalMinor,
-            excludeOrderId: locked.id,
-          });
+          await this.paymentsService.assertCodEligibleForCheckout(
+            {
+              userId: locked.userId,
+              paymentMethod,
+              finalTotalMinor: authorizationTotalMinor,
+              excludeOrderId: locked.id,
+            },
+            manager,
+          );
         locked.codEligible = codResult?.eligible === true;
         await this.paymentsService.ensurePendingCodCollection({
           orderId: locked.id,
-          amountMinor: String(locked.finalTotalMinor ?? '0'),
+          amountMinor: String(authorizationTotalMinor ?? '0'),
           eligible: locked.codEligible,
           eligibilityReason: codResult?.message ?? null,
         });
         // paymentStatus stays pending until cash_collected.
       }
 
-      this.freezeAuthorizationSnapshot(locked, {
-        paymentMethod,
-      });
+      this.freezeAuthorizationSnapshot(
+        locked,
+        rfqSnapshot ?? { paymentMethod },
+      );
 
       const fromStatus = locked.orderStatus;
       locked.orderStatus = OrderStatus.PAYMENT_AUTHORIZED;
@@ -2336,11 +2665,15 @@ export class OrdersService {
     order: Order,
     actorUserId: number,
     manager: EntityManager,
+    finalTotalMinor?: string | null,
   ): Promise<CreditMutationResult | null> {
-    const amountCredits = calculateChargeTotal({
-      totalPrice: order.totalPrice,
-      deliveryFee: order.deliveryFee,
-    });
+    const amountCredits =
+      finalTotalMinor != null
+        ? minorToCredits(finalTotalMinor)
+        : calculateChargeTotal({
+            totalPrice: order.totalPrice,
+            deliveryFee: order.deliveryFee,
+          });
 
     if (amountCredits <= 0) {
       return null;
@@ -2378,6 +2711,15 @@ export class OrdersService {
         actorUserId,
         manager,
       },
+    );
+  }
+
+  private isRfqQuoteOrder(order: Partial<Order>): boolean {
+    return (
+      order.quotedTotalMinor != null ||
+      order.quotedAt != null ||
+      order.pricingStatus === PricingStatus.PENDING_QUOTE ||
+      order.pricingStatus === PricingStatus.QUOTED
     );
   }
 

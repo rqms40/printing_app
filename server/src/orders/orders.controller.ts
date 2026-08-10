@@ -19,6 +19,7 @@ import { OrdersService } from './orders.service';
 import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
 import { SubmitRfqDto } from './dto/submit-rfq.dto';
+import { AcceptQuoteDto } from './dto/accept-quote.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { OrderStatus } from './entities/order.entity';
@@ -97,6 +98,17 @@ export class OrdersController {
   @Post('requests/batch')
   submitRfq(@Request() req: RequestWithUser, @Body() dto: SubmitRfqDto) {
     return this.ordersService.submitRfq(req.user.sub, dto);
+  }
+
+  @Post(':id/accept-quote')
+  @UseGuards(RolesGuard)
+  @Roles('client')
+  acceptQuote(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AcceptQuoteDto,
+  ) {
+    return this.ordersService.acceptQuote(id, req.user.sub, dto);
   }
 
   @Post('quote')

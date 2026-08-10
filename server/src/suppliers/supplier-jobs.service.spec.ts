@@ -17,8 +17,10 @@ import {
   Order,
   OrderStatus,
   PaymentAuthorizationStatus,
+  PricingStatus,
 } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
+import { BatchOrder } from '../orders/entities/batch-order.entity';
 import {
   FileMetadata,
   FilePurpose,
@@ -43,11 +45,17 @@ describe('SupplierJobsService', () => {
 
   let txAssignmentRepo: {
     findOne: jest.Mock;
+    find: jest.Mock;
     save: jest.Mock;
+    update: jest.Mock;
   };
   let txOrdersRepo: {
     findOne: jest.Mock;
+    find: jest.Mock;
     update: jest.Mock;
+  };
+  let txBatchRepo: {
+    findOne: jest.Mock;
   };
   let txHistoryRepo: {
     insert: jest.Mock;
@@ -77,6 +85,12 @@ describe('SupplierJobsService', () => {
       deliveryFee: 25,
       deliveryFeeMinor: '2500',
       finalTotalMinor: null,
+      quotedTotalMinor: null,
+      quotedAt: null,
+      quoteAcceptedAt: null,
+      quotedByUserId: null,
+      promisedCompletionAt: null,
+      pricingStatus: PricingStatus.PENDING_QUOTE,
       paymentMethod: 'pilot_credit',
       paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
       deliveryOption: 'delivery',
@@ -117,11 +131,17 @@ describe('SupplierJobsService', () => {
   beforeEach(async () => {
     txAssignmentRepo = {
       findOne: jest.fn(),
+      find: jest.fn(),
       save: jest.fn(async (row) => row),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     txOrdersRepo = {
       findOne: jest.fn(),
+      find: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    txBatchRepo = {
+      findOne: jest.fn(),
     };
     txHistoryRepo = {
       insert: jest.fn().mockResolvedValue(undefined),
@@ -180,6 +200,7 @@ describe('SupplierJobsService', () => {
                 getRepository: (entity: unknown) => {
                   if (entity === SupplierAssignment) return txAssignmentRepo;
                   if (entity === Order) return txOrdersRepo;
+                  if (entity === BatchOrder) return txBatchRepo;
                   if (entity === OrderStatusHistory) return txHistoryRepo;
                   if (entity === FileMetadata) return txFileRepo;
                   return {};
@@ -202,10 +223,21 @@ describe('SupplierJobsService', () => {
       Date.now() + 3 * 24 * 60 * 60 * 1000,
     ).toISOString();
 
+    beforeEach(() => {
+      assignmentRepo.findOne!.mockResolvedValue(baseAssignment());
+      ordersRepo.findOne!.mockResolvedValue(baseOrder());
+      txOrdersRepo.findOne.mockResolvedValue(baseOrder());
+      txAssignmentRepo.find.mockImplementation(async () => {
+        const selected = await txAssignmentRepo.findOne({});
+        return selected ? [selected] : [];
+      });
+    });
+
     it('accepts pending assignment: ACCEPTED + supplier_accepted + freezes price/promised', async () => {
       const assignment = baseAssignment();
       const order = baseOrder();
       txAssignmentRepo.findOne.mockResolvedValue(assignment);
+      txAssignmentRepo.find.mockResolvedValue([assignment]);
       txOrdersRepo.findOne.mockResolvedValue(order);
       txAssignmentRepo.save.mockImplementation(async (row) => ({
         ...row,
@@ -231,7 +263,11 @@ describe('SupplierJobsService', () => {
         { id: 42, orderStatus: OrderStatus.SUPPLIER_ASSIGNED },
         expect.objectContaining({
           orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
-          finalTotalMinor: '152500', // 150000 goods + 2500 delivery
+          pricingStatus: PricingStatus.QUOTED,
+          quotedTotalMinor: '152500', // 150000 goods + 2500 delivery
+          quotedAt: expect.any(Date),
+          quotedByUserId: 55,
+          promisedCompletionAt: new Date(futureDate),
           deliveryFeeMinor: '2500',
         }),
       );
@@ -260,6 +296,171 @@ describe('SupplierJobsService', () => {
           type: 'supplier_accepted',
         }),
       );
+    });
+
+    it('allocates a shared batch delivery fee only to the lowest persisted order id', async () => {
+      const assignment = baseAssignment({ orderId: 43 });
+      const order = baseOrder({
+        id: 43,
+        orderId: 'ORD-43',
+        batchOrderId: 8,
+        deliveryFee: 0,
+        deliveryFeeMinor: null,
+      });
+      txAssignmentRepo.findOne.mockResolvedValue(assignment);
+      txAssignmentRepo.find.mockResolvedValue([assignment]);
+      txBatchRepo.findOne.mockResolvedValue({ id: 8, deliveryFee: '25.00' });
+      assignmentRepo.findOne!.mockResolvedValue(assignment);
+      ordersRepo.findOne!.mockResolvedValue(order);
+      (txOrdersRepo as any).find = jest
+        .fn()
+        .mockResolvedValue([{ id: 42 }, order]);
+
+      await service.acceptJob(
+        7,
+        { finalPriceMinor: 150000, promisedDate: futureDate },
+        actor,
+      );
+
+      expect(txOrdersRepo.update).toHaveBeenCalledWith(
+        { id: 43, orderStatus: OrderStatus.SUPPLIER_ASSIGNED },
+        expect.objectContaining({
+          quotedTotalMinor: '150000',
+          deliveryFeeMinor: '0',
+        }),
+      );
+    });
+
+    it('assigns the shared batch delivery fee to the lowest persisted order even when it quotes last', async () => {
+      const assignment = baseAssignment({ orderId: 42 });
+      const order = baseOrder({
+        id: 42,
+        batchOrderId: 8,
+        deliveryFee: 0,
+        deliveryFeeMinor: null,
+      });
+      assignmentRepo.findOne!.mockResolvedValue(assignment);
+      ordersRepo.findOne!.mockResolvedValue(order);
+      txAssignmentRepo.findOne.mockResolvedValue(assignment);
+      txAssignmentRepo.find.mockResolvedValue([assignment]);
+      txBatchRepo.findOne.mockResolvedValue({ id: 8, deliveryFee: '25.00' });
+      txOrdersRepo.find.mockResolvedValue([order, { id: 43 }]);
+
+      await service.acceptJob(
+        7,
+        { finalPriceMinor: 100000, promisedDate: futureDate },
+        actor,
+      );
+
+      expect(txOrdersRepo.update).toHaveBeenCalledWith(
+        { id: 42, orderStatus: OrderStatus.SUPPLIER_ASSIGNED },
+        expect.objectContaining({
+          quotedTotalMinor: '102500',
+          deliveryFeeMinor: '2500',
+        }),
+      );
+    });
+
+    it('rejects a quote total that overflows the safe minor-unit range', async () => {
+      const assignment = baseAssignment();
+      txAssignmentRepo.findOne.mockResolvedValue(assignment);
+      txAssignmentRepo.find.mockResolvedValue([assignment]);
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({ deliveryFeeMinor: '1' }),
+      );
+
+      await expect(
+        service.acceptJob(
+          7,
+          {
+            finalPriceMinor: Number.MAX_SAFE_INTEGER,
+            promisedDate: futureDate,
+          },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'quote_total_overflow' }),
+      });
+      expect(txAssignmentRepo.save).not.toHaveBeenCalled();
+      expect(txOrdersRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a superseded assignment even when it is still pending', async () => {
+      const stale = baseAssignment({ id: 7 });
+      txAssignmentRepo.findOne.mockResolvedValue(stale);
+      txOrdersRepo.findOne.mockResolvedValue(baseOrder());
+      txAssignmentRepo.find.mockResolvedValue([
+        stale,
+        baseAssignment({ id: 8 }),
+      ]);
+
+      await expect(
+        service.acceptJob(
+          7,
+          { finalPriceMinor: 100, promisedDate: futureDate },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'stale_assignment' }),
+      });
+      expect(txAssignmentRepo.save).not.toHaveBeenCalled();
+      expect(txOrdersRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('never mutates a quote already accepted by the customer', async () => {
+      const assignment = baseAssignment();
+      txAssignmentRepo.findOne.mockResolvedValue(assignment);
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({
+          orderStatus: OrderStatus.SUPPLIER_ASSIGNED,
+          pricingStatus: PricingStatus.ACCEPTED,
+          quotedTotalMinor: '9000',
+          quoteAcceptedAt: new Date('2026-08-09T00:00:00Z'),
+        }),
+      );
+      txAssignmentRepo.find.mockResolvedValue([assignment]);
+
+      await expect(
+        service.acceptJob(
+          7,
+          { finalPriceMinor: 100, promisedDate: futureDate },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'quote_already_accepted' }),
+      });
+      expect(txAssignmentRepo.save).not.toHaveBeenCalled();
+      expect(txOrdersRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a promised completion that is not strictly in the future', async () => {
+      await expect(
+        service.acceptJob(
+          7,
+          {
+            finalPriceMinor: 100,
+            promisedDate: new Date(Date.now() - 1_000).toISOString(),
+          },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'promised_date_in_past' }),
+      });
+    });
+
+    it('rejects an unsafe integer price before persistence', async () => {
+      await expect(
+        service.acceptJob(
+          7,
+          {
+            finalPriceMinor: Number.MAX_SAFE_INTEGER + 1,
+            promisedDate: futureDate,
+          },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'invalid_final_price' }),
+      });
     });
 
     it('rejects when assignment belongs to another supplier', async () => {

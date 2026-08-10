@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
 import {
   CodCollection,
@@ -207,8 +207,10 @@ export class PaymentsService {
   async countActiveUnpaidCodOrders(
     userId: number,
     excludeOrderId?: number,
+    manager?: EntityManager,
   ): Promise<number> {
-    const qb = this.ordersRepo
+    const ordersRepo = manager?.getRepository(Order) ?? this.ordersRepo;
+    const qb = ordersRepo
       .createQueryBuilder('o')
       .where('o.userId = :userId', { userId })
       .andWhere('o.paymentStatus != :paid', { paid: 'paid' })
@@ -234,14 +236,19 @@ export class PaymentsService {
    * Evaluate COD eligibility for a user + commercial total.
    * Does not throw — callers decide whether to reject.
    */
-  async evaluateCodEligibilityForUser(input: {
-    userId: number;
-    finalTotalMinor: string | number | null | undefined;
-    excludeOrderId?: number;
-    addressZoneEligible?: boolean;
-  }): Promise<CodEligibilityResult> {
-    const user = await this.usersRepo.findOne({
+  async evaluateCodEligibilityForUser(
+    input: {
+      userId: number;
+      finalTotalMinor: string | number | null | undefined;
+      excludeOrderId?: number;
+      addressZoneEligible?: boolean;
+    },
+    manager?: EntityManager,
+  ): Promise<CodEligibilityResult> {
+    const usersRepo = manager?.getRepository(User) ?? this.usersRepo;
+    const user = await usersRepo.findOne({
       where: { id: input.userId },
+      ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
     });
     if (!user) {
       throw new NotFoundException(`User ${input.userId} not found`);
@@ -250,6 +257,7 @@ export class PaymentsService {
     const activeUnpaidCodCount = await this.countActiveUnpaidCodOrders(
       input.userId,
       input.excludeOrderId,
+      manager,
     );
 
     return evaluateCodEligibility({
@@ -270,17 +278,21 @@ export class PaymentsService {
    */
   async assertCodEligibleForCheckout(
     input: AssertCodCheckoutInput,
+    manager?: EntityManager,
   ): Promise<CodEligibilityResult | null> {
     if (!isCodPaymentMethod(input.paymentMethod)) {
       return null;
     }
 
-    const result = await this.evaluateCodEligibilityForUser({
-      userId: input.userId,
-      finalTotalMinor: input.finalTotalMinor,
-      excludeOrderId: input.excludeOrderId,
-      addressZoneEligible: input.addressZoneEligible,
-    });
+    const result = await this.evaluateCodEligibilityForUser(
+      {
+        userId: input.userId,
+        finalTotalMinor: input.finalTotalMinor,
+        excludeOrderId: input.excludeOrderId,
+        addressZoneEligible: input.addressZoneEligible,
+      },
+      manager,
+    );
 
     if (!result.eligible) {
       throw new ForbiddenException({

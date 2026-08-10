@@ -27,7 +27,12 @@ const SYSTEM_OR_OPS: readonly TransitionActor[] = [
   'ops_admin',
   'super_admin',
 ];
-const RIDER_OR_SYSTEM: readonly TransitionActor[] = ['rider', 'system'];
+const CLIENT_SYSTEM_OR_OPS: readonly TransitionActor[] = [
+  'client',
+  'system',
+  'ops_admin',
+  'super_admin',
+];
 const RIDER_OR_SYSTEM_OR_OPS: readonly TransitionActor[] = [
   'rider',
   'system',
@@ -93,7 +98,7 @@ export const ORDER_STATUS_TRANSITIONS: Record<
     { to: OrderStatus.CANCELLED, actors: OPS },
   ],
   [OrderStatus.SUPPLIER_ACCEPTED]: [
-    { to: OrderStatus.AWAITING_PAYMENT, actors: SYSTEM_OR_OPS },
+    { to: OrderStatus.AWAITING_PAYMENT, actors: CLIENT_SYSTEM_OR_OPS },
     // Money transition: ops/super authorize via POST /orders/:id/authorize-payment
     // only — not generic updateStatus (status-only path is hard-blocked).
     {
@@ -285,12 +290,23 @@ export function adminAllowedNextOrderStatuses(
 ): OrderStatus[] {
   if (!ADMIN_OPERABLE_SOURCE_STATUSES.has(fromStatus)) return [];
 
+  if (
+    fromStatus === OrderStatus.RIDER_ASSIGNED ||
+    fromStatus === OrderStatus.PICKED_UP ||
+    fromStatus === OrderStatus.OUT_FOR_DELIVERY
+  ) {
+    return [];
+  }
+
   return allowedNextStatuses(fromStatus, 'ops_admin').filter(
     (toStatus) =>
       toStatus !== OrderStatus.CANCELLED &&
       // Money path: use POST /orders/:id/authorize-payment, not status dropdown.
       toStatus !== OrderStatus.PAYMENT_AUTHORIZED &&
-      toStatus !== OrderStatus.COLLECTED_BY_CUSTOMER,
+      // Rider assignment has a dedicated Operations workflow.
+      toStatus !== OrderStatus.RIDER_ASSIGNED &&
+      (toStatus !== OrderStatus.COLLECTED_BY_CUSTOMER ||
+        deliveryOption === 'pickup'),
   );
 }
 

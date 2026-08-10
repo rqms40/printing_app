@@ -36,6 +36,7 @@ import {
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import { SupplierAssignmentDecision } from '../matching/entities/supplier-assignment.entity';
 import { Address } from '../addresses/entities/address.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
@@ -218,6 +219,9 @@ describe('OrdersService', () => {
   let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
   let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
   let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
+  let supplierAssignmentRepo: jest.Mocked<
+    Partial<Repository<SupplierAssignment>>
+  >;
   let slotBookingRepo: jest.Mocked<Partial<Repository<DeliverySlotBooking>>>;
   let dispatchPlanRepo: jest.Mocked<Partial<Repository<DispatchPlan>>>;
   let historyRepo: jest.Mocked<Partial<Repository<OrderStatusHistory>>>;
@@ -240,6 +244,7 @@ describe('OrdersService', () => {
   };
   let transactionQuery: jest.Mock;
   let transactionBetaSettingsRepo: { findOne: jest.Mock };
+  let transactionUserRepo: { findOne: jest.Mock };
 
   const mockOrder = {
     id: 1,
@@ -335,6 +340,10 @@ describe('OrdersService', () => {
     };
     assignmentRepo = {
       find: jest.fn(),
+      findOne: jest.fn(),
+    };
+    supplierAssignmentRepo = {
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
     };
     slotBookingRepo = {
@@ -480,6 +489,9 @@ describe('OrdersService', () => {
     transactionBetaSettingsRepo = {
       findOne: jest.fn().mockResolvedValue({ id: 1, isEnabled: true }),
     };
+    transactionUserRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 1 }),
+    };
     dataSource = {
       query: jest.fn().mockResolvedValue([{ is_enabled: true }]),
       getRepository: jest.fn().mockReturnValue(slotBookingRepo),
@@ -495,6 +507,9 @@ describe('OrdersService', () => {
             if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
             if (entity?.name === 'BatchOrder') return batchRepo;
             if (entity?.name === 'OrderStatusHistory') return historyRepo;
+            if (entity?.name === 'SupplierAssignment')
+              return supplierAssignmentRepo;
+            if (entity?.name === 'User') return transactionUserRepo;
             if (entity?.name === BetaModeSettings.name)
               return transactionBetaSettingsRepo;
             if (entity?.name === 'DeliveryDestination')
@@ -526,7 +541,7 @@ describe('OrdersService', () => {
         },
         {
           provide: getRepositoryToken(SupplierAssignment),
-          useValue: { find: jest.fn().mockResolvedValue([]) },
+          useValue: supplierAssignmentRepo,
         },
         {
           provide: getRepositoryToken(DispatchPlan),
@@ -646,6 +661,228 @@ describe('OrdersService', () => {
       expect(
         (order.authorizationSnapshot as { priceMinor: string }).priceMinor,
       ).toBe('10000');
+    });
+  });
+
+  describe('acceptQuote (RFQ customer gate)', () => {
+    function quotedOrder(overrides: Partial<Order> = {}): Order {
+      return {
+        id: 42,
+        orderId: 'ORD-10042',
+        userId: 1,
+        batchOrderId: null,
+        orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
+        pricingStatus: PricingStatus.QUOTED,
+        quotedTotalMinor: '12500',
+        quotedAt: new Date('2026-08-10T10:00:00Z'),
+        quoteAcceptedAt: null,
+        quotedByUserId: 55,
+        promisedCompletionAt: new Date('2026-08-13T10:00:00Z'),
+        paymentMethod: 'unselected',
+        paymentStatus: 'pending',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+        authorizationSnapshot: null,
+        totalPrice: 0,
+        deliveryFee: 0,
+        finalTotalMinor: null,
+        deliveryFeeMinor: null,
+        category: 'flyers',
+        quantity: 100,
+        fileMetadataId: 8,
+        estimatedCompletionAt: new Date('2026-08-13T10:00:00Z'),
+        codEligible: false,
+        ...overrides,
+      } as Order;
+    }
+
+    function acceptedAssignment(
+      overrides: Partial<SupplierAssignment> = {},
+    ): SupplierAssignment {
+      return {
+        id: 17,
+        orderId: 42,
+        supplierId: 5,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        finalPriceMinor: '10000',
+        promisedDate: new Date('2026-08-13T10:00:00Z'),
+        ...overrides,
+      } as SupplierAssignment;
+    }
+
+    beforeEach(() => {
+      const order = quotedOrder();
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      repo.save.mockImplementation(async (row) => row as Order);
+      supplierAssignmentRepo.find!.mockResolvedValue([acceptedAssignment()]);
+    });
+
+    it('accepts the current frozen quote without authorizing or debiting payment', async () => {
+      const result = await service.acceptQuote(42, 1, {
+        supplierAssignmentId: 17,
+        paymentMethod: 'pilot_credit',
+      });
+
+      expect(result.orderStatus).toBe(OrderStatus.AWAITING_PAYMENT);
+      expect(result.pricingStatus).toBe(PricingStatus.ACCEPTED);
+      expect(result.quoteAcceptedAt).toEqual(expect.any(Date));
+      expect(result.paymentMethod).toBe('pilot_credit');
+      expect(result.paymentAuthorizationStatus).toBe(
+        PaymentAuthorizationStatus.NONE,
+      );
+      expect(result.authorizationSnapshot).toBeNull();
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+      expect(creditsService.spendCredits).not.toHaveBeenCalled();
+      expect(paymentsService.ensurePendingCodCollection).not.toHaveBeenCalled();
+      expect(historyRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 42,
+          fromStatus: OrderStatus.SUPPLIER_ACCEPTED,
+          toStatus: OrderStatus.AWAITING_PAYMENT,
+          changedByUserId: 1,
+        }),
+      );
+      expect(auditService.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'customer_quote_accepted',
+          metadata: expect.objectContaining({ supplierAssignmentId: 17 }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects a non-owner under the transaction lock', async () => {
+      await expect(
+        service.acceptQuote(42, 99, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'not_order_owner' }),
+      });
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a superseded assignment as stale', async () => {
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        acceptedAssignment({ id: 17 }),
+        acceptedAssignment({ id: 18 }),
+      ]);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'stale_quote' }),
+      });
+    });
+
+    it.each([
+      ['price', { finalPriceMinor: null }],
+      ['promised date', { promisedDate: null }],
+    ])('rejects a quote missing its %s', async (_label, assignmentOverride) => {
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        acceptedAssignment(assignmentOverride),
+      ]);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'quote_terms_missing' }),
+      });
+    });
+
+    it('is idempotent only for the same accepted assignment and payment rail', async () => {
+      const order = quotedOrder({
+        orderStatus: OrderStatus.AWAITING_PAYMENT,
+        pricingStatus: PricingStatus.ACCEPTED,
+        quoteAcceptedAt: new Date('2026-08-10T12:00:00Z'),
+        paymentMethod: 'pilot_credit',
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).resolves.toBe(order);
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a conflicting payment rail after acceptance', async () => {
+      const order = quotedOrder({
+        orderStatus: OrderStatus.AWAITING_PAYMENT,
+        pricingStatus: PricingStatus.ACCEPTED,
+        quoteAcceptedAt: new Date('2026-08-10T12:00:00Z'),
+        paymentMethod: 'pilot_credit',
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'cod',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'quote_acceptance_conflict',
+        }),
+      });
+    });
+
+    it('evaluates COD against the frozen quoted total without creating a collection', async () => {
+      paymentsService.assertCodEligibleForCheckout.mockResolvedValue({
+        eligible: true,
+        reasons: [],
+        message: 'COD eligible',
+        amountMinor: '12500',
+        maxAmountMinor: 150000,
+      });
+
+      const result = await service.acceptQuote(42, 1, {
+        supplierAssignmentId: 17,
+        paymentMethod: 'cod',
+      });
+
+      expect(paymentsService.assertCodEligibleForCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          finalTotalMinor: '12500',
+          excludeOrderId: 42,
+        }),
+        expect.anything(),
+      );
+      expect(result.codEligible).toBe(true);
+      expect(paymentsService.ensurePendingCodCollection).not.toHaveBeenCalled();
+    });
+
+    it('rejects COD ineligibility before quote acceptance is persisted', async () => {
+      paymentsService.assertCodEligibleForCheckout.mockRejectedValue(
+        new ForbiddenException({
+          code: 'cod_not_eligible',
+          reasons: ['active_unpaid_cod_exists'],
+        }),
+      );
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'cod',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'cod_not_eligible' }),
+      });
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
     });
   });
 
@@ -852,6 +1089,110 @@ describe('OrdersService', () => {
 
       expect(creditsService.reserveCredits).not.toHaveBeenCalled();
       expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
+    });
+
+    it('rejects direct authorization of a newly quoted RFQ from supplier_accepted', async () => {
+      const order = awaitingPilotCreditOrder({
+        orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
+        pricingStatus: PricingStatus.QUOTED,
+        quotedTotalMinor: '12500',
+      });
+      repo.findOne.mockResolvedValue(order);
+
+      await expect(
+        service.authorizePayment(42, authContext),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'rfq_quote_not_accepted',
+        }),
+      });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+    });
+
+    it('freezes accepted RFQ money from the current supplier assignment and quote', async () => {
+      const order = awaitingPilotCreditOrder({
+        pricingStatus: PricingStatus.ACCEPTED,
+        quotedTotalMinor: '12500',
+        finalTotalMinor: null,
+        deliveryFeeMinor: null,
+        totalPrice: 0,
+        deliveryFee: 0,
+        promisedCompletionAt: new Date('2026-08-13T10:00:00Z'),
+      });
+      const supplierAssignment = {
+        id: 17,
+        orderId: 42,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        finalPriceMinor: '10000',
+        promisedDate: new Date('2026-08-13T10:00:00Z'),
+      } as SupplierAssignment;
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      repo.save.mockImplementation(async (row) => row as Order);
+      supplierAssignmentRepo.find!.mockResolvedValue([supplierAssignment]);
+
+      const result = await service.authorizePayment(42, authContext);
+
+      expect(creditsService.reserveCredits).toHaveBeenCalledWith(
+        1,
+        125,
+        OrdersService.creditReserveIdempotencyKey(42),
+        expect.anything(),
+      );
+      expect(result.authorizationSnapshot).toEqual(
+        expect.objectContaining({
+          priceMinor: '10000',
+          deliveryFeeMinor: '2500',
+          finalTotalMinor: '12500',
+          promisedDate: '2026-08-13T10:00:00.000Z',
+        }),
+      );
+    });
+
+    it('rejects authorization when the accepted assignment has been superseded', async () => {
+      const order = awaitingPilotCreditOrder({
+        pricingStatus: PricingStatus.ACCEPTED,
+        quotedTotalMinor: '12500',
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 17,
+          orderId: 42,
+          decision: SupplierAssignmentDecision.ACCEPTED,
+          finalPriceMinor: '10000',
+          promisedDate: new Date('2026-08-13T10:00:00Z'),
+        } as SupplierAssignment,
+        {
+          id: 18,
+          orderId: 42,
+          decision: SupplierAssignmentDecision.PENDING,
+        } as SupplierAssignment,
+      ]);
+
+      await expect(
+        service.authorizePayment(42, authContext),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'current_quote_missing' }),
+      });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the locked order no longer matches the prechecked commerce owner', async () => {
+      const precheck = awaitingPilotCreditOrder({ userId: 1 });
+      const changed = awaitingPilotCreditOrder({ userId: 2 });
+      repo.findOne.mockResolvedValue(precheck);
+      repo.findOneOrFail.mockResolvedValue(changed);
+
+      await expect(
+        service.authorizePayment(42, authContext),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'order_changed_during_authorization',
+        }),
+      });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
     });
   });
 
