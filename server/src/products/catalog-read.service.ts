@@ -4,8 +4,25 @@ import { Repository } from 'typeorm';
 
 import { CATALOG_VERSION } from './catalog-v1-10.definition';
 import { ProductCategory } from './entities/product-category.entity';
+import { PricingModel } from './enums/catalog.enums';
 
-export type CatalogCategory = ProductCategory;
+type CatalogCategoryBase = Omit<ProductCategory, 'baseRate' | 'pricingModel'>;
+
+export type NumericCatalogCategory = CatalogCategoryBase & {
+  pricingModel:
+    | PricingModel.PER_PAGE_MODIFIERS
+    | PricingModel.BASE_PLUS_MATERIAL_ESTIMATE;
+  baseRate: number;
+  pricingStatus?: never;
+};
+
+export type RfqCatalogCategory = CatalogCategoryBase & {
+  pricingModel: PricingModel.QUOTE_REQUIRED;
+  pricingStatus: 'pending_quote';
+  baseRate: null;
+};
+
+export type CatalogCategory = NumericCatalogCategory | RfqCatalogCategory;
 
 export interface CatalogGroup {
   slug: string;
@@ -48,20 +65,9 @@ export class CatalogReadService {
 
     const publicCategories = categories
       .filter((category) => includeInactive || category.isActive)
-      .map((category) => ({
-        ...category,
-        specs: (category.specs ?? [])
-          .filter((spec) => includeInactive || spec.isActive)
-          .map((spec) => ({
-            ...spec,
-            options: (spec.options ?? []).filter(
-              (option) => includeInactive || option.isActive,
-            ),
-          })),
-        addons: (category.addons ?? []).filter(
-          (addon) => includeInactive || addon.isActive,
-        ),
-      }));
+      .map((category) =>
+        this.serializePublicCategory(category, includeInactive),
+      );
 
     const grouped = new Map<string, CatalogGroup>();
     for (const category of publicCategories) {
@@ -106,6 +112,35 @@ export class CatalogReadService {
       groups,
       categories: publicCategories,
     };
+  }
+
+  private serializePublicCategory(
+    category: ProductCategory,
+    includeInactive: boolean,
+  ): CatalogCategory {
+    const serialized = {
+      ...category,
+      specs: (category.specs ?? [])
+        .filter((spec) => includeInactive || spec.isActive)
+        .map((spec) => ({
+          ...spec,
+          options: (spec.options ?? []).filter(
+            (option) => includeInactive || option.isActive,
+          ),
+        })),
+      addons: (category.addons ?? []).filter(
+        (addon) => includeInactive || addon.isActive,
+      ),
+    };
+    if (category.pricingModel === PricingModel.QUOTE_REQUIRED) {
+      return {
+        ...serialized,
+        pricingModel: PricingModel.QUOTE_REQUIRED,
+        pricingStatus: 'pending_quote',
+        baseRate: null,
+      };
+    }
+    return serialized as NumericCatalogCategory;
   }
 
   async getPublicCategoryBySlug(slug: string): Promise<CatalogCategory> {

@@ -153,6 +153,39 @@ const rfqCategory = {
   baseRate: 0,
 };
 
+const brochuresCategory = {
+  ...rfqCategory,
+  id: 3,
+  name: 'Brochures',
+  slug: 'brochures',
+};
+
+const validSpecs = {
+  paper_size: 'a4',
+  binding: 'none',
+  page_count: 1,
+};
+
+const zeroMoneyPaths = (value: unknown, path = '$'): string[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      zeroMoneyPaths(entry, `${path}[${index}]`),
+    );
+  }
+  if (value == null || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, entry]) => {
+    const nextPath = `${path}.${key}`;
+    const isMoneyField =
+      /(amount|subtotal|total|fee|cost|rate|multiplier|estimatedQuantity)/i.test(
+        key,
+      );
+    return [
+      ...(isMoneyField && entry === 0 ? [nextPath] : []),
+      ...zeroMoneyPaths(entry, nextPath),
+    ];
+  });
+};
+
 describe('CatalogPricingService', () => {
   const readService = {
     getPublicCatalog: jest.fn().mockResolvedValue({
@@ -216,11 +249,7 @@ describe('CatalogPricingService', () => {
         {
           categorySlug: 'flyers',
           quantity: 100,
-          specs: {
-            paper_size: 'a4',
-            binding: 'none',
-            page_count: 1,
-          },
+          specs: validSpecs,
         },
       ],
     });
@@ -244,6 +273,13 @@ describe('CatalogPricingService', () => {
         expect.objectContaining({ specKey: 'paper_size', value: 'a4' }),
       ]),
     );
+    expect(quote.items[0].specSnapshots[0]).not.toHaveProperty('multiplier');
+    expect(quote.items[0].specSnapshots[0]).not.toHaveProperty('fixedFee');
+    expect(quote.items[0].specSnapshots[0]).not.toHaveProperty('unitCost');
+    expect(quote.items[0].specSnapshots[0]).not.toHaveProperty(
+      'estimatedQuantity',
+    );
+    expect(zeroMoneyPaths(quote)).toEqual([]);
   });
 
   it('validates required specs before returning a pending quote', async () => {
@@ -267,5 +303,108 @@ describe('CatalogPricingService', () => {
         specKey: 'paper_size',
       }),
     });
+  });
+
+  it('returns a narrowly pending response for multiple RFQ products', async () => {
+    readService.getPublicCatalog.mockResolvedValueOnce({
+      categories: [rfqCategory, brochuresCategory],
+    });
+
+    const quote = await service.quote({
+      items: [
+        { categorySlug: 'flyers', quantity: 100, specs: validSpecs },
+        { categorySlug: 'brochures', quantity: 25, specs: validSpecs },
+      ],
+    });
+
+    expect(quote).toMatchObject({
+      pricingStatus: 'pending_quote',
+      subtotal: null,
+      total: null,
+    });
+    expect(quote.items).toHaveLength(2);
+    expect(
+      quote.items.every(
+        (item) =>
+          item.pricingModel === PricingModel.QUOTE_REQUIRED &&
+          item.printSubtotal === null,
+      ),
+    ).toBe(true);
+    expect(zeroMoneyPaths(quote)).toEqual([]);
+  });
+
+  it('rejects mixed numeric and RFQ products with a stable code', async () => {
+    readService.getPublicCatalog.mockResolvedValueOnce({
+      categories: [paperCategory, rfqCategory],
+    });
+
+    await expect(
+      service.quote({
+        items: [
+          { categorySlug: 'paper', quantity: 1, specs: validSpecs },
+          { categorySlug: 'flyers', quantity: 100, specs: validSpecs },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'MIXED_PRICING_MODELS' }),
+    });
+  });
+
+  it('validates every line before rejecting mixed pricing models', async () => {
+    readService.getPublicCatalog.mockResolvedValueOnce({
+      categories: [paperCategory, rfqCategory],
+    });
+
+    await expect(
+      service.quote({
+        items: [
+          { categorySlug: 'flyers', quantity: 100, specs: validSpecs },
+          {
+            categorySlug: 'paper',
+            quantity: 1,
+            specs: { binding: 'none', page_count: 1 },
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'SPEC_REQUIRED',
+        specKey: 'paper_size',
+      }),
+    });
+  });
+
+  it('preserves the exact legacy numeric quote shape without a pricing status', async () => {
+    const quote = await service.quote({
+      items: [
+        {
+          categorySlug: 'paper',
+          quantity: 2,
+          specs: { paper_size: 'a3', binding: 'spiral', page_count: 3 },
+        },
+      ],
+    });
+
+    expect(Object.keys(quote).sort()).toEqual([
+      'deliveryFee',
+      'items',
+      'serviceFee',
+      'subtotal',
+      'total',
+    ]);
+    expect(quote).not.toHaveProperty('pricingStatus');
+    expect(Object.keys(quote.items[0]).sort()).toEqual([
+      'categoryId',
+      'categoryName',
+      'categorySlug',
+      'pricingBreakdown',
+      'pricingModel',
+      'printSubtotal',
+      'quantity',
+      'specSnapshots',
+    ]);
+    expect(quote.items[0].printSubtotal).toBe(68);
+    expect(quote.subtotal).toBe(68);
+    expect(quote.total).toBe(68);
   });
 });

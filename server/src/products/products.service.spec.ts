@@ -240,6 +240,23 @@ describe('ProductsService', () => {
   });
 
   describe('updateCategory', () => {
+    const activeRfqCategory = {
+      id: 10,
+      slug: 'flyers',
+      name: 'Flyers',
+      description: 'Single-sheet promotional printing.',
+      pricingModel: PricingModel.QUOTE_REQUIRED,
+      baseRate: 0,
+      isActive: true,
+      groupSlug: 'marketing-promo',
+      groupName: 'Marketing & Promotional Collateral',
+      groupDescription: 'Best for businesses, startups, and events.',
+      groupSortOrder: 1,
+      fileProcessingType: 'document',
+      quantityUnit: 'copy',
+      allowedExtensions: ['pdf'],
+    };
+
     it('rejects activating an RFQ product whose resulting group metadata is incomplete', async () => {
       catRepo.findOneOrFail.mockResolvedValue({
         id: 10,
@@ -262,6 +279,99 @@ describe('ProductsService', () => {
         }),
       });
       expect(catRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('allows converting a numeric product to RFQ with complete effective metadata', async () => {
+      const existing = {
+        ...activeRfqCategory,
+        slug: 'paper',
+        name: 'Paper Printing',
+        pricingModel: PricingModel.PER_PAGE_MODIFIERS,
+        baseRate: 2,
+        groupSlug: null,
+        groupName: null,
+        groupDescription: null,
+        groupSortOrder: null,
+      };
+      catRepo.findOneOrFail
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce({ ...activeRfqCategory });
+      const update = {
+        pricingModel: PricingModel.QUOTE_REQUIRED,
+        baseRate: 0,
+        groupSlug: 'marketing-promo',
+        groupName: 'Marketing & Promotional Collateral',
+        groupDescription: 'Best for businesses, startups, and events.',
+        groupSortOrder: 1,
+        examples: ['Single sheets'],
+      };
+
+      await expect(service.updateCategory(10, update)).resolves.toMatchObject({
+        pricingModel: PricingModel.QUOTE_REQUIRED,
+        baseRate: 0,
+      });
+      expect(catRepo.update).toHaveBeenCalledWith(10, update);
+    });
+
+    it('rejects converting a zero-rate RFQ product to numeric pricing', async () => {
+      catRepo.findOneOrFail.mockResolvedValue(activeRfqCategory);
+
+      await expect(
+        service.updateCategory(10, {
+          pricingModel: PricingModel.PER_PAGE_MODIFIERS,
+        }),
+      ).rejects.toThrow(
+        'baseRate must be greater than 0 for numeric pricing models',
+      );
+      expect(catRepo.update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['groupSlug', ''],
+      ['groupName', '   '],
+      ['groupDescription', null],
+      ['groupSortOrder', null],
+    ])(
+      'rejects clearing required %s metadata on an active RFQ product',
+      async (field, value) => {
+        catRepo.findOneOrFail.mockResolvedValue(activeRfqCategory);
+
+        await expect(
+          service.updateCategory(10, { [field]: value } as any),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: 'RFQ_GROUP_METADATA_REQUIRED',
+          }),
+        });
+        expect(catRepo.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('allows a partial update while an incomplete RFQ product remains inactive', async () => {
+      const inactive = {
+        ...activeRfqCategory,
+        isActive: false,
+        groupName: null,
+        groupDescription: null,
+      };
+      catRepo.findOneOrFail.mockResolvedValue(inactive);
+
+      await expect(
+        service.updateCategory(10, { description: 'Draft description' }),
+      ).resolves.toEqual(inactive);
+      expect(catRepo.update).toHaveBeenCalledWith(10, {
+        description: 'Draft description',
+      });
+    });
+
+    it('does not clobber omitted RFQ fields during a partial update', async () => {
+      catRepo.findOneOrFail.mockResolvedValue(activeRfqCategory);
+
+      await service.updateCategory(10, { name: 'Updated Flyers' });
+
+      expect(catRepo.update).toHaveBeenCalledWith(10, {
+        name: 'Updated Flyers',
+      });
     });
   });
 

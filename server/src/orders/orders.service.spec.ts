@@ -1106,6 +1106,16 @@ describe('OrdersService', () => {
         response: expect.objectContaining({ code: 'RFQ_ENDPOINT_REQUIRED' }),
       });
       expect(repo.create).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(orderItemsRepo.save).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(creditsService.subtractCredits).not.toHaveBeenCalled();
+      expect(
+        paymentsService.assertCodEligibleForCheckout,
+      ).not.toHaveBeenCalled();
+      expect(paymentsService.ensurePendingCodCollection).not.toHaveBeenCalled();
+      expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(notificationsService.createForAllAdmins).not.toHaveBeenCalled();
     });
 
     it('should generate orderId, save order', async () => {
@@ -1487,6 +1497,18 @@ describe('OrdersService', () => {
         response: expect.objectContaining({ code: 'RFQ_ENDPOINT_REQUIRED' }),
       });
       expect(batchRepo.create).not.toHaveBeenCalled();
+      expect(batchRepo.save).not.toHaveBeenCalled();
+      expect(repo.create).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(orderItemsRepo.save).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(creditsService.subtractCredits).not.toHaveBeenCalled();
+      expect(
+        paymentsService.assertCodEligibleForCheckout,
+      ).not.toHaveBeenCalled();
+      expect(paymentsService.ensurePendingCodCollection).not.toHaveBeenCalled();
+      expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(notificationsService.createForAllAdmins).not.toHaveBeenCalled();
     });
 
     it('rejects delivery addresses that do not belong to the user', async () => {

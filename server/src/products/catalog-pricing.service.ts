@@ -1,7 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
 import { QuoteOrderDto } from '../orders/dto/quote-order.dto';
-import { CatalogCategory, CatalogReadService } from './catalog-read.service';
+import {
+  CatalogCategory,
+  CatalogReadService,
+  NumericCatalogCategory,
+} from './catalog-read.service';
 import {
   CatalogValidationService,
   SelectedSpec,
@@ -10,7 +14,7 @@ import { PricingModel, PricingRole } from './enums/catalog.enums';
 
 const PENDING_QUOTE = 'pending_quote' as const;
 
-export interface SpecSnapshotDraft {
+interface SpecSnapshotIdentity {
   specDefinitionId: number;
   specKey: string;
   specLabel: string;
@@ -19,11 +23,16 @@ export interface SpecSnapshotDraft {
   displayValue: string;
   optionId: number | null;
   optionLabel: string | null;
+}
+
+export interface SpecSnapshotDraft extends SpecSnapshotIdentity {
   multiplier: number;
   fixedFee: number;
   unitCost: number;
   estimatedQuantity: number | null;
 }
+
+export type PendingSpecSnapshotDraft = SpecSnapshotIdentity;
 
 interface QuoteItemBase {
   categoryId: number;
@@ -31,17 +40,18 @@ interface QuoteItemBase {
   categoryName: string;
   pricingModel: PricingModel;
   quantity: number;
-  specSnapshots: SpecSnapshotDraft[];
 }
 
 export interface PricedQuoteItemResult extends QuoteItemBase {
   printSubtotal: number;
+  specSnapshots: SpecSnapshotDraft[];
   pricingBreakdown: { label: string; amount: number }[];
 }
 
 export interface PendingQuoteItemResult extends QuoteItemBase {
   pricingModel: PricingModel.QUOTE_REQUIRED;
   printSubtotal: null;
+  specSnapshots: PendingSpecSnapshotDraft[];
   pricingBreakdown: [];
 }
 
@@ -57,7 +67,7 @@ export interface PricedQuoteResult {
 
 export interface PendingQuoteResult {
   pricingStatus: typeof PENDING_QUOTE;
-  items: QuoteItemResult[];
+  items: PendingQuoteItemResult[];
   subtotal: null;
   deliveryFee: null;
   serviceFee: null;
@@ -75,7 +85,7 @@ export class CatalogPricingService {
 
   async quote(dto: QuoteOrderDto): Promise<QuoteResult> {
     const catalog = await this.catalogReadService.getPublicCatalog();
-    const items = dto.items.map((item) => {
+    const validatedItems = dto.items.map((item) => {
       const category = catalog.categories.find(
         (candidate) => candidate.slug === item.categorySlug,
       );
@@ -89,12 +99,29 @@ export class CatalogPricingService {
         category,
         item.specs,
       );
-      return this.priceItem(category, selected, item.quantity);
+      return { category, selected, quantity: item.quantity };
     });
-    if (items.some((item) => item.printSubtotal == null)) {
+
+    const hasRfq = validatedItems.some(
+      ({ category }) => category.pricingModel === PricingModel.QUOTE_REQUIRED,
+    );
+    const hasNumeric = validatedItems.some(
+      ({ category }) => category.pricingModel !== PricingModel.QUOTE_REQUIRED,
+    );
+    if (hasRfq && hasNumeric) {
+      throw new BadRequestException({
+        code: 'MIXED_PRICING_MODELS',
+        message:
+          'Instant-priced and quote-required products must be quoted separately',
+      });
+    }
+
+    if (hasRfq) {
       return {
         pricingStatus: PENDING_QUOTE,
-        items,
+        items: validatedItems.map(({ category, selected, quantity }) =>
+          this.pendingItem(category, selected, quantity),
+        ),
         subtotal: null,
         deliveryFee: null,
         serviceFee: null,
@@ -102,7 +129,9 @@ export class CatalogPricingService {
       };
     }
 
-    const pricedItems = items as PricedQuoteItemResult[];
+    const pricedItems = validatedItems.map(({ category, selected, quantity }) =>
+      this.priceItem(category, selected, quantity),
+    );
     const subtotal = this.roundMoney(
       pricedItems.reduce((sum, item) => sum + item.printSubtotal, 0),
     );
@@ -119,19 +148,7 @@ export class CatalogPricingService {
     category: CatalogCategory,
     selected: SelectedSpec[],
     quantity: number,
-  ): QuoteItemResult {
-    if (category.pricingModel === PricingModel.QUOTE_REQUIRED) {
-      return {
-        categoryId: category.id,
-        categorySlug: category.slug,
-        categoryName: category.name,
-        pricingModel: PricingModel.QUOTE_REQUIRED,
-        quantity,
-        printSubtotal: null,
-        specSnapshots: selected.map((entry) => this.toSnapshot(entry)),
-        pricingBreakdown: [],
-      };
-    }
+  ): PricedQuoteItemResult {
     if (category.pricingModel === PricingModel.PER_PAGE_MODIFIERS) {
       return this.pricePerPage(category, selected, quantity);
     }
@@ -143,8 +160,28 @@ export class CatalogPricingService {
     );
   }
 
-  private pricePerPage(
+  private pendingItem(
     category: CatalogCategory,
+    selected: SelectedSpec[],
+    quantity: number,
+  ): PendingQuoteItemResult {
+    if (category.pricingModel !== PricingModel.QUOTE_REQUIRED) {
+      throw new BadRequestException('Expected a quote-required product');
+    }
+    return {
+      categoryId: category.id,
+      categorySlug: category.slug,
+      categoryName: category.name,
+      pricingModel: PricingModel.QUOTE_REQUIRED,
+      quantity,
+      printSubtotal: null,
+      specSnapshots: selected.map((entry) => this.toPendingSnapshot(entry)),
+      pricingBreakdown: [],
+    };
+  }
+
+  private pricePerPage(
+    category: NumericCatalogCategory,
     selected: SelectedSpec[],
     quantity: number,
   ): PricedQuoteItemResult {
@@ -179,7 +216,7 @@ export class CatalogPricingService {
   }
 
   private priceBasePlusEstimate(
-    category: CatalogCategory,
+    category: NumericCatalogCategory,
     selected: SelectedSpec[],
     quantity: number,
   ): PricedQuoteItemResult {
@@ -225,6 +262,20 @@ export class CatalogPricingService {
 
   private toSnapshot(entry: SelectedSpec): SpecSnapshotDraft {
     return {
+      ...this.toSnapshotIdentity(entry),
+      multiplier: entry.option?.multiplier ?? 1,
+      fixedFee: entry.option?.fixedFee ?? 0,
+      unitCost: entry.option?.unitCost ?? 0,
+      estimatedQuantity: entry.option?.estimatedQuantity ?? null,
+    };
+  }
+
+  private toPendingSnapshot(entry: SelectedSpec): PendingSpecSnapshotDraft {
+    return this.toSnapshotIdentity(entry);
+  }
+
+  private toSnapshotIdentity(entry: SelectedSpec): SpecSnapshotIdentity {
+    return {
       specDefinitionId: entry.spec.id,
       specKey: entry.spec.key,
       specLabel: entry.spec.label,
@@ -238,10 +289,6 @@ export class CatalogPricingService {
       displayValue: entry.displayValue,
       optionId: entry.option?.id ?? null,
       optionLabel: entry.option?.label ?? null,
-      multiplier: entry.option?.multiplier ?? 1,
-      fixedFee: entry.option?.fixedFee ?? 0,
-      unitCost: entry.option?.unitCost ?? 0,
-      estimatedQuantity: entry.option?.estimatedQuantity ?? null,
     };
   }
 
