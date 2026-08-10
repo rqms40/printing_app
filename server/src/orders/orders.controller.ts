@@ -18,6 +18,7 @@ import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
 import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
+import { SubmitRfqDto } from './dto/submit-rfq.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { OrderStatus } from './entities/order.entity';
@@ -91,6 +92,11 @@ export class OrdersController {
     @Body() dto: CreateBatchOrderDto,
   ) {
     return this.ordersService.createBatch(req.user.sub, dto);
+  }
+
+  @Post('requests/batch')
+  submitRfq(@Request() req: RequestWithUser, @Body() dto: SubmitRfqDto) {
+    return this.ordersService.submitRfq(req.user.sub, dto);
   }
 
   @Post('quote')

@@ -18,6 +18,7 @@ import {
   Order,
   OrderStatus,
   PaymentAuthorizationStatus,
+  PricingStatus,
 } from './entities/order.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { OrderItem } from './entities/order-item.entity';
@@ -43,6 +44,7 @@ import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-booking.entity';
 import {
   CancellationClosedException,
+  ServiceAreaMismatchException,
   SlotFullException,
 } from '../delivery-slots/exceptions';
 import { BatchOrder } from './entities/batch-order.entity';
@@ -51,6 +53,14 @@ import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
+import { CatalogValidationService } from '../products/catalog-validation.service';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import {
+  InputType,
+  PricingModel,
+  PricingRole,
+  ValueType,
+} from '../products/enums/catalog.enums';
 import { User } from '../users/entities/user.entity';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 import {
@@ -349,7 +359,15 @@ describe('OrdersService', () => {
       })),
       findOneOrFail: jest.fn().mockResolvedValue({ model3dWidthMm: null }),
     };
-    addressRepo.findOne.mockResolvedValue({ id: 9, userId: 1 } as Address);
+    addressRepo.findOne.mockResolvedValue({
+      id: 9,
+      userId: 1,
+      label: 'Home',
+      fullAddress: '9 Main Street',
+      city: 'Davao City',
+      latitude: 7.0731,
+      longitude: 125.6128,
+    } as Address);
     gateway = {
       notifyOrderUpdate: jest.fn(),
     };
@@ -1836,10 +1854,78 @@ describe('OrdersService', () => {
           'items',
           'items.destination',
           'items.specValues',
+          'statusHistory',
         ],
         order: { createdAt: 'DESC' },
       });
       expect(result).toEqual(orders);
+    });
+
+    it('masks RFQ compatibility money on subsequent customer reads', async () => {
+      repo.find.mockResolvedValue([
+        {
+          ...mockOrder,
+          pricingStatus: PricingStatus.PENDING_QUOTE,
+          totalPrice: 0,
+          deliveryFee: 0,
+          deliveryFeeMinor: null,
+          finalTotalMinor: null,
+          quotedTotalMinor: null,
+          batchOrder: {
+            id: 77,
+            subtotal: 0,
+            deliveryFee: 42,
+            totalPrice: 0,
+            priorityFee: 0,
+            extraDestinationFee: 0,
+          },
+          items: [
+            {
+              id: 10,
+              totalPrice: 0,
+              specValues: [
+                {
+                  id: 20,
+                  orderItemId: 10,
+                  specDefinitionId: 30,
+                  specKey: 'size',
+                  specLabel: 'Size',
+                  inputType: 'text',
+                  value: 'A5',
+                  displayValue: 'A5',
+                  optionId: null,
+                  optionLabel: null,
+                  multiplier: 1,
+                  fixedFee: 0,
+                  unitCost: 0,
+                  estimatedQuantity: null,
+                },
+              ],
+            },
+          ],
+        } as Order,
+      ]);
+      assignmentRepo.find.mockResolvedValue([]);
+
+      const [result] = await service.findByUser(1);
+
+      expect(result).toMatchObject({
+        totalPrice: null,
+        deliveryFee: null,
+        deliveryFeeMinor: null,
+        finalTotalMinor: null,
+        quotedTotalMinor: null,
+        batchOrder: {
+          subtotal: null,
+          deliveryFee: null,
+          totalPrice: null,
+          priorityFee: null,
+          extraDestinationFee: null,
+        },
+        items: [{ totalPrice: null }],
+      });
+      expect(result.items[0].specValues[0]).not.toHaveProperty('fixedFee');
+      expect(result.items[0].specValues[0]).not.toHaveProperty('unitCost');
     });
 
     it('batch-loads and maps assigned slots across multiple order batches', async () => {
@@ -2117,6 +2203,7 @@ describe('OrdersService', () => {
           'items',
           'items.destination',
           'items.specValues',
+          'statusHistory',
         ],
       });
       expect(result).toEqual(mockOrder);
@@ -3282,7 +3369,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         orderId: arrived.id,
         fromStatus: OrderStatus.DELIVERED,
         toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
-        changedByUserId: 0,
+        changedByUserId: 51,
       }),
     );
     expect(
@@ -4196,7 +4283,7 @@ describe('createBatch with slot + destinations', () => {
     it('auto-books the nearest available same-day slot and returns assignedSlot', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        if (where.id === 9) return makeAddress(9, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4256,7 +4343,7 @@ describe('createBatch with slot + destinations', () => {
     it('searches future PH dates when all same-day slots have ended', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T15:30:00Z'));
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        if (where.id === 9) return makeAddress(9, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4314,7 +4401,7 @@ describe('createBatch with slot + destinations', () => {
     it('moves to the next candidate when capacity is lost during booking', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        if (where.id === 9) return makeAddress(9, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4712,7 +4799,7 @@ describe('createBatch with slot + destinations', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
 
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        if (where.id === 1) return makeAddress(1, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4770,7 +4857,7 @@ describe('createBatch with slot + destinations', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
 
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        if (where.id === 1) return makeAddress(1, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4827,7 +4914,7 @@ describe('createBatch with slot + destinations', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T15:30:00Z'));
 
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        if (where.id === 1) return makeAddress(1, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -5671,5 +5758,479 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         externalDeliveryStatus: 'booked',
       });
     });
+  });
+});
+
+describe('OrdersService.submitRfq', () => {
+  const makeProduct = (
+    id: number,
+    slug: string,
+    specKey: string,
+    overrides: Partial<ProductCategory> = {},
+  ) =>
+    ({
+      id,
+      slug,
+      name: slug === 'flyers' ? 'Flyers' : 'Custom Apparel',
+      description: 'RFQ leaf',
+      groupSlug: slug === 'flyers' ? 'marketing-promo' : 'corporate-merch',
+      groupName: slug === 'flyers' ? 'Marketing' : 'Merchandise',
+      groupDescription: 'Orderable RFQ products',
+      groupSortOrder: slug === 'flyers' ? 1 : 2,
+      pricingModel: PricingModel.QUOTE_REQUIRED,
+      baseRate: 0,
+      isActive: true,
+      fileProcessingType: 'generic_file',
+      maxFileSizeMb: 100,
+      allowedExtensions: ['pdf'],
+      quantityUnit: 'piece',
+      sortOrder: 1,
+      specs: [
+        {
+          id: id * 10,
+          key: specKey,
+          label: `Required ${specKey}`,
+          inputType: InputType.TEXT,
+          valueType: ValueType.STRING,
+          isRequired: true,
+          pricingRole: PricingRole.NONE,
+          defaultValue: null,
+          minValue: null,
+          maxValue: null,
+          stepValue: null,
+          sortOrder: 1,
+          options: [],
+        },
+      ],
+      addons: [],
+      ...overrides,
+    }) as ProductCategory;
+
+  const flyers = makeProduct(11, 'flyers', 'size');
+  const apparel = makeProduct(12, 'custom-apparel', 'variant');
+  const firstItem = () => ({
+    categorySlug: 'flyers',
+    quantity: 100,
+    requiredDate: '2099-12-31',
+    fileMetadataId: 41,
+    specs: { size: 'A5' },
+    specialInstructions: 'Keep crop marks.',
+  });
+  const request = (items = [firstItem()]) => ({
+    items,
+    deliveryOption: 'pickup' as const,
+  });
+
+  const buildHarness = (
+    products = [flyers, apparel],
+    catalogProducts = products,
+  ) => {
+    const durable = {
+      batches: [] as BatchOrder[],
+      orders: [] as Order[],
+      items: [] as OrderItem[],
+      specs: [] as OrderItemSpecValue[],
+      destinations: [] as DeliveryDestination[],
+    };
+    const credits = {
+      subtractCredits: jest.fn(),
+      publishCreditMutation: jest.fn(),
+    };
+    const payments = {
+      assertCodEligibleForCheckout: jest.fn(),
+      ensurePendingCodCollection: jest.fn(),
+    };
+    const slots = { bookSlot: jest.fn(), getAvailability: jest.fn() };
+    const notifications = { create: jest.fn(), createForAllAdmins: jest.fn() };
+    const files = {
+      resolveCatalogArtwork: jest.fn(
+        async (fileId: number, selected: ProductCategory) =>
+          ({
+            id: fileId,
+            url: `https://files/${fileId}.pdf`,
+            originalName: `${selected.slug}-${fileId}.pdf`,
+          }) as FileMetadata,
+      ),
+    };
+    const savedAddresses = new Map<number, Address>([
+      [
+        9,
+        {
+          id: 9,
+          userId: 1,
+          label: 'Home',
+          fullAddress: '9 Main Street',
+          city: 'Davao City',
+          latitude: 7.0731,
+          longitude: 125.6128,
+        } as Address,
+      ],
+    ]);
+    const addressRepo = {
+      findOne: jest.fn(async ({ where }: any) => {
+        const found = savedAddresses.get(Number(where.id));
+        return found?.userId === Number(where.userId) ? found : null;
+      }),
+    };
+    const settings = { isInsideServiceArea: jest.fn().mockResolvedValue(true) };
+    const geoZones = {
+      hasActiveZones: jest.fn().mockResolvedValue(true),
+      getCommerceSettings: jest
+        .fn()
+        .mockResolvedValue({ rejectOutsideZones: true }),
+      matchPoint: jest.fn().mockResolvedValue({
+        inside: true,
+        zone: { id: 5 },
+        deliveryFeeMinor: '4000',
+      }),
+    };
+    const pricing = new CatalogPricingService(
+      {
+        getPublicCatalog: jest.fn().mockResolvedValue({
+          version: '1.10',
+          groups: [],
+          categories: catalogProducts.filter((entry) => entry.isActive),
+        }),
+      } as any,
+      new CatalogValidationService(),
+    );
+    const dataSource = {
+      transaction: jest.fn(async (callback: (manager: any) => Promise<any>) => {
+        const staged = {
+          batches: [] as BatchOrder[],
+          orders: [] as Order[],
+          items: [] as OrderItem[],
+          specs: [] as OrderItemSpecValue[],
+          destinations: [] as DeliveryDestination[],
+        };
+        const repo = <T extends { id?: number }>(
+          target: T[],
+          idBase: number,
+        ) => ({
+          create: jest.fn((data: T) => data),
+          save: jest.fn(async (data: T) => {
+            const saved = { id: idBase + target.length, ...data } as T;
+            target.push(saved);
+            return saved;
+          }),
+        });
+        const repositories: Record<string, any> = {
+          BatchOrder: repo(staged.batches, 77),
+          Order: repo(staged.orders, 101),
+          OrderItem: repo(staged.items, 201),
+          OrderItemSpecValue: repo(staged.specs, 301),
+          DeliveryDestination: repo(staged.destinations, 401),
+          ProductCategory: {
+            findOne: jest.fn(
+              async ({ where }: any) =>
+                products.find(
+                  (entry) =>
+                    entry.id === Number(where.id) && entry.slug === where.slug,
+                ) ?? null,
+            ),
+          },
+          FileMetadata: {},
+        };
+        const result = await callback({
+          query: jest
+            .fn()
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([
+              { max_batch_ref: 10020, max_order_ref: 10030 },
+            ]),
+          getRepository: (entity: { name: string }) =>
+            repositories[entity.name],
+        });
+        durable.batches.push(...staged.batches);
+        durable.orders.push(...staged.orders);
+        durable.items.push(...staged.items);
+        durable.specs.push(...staged.specs);
+        durable.destinations.push(...staged.destinations);
+        return result;
+      }),
+    };
+    const service = Object.create(OrdersService.prototype) as OrdersService;
+    Object.assign(service as any, {
+      dataSource,
+      catalogPricingService: pricing,
+      filesService: files,
+      addressRepo,
+      settingsService: settings,
+      geoZonesService: geoZones,
+      creditsService: credits,
+      paymentsService: payments,
+      slotsService: slots,
+      notificationsService: notifications,
+    });
+    return {
+      service,
+      dataSource,
+      durable,
+      files,
+      credits,
+      payments,
+      slots,
+      notifications,
+      settings,
+      geoZones,
+    };
+  };
+
+  it('creates one pending, nullable-money order with one exact item/spec snapshot', async () => {
+    const harness = buildHarness();
+
+    const result = await harness.service.submitRfq(1, request());
+
+    expect(result.batchId).toBe('BATCH-10021');
+    expect(result.orders).toHaveLength(1);
+    expect(result.orders[0]).toMatchObject({
+      orderId: 'ORD-10031',
+      category: 'flyers',
+      batchOrderId: 77,
+      pricingStatus: PricingStatus.PENDING_QUOTE,
+      totalPrice: null,
+      deliveryFee: null,
+      finalTotalMinor: null,
+      quotedTotalMinor: null,
+      paymentMethod: 'unselected',
+      paymentStatus: 'pending',
+    });
+    expect(result.orders[0].items).toEqual([
+      expect.objectContaining({
+        orderId: 101,
+        categorySlug: 'flyers',
+        totalPrice: null,
+        requiredAt: new Date('2099-12-30T16:00:00.000Z'),
+      }),
+    ]);
+    expect(result.orders[0].items[0].specValues[0]).not.toHaveProperty(
+      'fixedFee',
+    );
+    expect(result.orders[0].items[0].specValues[0]).not.toHaveProperty(
+      'unitCost',
+    );
+    expect(harness.durable.orders[0]).toMatchObject({
+      totalPrice: 0,
+      deliveryFee: 0,
+      finalTotalMinor: null,
+      deliveryFeeMinor: null,
+    });
+    expect(harness.durable.specs).toEqual([
+      expect.objectContaining({
+        orderItemId: 201,
+        specDefinitionId: 110,
+        specKey: 'size',
+        value: 'A5',
+        displayValue: 'A5',
+      }),
+    ]);
+    expect(harness.durable.specs[0]).not.toHaveProperty('fixedFee');
+    expect(harness.files.resolveCatalogArtwork).toHaveBeenCalledWith(
+      41,
+      flyers,
+      1,
+      expect.anything(),
+    );
+  });
+
+  it('creates unlike lines as independent orders in one shared batch with contiguous refs', async () => {
+    const harness = buildHarness();
+    const result = await harness.service.submitRfq(
+      1,
+      request([
+        firstItem(),
+        {
+          categorySlug: 'custom-apparel',
+          quantity: 12,
+          requiredDate: '2099-12-30',
+          fileMetadataId: 42,
+          specs: { variant: 'Large shirt' },
+        },
+      ]),
+    );
+
+    expect(result.orders.map((order) => order.orderId)).toEqual([
+      'ORD-10031',
+      'ORD-10032',
+    ]);
+    expect(result.orders.map((order) => order.category)).toEqual([
+      'flyers',
+      'custom-apparel',
+    ]);
+    expect(new Set(result.orders.map((order) => order.batchOrderId))).toEqual(
+      new Set([77]),
+    );
+    expect(harness.durable.items.map((item) => item.orderId)).toEqual([
+      101, 102,
+    ]);
+  });
+
+  it('stores one authoritative shared delivery fee on the batch and maps each destination', async () => {
+    const harness = buildHarness();
+    const result = await harness.service.submitRfq(1, {
+      ...request([
+        { ...firstItem(), destinationIndex: 0 },
+        {
+          ...firstItem(),
+          quantity: 200,
+          fileMetadataId: 41,
+          destinationIndex: 1,
+        },
+      ]),
+      deliveryOption: 'delivery' as const,
+      destinations: [
+        { addressId: 9, label: 'Home drop' },
+        {
+          label: 'Event booth',
+          address: {
+            fullAddress: 'SMX Booth A12',
+            city: 'Davao City',
+            latitude: 7.09,
+            longitude: 125.63,
+          },
+        },
+      ],
+    });
+
+    expect(harness.durable.batches[0]).toMatchObject({
+      subtotal: 0,
+      deliveryFee: 42,
+      totalPrice: 0,
+      priorityFee: 0,
+      extraDestinationFee: 0,
+      slotBookingId: null,
+    });
+    expect(harness.durable.orders.map((order) => order.deliveryFee)).toEqual([
+      0, 0,
+    ]);
+    expect(harness.durable.items.map((item) => item.destinationId)).toEqual([
+      401, 402,
+    ]);
+    expect(result.orders.map((order) => order.destinationId)).toEqual([
+      401, 402,
+    ]);
+  });
+
+  it('does not invoke payment, credit, COD, slot, or production notification side effects', async () => {
+    const harness = buildHarness();
+
+    await harness.service.submitRfq(1, request());
+
+    expect(harness.credits.subtractCredits).not.toHaveBeenCalled();
+    expect(
+      harness.payments.assertCodEligibleForCheckout,
+    ).not.toHaveBeenCalled();
+    expect(harness.payments.ensurePendingCodCollection).not.toHaveBeenCalled();
+    expect(harness.slots.bookSlot).not.toHaveBeenCalled();
+    expect(harness.slots.getAvailability).not.toHaveBeenCalled();
+    expect(harness.notifications.create).not.toHaveBeenCalled();
+    expect(harness.notifications.createForAllAdmins).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['foreign', 'Invalid catalog artwork reference'],
+    ['wrong-product', 'Invalid catalog artwork reference'],
+    ['missing', 'Invalid catalog artwork reference'],
+    ['non-stored', 'Catalog artwork storage object not found'],
+  ])('rejects %s artwork before a durable write', async (_case, message) => {
+    const harness = buildHarness();
+    harness.files.resolveCatalogArtwork.mockRejectedValueOnce(
+      new BadRequestException(message),
+    );
+
+    await expect(harness.service.submitRfq(1, request())).rejects.toThrow(
+      message,
+    );
+    expect(harness.durable.batches).toEqual([]);
+    expect(harness.durable.orders).toEqual([]);
+  });
+
+  it('rolls back when the second line fails and permits same-product file reuse', async () => {
+    const failing = buildHarness();
+    failing.files.resolveCatalogArtwork
+      .mockResolvedValueOnce({ id: 41 } as FileMetadata)
+      .mockRejectedValueOnce(
+        new BadRequestException('Invalid catalog artwork reference'),
+      );
+    await expect(
+      failing.service.submitRfq(
+        1,
+        request([firstItem(), { ...firstItem(), quantity: 200 }]),
+      ),
+    ).rejects.toThrow('Invalid catalog artwork reference');
+    expect(failing.durable).toEqual({
+      batches: [],
+      orders: [],
+      items: [],
+      specs: [],
+      destinations: [],
+    });
+
+    const reusable = buildHarness();
+    await expect(
+      reusable.service.submitRfq(
+        1,
+        request([firstItem(), { ...firstItem(), quantity: 200 }]),
+      ),
+    ).resolves.toMatchObject({
+      orders: [{ category: 'flyers' }, { category: 'flyers' }],
+    });
+  });
+
+  it('rejects inactive products, missing specs, past dates, zero quantity, and delivery without an address', async () => {
+    const inactive = buildHarness([
+      makeProduct(11, 'flyers', 'size', { isActive: false }),
+    ]);
+    await expect(
+      inactive.service.submitRfq(1, request()),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CATEGORY_INACTIVE' }),
+    });
+
+    const invalidRequests = [
+      request([{ ...firstItem(), specs: {} }]),
+      request([{ ...firstItem(), requiredDate: '2020-01-01' }]),
+      request([{ ...firstItem(), requiredDate: '2099-02-29' }]),
+      request([{ ...firstItem(), quantity: 0 }]),
+      { ...request(), deliveryOption: 'delivery' as const },
+      {
+        ...request(),
+        deliveryOption: 'delivery' as const,
+        deliveryAddressId: 999,
+      },
+    ];
+    for (const dto of invalidRequests) {
+      const harness = buildHarness();
+      await expect(harness.service.submitRfq(1, dto)).rejects.toBeDefined();
+      expect(harness.durable.orders).toEqual([]);
+    }
+  });
+
+  it('rejects an address outside the configured delivery zones before opening a transaction', async () => {
+    const harness = buildHarness();
+    harness.settings.isInsideServiceArea.mockResolvedValueOnce(false);
+
+    await expect(
+      harness.service.submitRfq(1, {
+        ...request(),
+        deliveryOption: 'delivery',
+        deliveryAddressId: 9,
+      }),
+    ).rejects.toBeInstanceOf(ServiceAreaMismatchException);
+    expect(harness.dataSource.transaction).not.toHaveBeenCalled();
+    expect(harness.durable.orders).toEqual([]);
+  });
+
+  it('revalidates specifications against the locked transaction product', async () => {
+    const changedFlyers = makeProduct(11, 'flyers', 'new_size');
+    const harness = buildHarness([changedFlyers], [flyers]);
+
+    await expect(harness.service.submitRfq(1, request())).rejects.toMatchObject(
+      {
+        response: expect.objectContaining({ code: 'SPEC_REQUIRED' }),
+      },
+    );
+    expect(harness.files.resolveCatalogArtwork).not.toHaveBeenCalled();
+    expect(harness.durable.orders).toEqual([]);
   });
 });
