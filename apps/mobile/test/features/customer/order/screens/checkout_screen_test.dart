@@ -137,6 +137,45 @@ void main() {
     expect(receivedPayload?.createdOrders.single.id, 'batch-alpha');
     expect(container.read(checkoutProvider).items, isEmpty);
   });
+
+  testWidgets('RFQ review hides payment, speed, and numeric totals', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = ProviderContainer(
+      overrides: [
+        dioProvider.overrideWithValue(MockDio()),
+        webSocketServiceProvider.overrideWithValue(MockWebSocketService()),
+        ordersProvider.overrideWith((_) => _CheckoutOrdersNotifier(const [])),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(checkoutProvider.notifier)
+      ..addItem(_rfqItem())
+      ..setMode(DeliveryMode.pickup);
+    final router = GoRouter(
+      routes: [GoRoute(path: '/', builder: (_, _) => const CheckoutScreen())],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Price and turnaround pending review'), findsWidgets);
+    expect(find.text('Stock / material: Matte'), findsOneWidget);
+    expect(find.text('Payment method'), findsNothing);
+    expect(find.text('Delivery options'), findsNothing);
+    expect(find.text('Payment details'), findsNothing);
+    expect(find.textContaining('₱0'), findsNothing);
+    expect(find.text('Submit quote request'), findsOneWidget);
+  });
 }
 
 class _CheckoutOrdersNotifier extends OrdersNotifier {
@@ -146,7 +185,27 @@ class _CheckoutOrdersNotifier extends OrdersNotifier {
 
   @override
   Future<List<Order>> placeCheckout(CheckoutState state) async => createdOrders;
+
+  @override
+  Future<List<Order>> submitRfq(CheckoutState state) async => createdOrders;
 }
+
+CartItem _rfqItem() => CartItem(
+  id: 'rfq',
+  category: 'flyers',
+  categoryName: 'Flyers',
+  productSlug: 'flyers',
+  quoteRequired: true,
+  requiredDate: DateTime(2099, 12, 31),
+  catalogServerBacked: true,
+  fileName: 'art.pdf',
+  fileMetadataId: 41,
+  specs: const {'stock': 'matte'},
+  specDisplayValues: const {'stock': 'Matte'},
+  quantity: 100,
+  pageCount: 1,
+  createdAt: DateTime(2026),
+);
 
 CartItem _cartItem() => CartItem(
   id: 'a',

@@ -9,7 +9,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import 'package:uuid/uuid.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
@@ -46,6 +45,33 @@ bool isUploadedFileReady({
       fileMetadataId > 0 &&
       !isUploading &&
       errorText == null;
+}
+
+Map<String, String> catalogUploadFields({
+  required String? productSlug,
+  required bool catalogServerBacked,
+}) {
+  if (productSlug == null || productSlug.trim().isEmpty) {
+    return const {};
+  }
+  return {'purpose': 'catalog_artwork', 'productSlug': productSlug.trim()};
+}
+
+bool canContinueCatalogUpload({
+  required String? productSlug,
+  required bool catalogServerBacked,
+  required String? fileName,
+  required int? fileMetadataId,
+  required bool isUploading,
+  required String? errorText,
+}) {
+  if (productSlug != null && !catalogServerBacked) return false;
+  return isUploadedFileReady(
+    fileName: fileName,
+    fileMetadataId: fileMetadataId,
+    isUploading: isUploading,
+    errorText: errorText,
+  );
 }
 
 /// Step 3/6 -- File upload with real Dio progress.
@@ -383,7 +409,15 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         return;
       }
 
-      final formData = FormData.fromMap({'file': multipartFile});
+      final flow = ref.read(orderFlowProvider);
+      final catalogState = ref.read(productCatalogProvider);
+      final formData = FormData.fromMap({
+        'file': multipartFile,
+        ...catalogUploadFields(
+          productSlug: flow.productSlug,
+          catalogServerBacked: catalogState.canSubmit,
+        ),
+      });
       final response = await ApiClient.instance.dio.post(
         '/files/upload',
         data: formData,
@@ -479,26 +513,34 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
           _isUploading = false;
           _uploadProgress = 0;
           _errorText = message;
-          _fileName = null;
-          _fileSize = null;
-          _fileBytes = null;
           _fileMetadataId = null;
         });
       }
     }
   }
 
-  bool get _canContinue =>
-      !_isBetaDemo3dUploadActive &&
-      isUploadedFileReady(
-        fileName: _fileName,
-        fileMetadataId: _fileMetadataId,
-        isUploading: _isUploading,
-        errorText: _errorText,
-      );
+  bool get _canContinue {
+    final flow = ref.read(orderFlowProvider);
+    final catalogState = ref.read(productCatalogProvider);
+    final currentProduct = catalogState.catalog.productBySlug(flow.productSlug);
+    return !_isBetaDemo3dUploadActive &&
+        canContinueCatalogUpload(
+          productSlug: flow.productSlug,
+          catalogServerBacked:
+              flow.productSlug == null ||
+              (flow.catalogServerBacked &&
+                  catalogState.canSubmit &&
+                  currentProduct?.isActive == true),
+          fileName: _fileName,
+          fileMetadataId: _fileMetadataId,
+          isUploading: _isUploading,
+          errorText: _errorText,
+        );
+  }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(productCatalogProvider);
     final colors = _colors(context);
     final category = ref.watch(orderFlowProvider).category;
     final betaStatus = ref.watch(betaStatusProvider).valueOrNull;
@@ -802,24 +844,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
 
   void _appendToCheckoutAndNavigate() {
     final flow = ref.read(orderFlowProvider);
-    final item = CartItem(
-      id: const Uuid().v4(),
-      category: flow.category!,
-      categoryName: flow.categoryName,
-      fileName: flow.fileName!,
-      filePath: flow.filePath,
-      fileSize: flow.fileSize,
-      fileMetadataId: flow.fileMetadataId!,
-      specs: flow.specs,
-      specDisplayValues: flow.specDisplayValues,
-      paperSpecs: flow.category == 'paper' ? flow.paperSpecs : null,
-      threeDSpecs: flow.category == '3d' ? flow.threeDSpecs : null,
-      quantity: flow.quantity,
-      pageCount: flow.pageCount,
-      printSubtotal: flow.totalPrice,
-      specialInstructions: flow.specialInstructions,
-      createdAt: DateTime.now(),
-    );
+    final item = CartItem.fromOrderFlow(flow);
     ref.read(checkoutProvider.notifier).addItem(item);
     // Reset the in-flight order draft so navigating back to Upload
     // does not re-add the same item on a second Continue tap.

@@ -41,6 +41,12 @@ class OrderFlowState {
     this.currentStep = 0,
     this.category,
     this.categoryName,
+    this.groupSlug,
+    this.productSlug,
+    this.productName,
+    this.requiredDate,
+    this.quoteRequired = false,
+    this.catalogServerBacked = false,
     this.specs = const {},
     this.specDisplayValues = const {},
     this.paperSpecs,
@@ -66,6 +72,12 @@ class OrderFlowState {
   /// Either `'paper'` or `'3d'`.
   final String? category;
   final String? categoryName;
+  final String? groupSlug;
+  final String? productSlug;
+  final String? productName;
+  final DateTime? requiredDate;
+  final bool quoteRequired;
+  final bool catalogServerBacked;
 
   /// Dynamic catalog spec values keyed by `product_spec_definitions.key`.
   final Map<String, dynamic> specs;
@@ -105,6 +117,12 @@ class OrderFlowState {
     int? currentStep,
     String? category,
     String? categoryName,
+    String? groupSlug,
+    String? productSlug,
+    String? productName,
+    DateTime? requiredDate,
+    bool? quoteRequired,
+    bool? catalogServerBacked,
     Map<String, dynamic>? specs,
     Map<String, String>? specDisplayValues,
     PaperSpecs? paperSpecs,
@@ -135,6 +153,12 @@ class OrderFlowState {
       currentStep: currentStep ?? this.currentStep,
       category: category ?? this.category,
       categoryName: categoryName ?? this.categoryName,
+      groupSlug: groupSlug ?? this.groupSlug,
+      productSlug: productSlug ?? this.productSlug,
+      productName: productName ?? this.productName,
+      requiredDate: requiredDate ?? this.requiredDate,
+      quoteRequired: quoteRequired ?? this.quoteRequired,
+      catalogServerBacked: catalogServerBacked ?? this.catalogServerBacked,
       specs: clearSpecs ? const {} : (specs ?? this.specs),
       specDisplayValues: clearSpecs
           ? const {}
@@ -171,6 +195,12 @@ class OrderFlowState {
       'currentStep': currentStep,
       'category': category,
       'categoryName': categoryName,
+      'groupSlug': groupSlug,
+      'productSlug': productSlug,
+      'productName': productName,
+      'requiredDate': requiredDate?.toIso8601String(),
+      'quoteRequired': quoteRequired,
+      'catalogServerBacked': catalogServerBacked,
       'specs': specs,
       'specDisplayValues': specDisplayValues,
       'paperSpecs': paperSpecs != null
@@ -296,6 +326,12 @@ class OrderFlowState {
       currentStep: map['currentStep'] as int? ?? 0,
       category: map['category'] as String?,
       categoryName: map['categoryName'] as String?,
+      groupSlug: map['groupSlug'] as String?,
+      productSlug: map['productSlug'] as String?,
+      productName: map['productName'] as String?,
+      requiredDate: DateTime.tryParse(map['requiredDate']?.toString() ?? ''),
+      quoteRequired: map['quoteRequired'] as bool? ?? false,
+      catalogServerBacked: map['catalogServerBacked'] as bool? ?? false,
       specs: _readStringKeyedMap(map['specs']),
       specDisplayValues: _readStringMap(map['specDisplayValues']),
       paperSpecs: paperSpecs,
@@ -324,9 +360,13 @@ class OrderFlowState {
 
 /// Manages order flow progression and state mutations.
 class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
-  OrderFlowNotifier() : super(const OrderFlowState()) {
-    _loadDraft();
+  OrderFlowNotifier({bool persistDraft = true})
+    : _persistDraft = persistDraft,
+      super(const OrderFlowState()) {
+    if (_persistDraft) _loadDraft();
   }
+
+  final bool _persistDraft;
 
   void _loadDraft() {
     final data = DraftStorageService.loadDraft();
@@ -336,6 +376,7 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
   }
 
   void _saveDraft() {
+    if (!_persistDraft) return;
     DraftStorageService.saveDraft(state.toMap());
   }
 
@@ -349,6 +390,37 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
       clearFile: true,
       clearSpecialInstructions: true,
       printMode: 'fitToPage',
+    );
+    _saveDraft();
+  }
+
+  void setCatalogProduct({
+    required String groupSlug,
+    required String productSlug,
+    required String productName,
+    required DateTime requiredDate,
+    required bool quoteRequired,
+    required bool catalogServerBacked,
+    required int quantity,
+    required Map<String, dynamic> specs,
+    required Map<String, String> displayValues,
+    String? notes,
+  }) {
+    state = state.copyWith(
+      category: productSlug,
+      categoryName: productName,
+      groupSlug: groupSlug,
+      productSlug: productSlug,
+      productName: productName,
+      requiredDate: requiredDate,
+      quoteRequired: quoteRequired,
+      catalogServerBacked: catalogServerBacked,
+      quantity: quantity,
+      specs: Map<String, dynamic>.unmodifiable(specs),
+      specDisplayValues: Map<String, String>.unmodifiable(displayValues),
+      specialInstructions: _normalizeOptionalText(notes),
+      clearPaperSpecs: true,
+      clearThreeDSpecs: true,
     );
     _saveDraft();
   }
@@ -526,7 +598,7 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
 
   void reset() {
     state = const OrderFlowState();
-    DraftStorageService.clearDraft();
+    if (_persistDraft) DraftStorageService.clearDraft();
   }
 
   void _recalculatePrice() {

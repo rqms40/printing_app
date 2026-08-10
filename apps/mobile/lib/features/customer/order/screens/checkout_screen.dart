@@ -16,6 +16,7 @@ import 'package:printing_app/features/customer/order/widgets/checkout_items_card
 import 'package:printing_app/features/customer/order/widgets/checkout_payment_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_speed_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_summary_card.dart';
+import 'package:printing_app/features/customer/order/widgets/rfq_review_card.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
@@ -308,6 +309,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final divider = Container(height: 8, color: colors.background);
 
     final isEmpty = state.items.isEmpty;
+    final isRfq = state.hasPendingQuoteItems;
 
     return Scaffold(
       backgroundColor: colors.surface,
@@ -361,11 +363,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     multiDropTabKey: _multiDropTabKey,
                   ),
                   divider,
-                  const CheckoutSpeedCard(),
-                  divider,
-                  CheckoutPaymentCard(methodPickerKey: _paymentMethodKey),
-                  divider,
-                  const CheckoutSummaryCard(),
+                  if (isRfq)
+                    const RfqReviewCard()
+                  else ...[
+                    const CheckoutSpeedCard(),
+                    divider,
+                    CheckoutPaymentCard(methodPickerKey: _paymentMethodKey),
+                    divider,
+                    const CheckoutSummaryCard(),
+                  ],
                   const SizedBox(height: 8),
                 ],
               ),
@@ -388,7 +394,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     final notifier = ref.read(ordersProvider.notifier);
     try {
-      final placed = await notifier.placeCheckout(ref.read(checkoutProvider));
+      final checkout = ref.read(checkoutProvider);
+      final placed = checkout.hasPendingQuoteItems
+          ? await notifier.submitRfq(checkout)
+          : await notifier.placeCheckout(checkout);
       ref.read(checkoutProvider.notifier).reset();
       if (!context.mounted) return;
       context.go(

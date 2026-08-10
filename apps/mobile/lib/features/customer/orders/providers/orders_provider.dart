@@ -8,6 +8,7 @@ import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
+import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
@@ -792,6 +793,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     this.onInitialLoadComplete,
     this.onInitialLoadResult,
     bool? realFlow,
+    this.canSubmitCatalogRfq,
   }) : realFlow = realFlow ?? AppConstants.realFlow,
        super(initialState) {
     if (!skipBootstrap) {
@@ -804,6 +806,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   final VoidCallback? onInitialLoadComplete;
   final ValueChanged<bool>? onInitialLoadResult;
   final bool realFlow;
+  final bool Function()? canSubmitCatalogRfq;
   String? errorMessage;
   VoidCallback? _removeOrderUpdateListener;
   VoidCallback? _removeDeliveryQueueListener;
@@ -1236,6 +1239,93 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     );
   }
 
+  Future<List<Order>> submitRfq(CheckoutState checkout) async {
+    if (canSubmitCatalogRfq != null && !canSubmitCatalogRfq!()) {
+      throw StateError('Refresh the catalog before submitting this request.');
+    }
+    if (checkout.items.isEmpty) throw StateError('RFQ cart is empty');
+    if (checkout.hasMixedPricingModes) {
+      throw StateError(
+        'Quoted requests and priced orders must be submitted separately.',
+      );
+    }
+    if (!checkout.hasPendingQuoteItems) {
+      throw StateError('RFQ cart requires quote-request items');
+    }
+
+    final items = <Map<String, dynamic>>[];
+    for (final item in checkout.items) {
+      final slug = item.productSlug?.trim();
+      final requiredDate = item.requiredDate;
+      if (!item.catalogServerBacked) {
+        throw StateError('Refresh the catalog before submitting this request.');
+      }
+      if (slug == null || slug.isEmpty || item.quantity < 1) {
+        throw StateError('Each request needs an active product and quantity.');
+      }
+      if (requiredDate == null || !requiredDate.isAfter(DateTime.now())) {
+        throw StateError('Each request needs a future required date.');
+      }
+      if (item.fileMetadataId <= 0 || item.specs.isEmpty) {
+        throw StateError('Each request needs specifications and artwork.');
+      }
+      items.add({
+        'categorySlug': slug,
+        'quantity': item.quantity,
+        'requiredDate': _isoDateOnly(requiredDate),
+        'fileMetadataId': item.fileMetadataId,
+        'specs': item.specs,
+        if (item.specialInstructions?.trim().isNotEmpty ?? false)
+          'specialInstructions': item.specialInstructions!.trim(),
+      });
+    }
+
+    final body = <String, dynamic>{
+      'items': items,
+      'deliveryOption': checkout.mode == DeliveryMode.pickup
+          ? 'pickup'
+          : 'delivery',
+    };
+    if (checkout.mode == DeliveryMode.delivery) {
+      final temporaryAddress = checkout.temporaryAddress;
+      final addressId = _deliveryAddressIdValue(checkout.singleAddress?.id);
+      if (temporaryAddress?.isValid ?? false) {
+        body['temporaryAddress'] = temporaryAddress!.toJson();
+      } else if (addressId != null) {
+        body['deliveryAddressId'] = addressId;
+      } else {
+        throw StateError('A delivery address is required for RFQ submission.');
+      }
+    } else if (checkout.mode == DeliveryMode.multidrop) {
+      throw StateError(
+        'Submit RFQ items to one delivery destination at a time.',
+      );
+    }
+
+    final sessionGeneration = _sessionGeneration;
+    final response = await ApiClient.instance.post(
+      '/orders/requests/batch',
+      data: body,
+    );
+    final data = Map<String, dynamic>.from(response.data as Map);
+    final batchId = data['batchId']?.toString();
+    final rawOrders = data['orders'] as List<dynamic>? ?? const [];
+    final created = _groupBatchOrders(
+      rawOrders.map((raw) {
+        final json = Map<String, dynamic>.from(raw as Map);
+        if (batchId?.isNotEmpty ?? false) json['batchId'] = batchId;
+        return _parseOrder(json);
+      }).toList(),
+    );
+    if (_isCurrentSession(sessionGeneration)) {
+      state = [...created, ...state];
+      for (final order in created) {
+        WebSocketService.instance.subscribeToOrder(order.orderId);
+      }
+    }
+    return created;
+  }
+
   /// Cancel an order if it is in a cancellable status.
   Future<void> cancelOrder(String orderId) async {
     // Optimistic local update so the UI responds immediately
@@ -1360,10 +1450,14 @@ int? _deliveryAddressIdValue(String? id) {
   return int.tryParse(id);
 }
 
+String _isoDateOnly(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
 final ordersProvider = StateNotifierProvider<OrdersNotifier, List<Order>>((
   ref,
 ) {
   return OrdersNotifier(
+    canSubmitCatalogRfq: () => ref.read(productCatalogProvider).canSubmit,
     onCompletionUpdate: () => ref.read(accountStateProvider.notifier).refresh(),
     onInitialLoadComplete: () {
       ref.read(ordersInitialLoadCompleteProvider.notifier).state = true;

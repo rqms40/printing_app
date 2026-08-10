@@ -66,13 +66,15 @@ class CheckoutItemsCard extends ConsumerWidget {
               child: _ItemRow(
                 item: state.items[i],
                 colors: colors,
-                onEdit: () async {
-                  final updated = await EditItemSheet.show(
-                    context,
-                    item: state.items[i],
-                  );
-                  if (updated != null) notifier.replaceItem(updated);
-                },
+                onEdit: state.items[i].quoteRequired
+                    ? null
+                    : () async {
+                        final updated = await EditItemSheet.show(
+                          context,
+                          item: state.items[i],
+                        );
+                        if (updated != null) notifier.replaceItem(updated);
+                      },
                 onView: state.items[i].fileMetadataId > 0
                     ? () => _viewItem(context, state.items[i])
                     : null,
@@ -141,7 +143,7 @@ class _ItemRow extends StatelessWidget {
 
   final CartItem item;
   final AppColorSet colors;
-  final VoidCallback onEdit;
+  final VoidCallback? onEdit;
   final VoidCallback? onView;
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
@@ -149,7 +151,13 @@ class _ItemRow extends StatelessWidget {
   String _specSummary() {
     if (item.category == 'paper') return _paperSpecSummary();
     if (item.category == '3d') return _threeDSpecSummary();
-    return item.category == 'paper' ? 'Paper' : '3D';
+    final values = item.specDisplayValues.values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+    return values.isEmpty
+        ? (item.categoryName ?? item.category)
+        : values.join(' · ');
   }
 
   String _paperSpecSummary() {
@@ -257,7 +265,9 @@ class _ItemRow extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
-                      formatCurrency(item.printSubtotal),
+                      item.printSubtotal == null
+                          ? 'Price pending review'
+                          : formatCurrency(item.printSubtotal!),
                       style: AppTypography.bodyBold.copyWith(
                         color: colors.brand,
                         fontSize: 13,

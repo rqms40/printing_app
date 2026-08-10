@@ -31,7 +31,8 @@ void main() {
     captured = null;
     iw = InterceptorsWrapper(
       onRequest: (options, handler) {
-        if (options.path == '/orders/batch') {
+        if (options.path == '/orders/batch' ||
+            options.path == '/orders/requests/batch') {
           captured = Map<String, dynamic>.from(options.data as Map);
           handler.resolve(
             Response(
@@ -89,6 +90,101 @@ void main() {
     expect(captured?['deliveryOption'], 'delivery');
     // Server's whitelist DTO rejects `priority`, so the field must NOT be sent.
     expect(captured?.containsKey('priority'), isFalse);
+  });
+
+  test('submitRfq posts exact pending-price DTO without fake totals', () async {
+    final container = ProviderContainer(
+      overrides: [
+        ordersProvider.overrideWith(
+          (ref) => OrdersNotifier(initialState: const [], skipBootstrap: true),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final state = CheckoutState(
+      mode: DeliveryMode.delivery,
+      singleAddress: _address('9'),
+      items: [
+        CartItem(
+          id: 'rfq',
+          category: 'flyers',
+          categoryName: 'Flyers',
+          productSlug: 'flyers',
+          quoteRequired: true,
+          requiredDate: DateTime(2099, 12, 31),
+          catalogServerBacked: true,
+          fileName: 'flyer.pdf',
+          fileMetadataId: 41,
+          specs: const {'stock': 'matte', 'sides': 2},
+          quantity: 100,
+          pageCount: 1,
+          specialInstructions: 'Trim carefully',
+          createdAt: DateTime(2026),
+        ),
+      ],
+    );
+
+    await container.read(ordersProvider.notifier).submitRfq(state);
+
+    expect(captured, {
+      'items': [
+        {
+          'categorySlug': 'flyers',
+          'quantity': 100,
+          'requiredDate': '2099-12-31',
+          'fileMetadataId': 41,
+          'specs': {'stock': 'matte', 'sides': 2},
+          'specialInstructions': 'Trim carefully',
+        },
+      ],
+      'deliveryOption': 'delivery',
+      'deliveryAddressId': 9,
+    });
+    expect(captured?.toString(), isNot(contains('totalPrice')));
+    expect(captured?.toString(), isNot(contains('paymentMethod')));
+  });
+
+  test('submitRfq fails closed without current catalog authority', () async {
+    final container = ProviderContainer(
+      overrides: [
+        ordersProvider.overrideWith(
+          (ref) => OrdersNotifier(
+            initialState: const [],
+            skipBootstrap: true,
+            canSubmitCatalogRfq: () => false,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await expectLater(
+      container
+          .read(ordersProvider.notifier)
+          .submitRfq(
+            CheckoutState(
+              mode: DeliveryMode.pickup,
+              items: [
+                CartItem(
+                  id: 'rfq',
+                  category: 'flyers',
+                  productSlug: 'flyers',
+                  quoteRequired: true,
+                  requiredDate: DateTime(2099, 12, 31),
+                  catalogServerBacked: true,
+                  fileName: 'art.pdf',
+                  fileMetadataId: 4,
+                  specs: const {'stock': 'matte'},
+                  quantity: 1,
+                  pageCount: 1,
+                  createdAt: DateTime(2026),
+                ),
+              ],
+            ),
+          ),
+      throwsA(isA<StateError>()),
+    );
+    expect(captured, isNull);
   });
 
   test('placeCheckout omits stale scheduled slot for standard tier', () async {

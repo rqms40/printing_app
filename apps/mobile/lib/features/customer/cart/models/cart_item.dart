@@ -8,6 +8,10 @@ class CartItem {
     required this.id,
     required this.category,
     this.categoryName,
+    this.productSlug,
+    this.quoteRequired = false,
+    this.requiredDate,
+    this.catalogServerBacked = false,
     required this.fileName,
     this.filePath,
     this.fileSize,
@@ -23,17 +27,27 @@ class CartItem {
     this.specialInstructions,
     required this.createdAt,
   }) : assert(
-         unitPrice != null || printSubtotal != null,
-         'CartItem requires either unitPrice or printSubtotal.',
+         quoteRequired
+             ? unitPrice == null && printSubtotal == null
+             : unitPrice != null || printSubtotal != null,
+         'Priced items require a price; RFQ items must not have one.',
        ),
        quantity = _normalizeQuantity(quantity),
        specs = Map<String, dynamic>.unmodifiable(specs),
        specDisplayValues = Map<String, String>.unmodifiable(specDisplayValues),
-       unitPrice = unitPrice ?? printSubtotal! / _normalizeQuantity(quantity);
+       unitPrice =
+           unitPrice ??
+           (printSubtotal == null
+               ? null
+               : printSubtotal / _normalizeQuantity(quantity));
 
   final String id;
   final String category;
   final String? categoryName;
+  final String? productSlug;
+  final bool quoteRequired;
+  final DateTime? requiredDate;
+  final bool catalogServerBacked;
   final String fileName;
   final String? filePath;
   final int? fileSize;
@@ -44,11 +58,11 @@ class CartItem {
   final ThreeDSpecs? threeDSpecs;
   final int quantity;
   final int pageCount;
-  final double unitPrice;
+  final double? unitPrice;
   final String? specialInstructions;
   final DateTime createdAt;
 
-  double get printSubtotal => unitPrice * quantity;
+  double? get printSubtotal => unitPrice == null ? null : unitPrice! * quantity;
 
   factory CartItem.fromOrderFlow(OrderFlowState flow) {
     _validateOrderFlow(flow);
@@ -57,6 +71,10 @@ class CartItem {
       id: _newCartItemId(flow),
       category: flow.category!,
       categoryName: flow.categoryName,
+      productSlug: flow.productSlug,
+      quoteRequired: flow.quoteRequired,
+      requiredDate: flow.requiredDate,
+      catalogServerBacked: flow.catalogServerBacked,
       fileName: flow.fileName!.trim(),
       filePath: flow.filePath,
       fileSize: flow.fileSize,
@@ -67,7 +85,7 @@ class CartItem {
       threeDSpecs: flow.category == '3d' ? flow.threeDSpecs : null,
       quantity: flow.quantity,
       pageCount: flow.pageCount,
-      unitPrice: flow.totalPrice / flow.quantity,
+      unitPrice: flow.quoteRequired ? null : flow.totalPrice / flow.quantity,
       specialInstructions: flow.specialInstructions,
       createdAt: DateTime.now(),
     );
@@ -75,12 +93,16 @@ class CartItem {
 
   factory CartItem.fromMap(Map<String, dynamic> map) {
     final quantity = _normalizeQuantity((map['quantity'] as num?)?.toInt());
-    final legacySubtotal = (map['printSubtotal'] as num?)?.toDouble() ?? 0;
+    final legacySubtotal = (map['printSubtotal'] as num?)?.toDouble();
 
     return CartItem(
       id: map['id']?.toString() ?? _newFallbackId(),
       category: map['category']?.toString() ?? '',
       categoryName: map['categoryName']?.toString(),
+      productSlug: map['productSlug']?.toString(),
+      quoteRequired: map['quoteRequired'] as bool? ?? false,
+      requiredDate: DateTime.tryParse(map['requiredDate']?.toString() ?? ''),
+      catalogServerBacked: map['catalogServerBacked'] as bool? ?? false,
       fileName: map['fileName']?.toString() ?? '',
       filePath: map['filePath']?.toString(),
       fileSize: (map['fileSize'] as num?)?.toInt(),
@@ -92,7 +114,8 @@ class CartItem {
       quantity: quantity,
       pageCount: (map['pageCount'] as num?)?.toInt() ?? 1,
       unitPrice:
-          (map['unitPrice'] as num?)?.toDouble() ?? legacySubtotal / quantity,
+          (map['unitPrice'] as num?)?.toDouble() ??
+          (legacySubtotal == null ? null : legacySubtotal / quantity),
       specialInstructions: _normalizeOptionalText(
         map['specialInstructions']?.toString(),
       ),
@@ -107,6 +130,10 @@ class CartItem {
       'id': id,
       'category': category,
       'categoryName': categoryName,
+      'productSlug': productSlug,
+      'quoteRequired': quoteRequired,
+      'requiredDate': requiredDate?.toIso8601String(),
+      'catalogServerBacked': catalogServerBacked,
       'fileName': fileName,
       'filePath': filePath,
       'fileSize': fileSize,
@@ -135,8 +162,8 @@ class CartItem {
             },
       'quantity': quantity,
       'pageCount': pageCount,
-      'unitPrice': unitPrice,
-      'printSubtotal': printSubtotal,
+      if (unitPrice != null) 'unitPrice': unitPrice,
+      if (printSubtotal != null) 'printSubtotal': printSubtotal,
       'specialInstructions': specialInstructions,
       'createdAt': createdAt.toIso8601String(),
     };
@@ -162,6 +189,10 @@ class CartItem {
       id: id,
       category: category,
       categoryName: categoryName ?? this.categoryName,
+      productSlug: productSlug,
+      quoteRequired: quoteRequired,
+      requiredDate: requiredDate,
+      catalogServerBacked: catalogServerBacked,
       fileName: fileName ?? this.fileName,
       filePath: filePath ?? this.filePath,
       fileSize: fileSize ?? this.fileSize,
@@ -183,7 +214,23 @@ class CartItem {
 
 void _validateOrderFlow(OrderFlowState flow) {
   final category = flow.category;
-  if (category != 'paper' && category != '3d') {
+  if (flow.quoteRequired) {
+    if (flow.productSlug == null || flow.productSlug!.trim().isEmpty) {
+      throw ArgumentError('RFQ cart items require an active product.');
+    }
+    if (!flow.catalogServerBacked) {
+      throw ArgumentError(
+        'RFQ submission requires the current server catalog.',
+      );
+    }
+    if (flow.requiredDate == null ||
+        !flow.requiredDate!.isAfter(DateTime.now())) {
+      throw ArgumentError('RFQ cart items require a future date.');
+    }
+    if (flow.specs.isEmpty) {
+      throw ArgumentError('RFQ cart items require specifications.');
+    }
+  } else if (category != 'paper' && category != '3d') {
     throw ArgumentError('Cart item requires a paper or 3D category.');
   }
 
@@ -207,7 +254,7 @@ void _validateOrderFlow(OrderFlowState flow) {
     throw ArgumentError('Cart item quantity must be positive.');
   }
 
-  if (flow.totalPrice <= 0) {
+  if (!flow.quoteRequired && flow.totalPrice <= 0) {
     throw ArgumentError('Cart item subtotal must be positive.');
   }
 }

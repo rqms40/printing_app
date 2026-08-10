@@ -54,4 +54,29 @@ void main() {
       );
     });
   });
+
+  test('catalog upload is product-bound and authority gated', () {
+    expect(
+      catalogUploadFields(
+        productSlug: '3d-printing-scale-models',
+        catalogServerBacked: true,
+      ),
+      {'purpose': 'catalog_artwork', 'productSlug': '3d-printing-scale-models'},
+    );
+    expect(
+      catalogUploadFields(productSlug: 'flyers', catalogServerBacked: false),
+      {'purpose': 'catalog_artwork', 'productSlug': 'flyers'},
+    );
+    expect(
+      canContinueCatalogUpload(
+        productSlug: 'flyers',
+        catalogServerBacked: false,
+        fileName: 'art.pdf',
+        fileMetadataId: 4,
+        isUploading: false,
+        errorText: null,
+      ),
+      isFalse,
+    );
+  });
 }

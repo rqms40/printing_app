@@ -212,10 +212,9 @@ final checkoutFeesProvider = Provider<CheckoutFees>((ref) {
   final extraDrops = state.drops.length > 1 ? state.drops.length - 1 : 0;
   final isPickup = state.mode == DeliveryMode.pickup;
   return CheckoutFees(
-    subtotal: state.subtotal,
+    subtotal: state.subtotal ?? 0,
     deliveryFee: isPickup ? 0 : _deliveryFeeForTier(state.speedTier),
-    priorityFee:
-        !isPickup && state.speedTier == DeliverySpeedTier.priority
+    priorityFee: !isPickup && state.speedTier == DeliverySpeedTier.priority
         ? _kPriorityFee
         : 0,
     extraDropFee: isPickup ? 0 : extraDrops * _kExtraDropFee,

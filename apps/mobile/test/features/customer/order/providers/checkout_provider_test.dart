@@ -114,6 +114,34 @@ void main() {
       expect(state.singleAddress?.id, '9');
       expect(state.temporaryAddress, isNull);
     });
+
+    test('RFQ cart keeps price nullable and rejects mixed pricing modes', () {
+      final rfq = CartItem(
+        id: 'rfq',
+        category: 'flyers',
+        categoryName: 'Flyers',
+        productSlug: 'flyers',
+        quoteRequired: true,
+        requiredDate: DateTime(2099, 12, 31),
+        catalogServerBacked: true,
+        fileName: 'art.pdf',
+        fileMetadataId: 9,
+        specs: const {'stock': 'matte'},
+        quantity: 100,
+        pageCount: 1,
+        createdAt: DateTime(2026),
+      );
+      final notifier = container.read(checkoutProvider.notifier);
+      notifier.addItem(rfq);
+
+      expect(container.read(checkoutProvider).hasPendingQuoteItems, isTrue);
+      expect(container.read(checkoutProvider).subtotal, isNull);
+      expect(rfq.printSubtotal, isNull);
+      expect(CartItem.fromMap(rfq.toMap()).unitPrice, isNull);
+
+      notifier.addItem(_item('legacy', 10));
+      expect(container.read(checkoutProvider).hasMixedPricingModes, isTrue);
+    });
   });
 }
 

@@ -42,6 +42,7 @@ import 'package:printing_app/features/customer/order/navigation/legacy_order_rou
 import 'package:printing_app/features/customer/order/screens/paper_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/three_d_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/upload_screen.dart';
+import 'package:printing_app/features/customer/order/screens/catalog_requirements_screen.dart';
 import 'package:printing_app/features/customer/order/screens/checkout_screen.dart';
 import 'package:printing_app/features/customer/order/screens/order_success_screen.dart';
 import 'package:printing_app/features/customer/tracking/screens/delivery_tracking_screen.dart';
@@ -569,7 +570,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/customer/order/products/:productSlug/requirements',
         pageBuilder: (_, state) => slideUpTransition(
-          CatalogRequirementsRouteBoundary(
+          CatalogRequirementsScreen(
             productSlug: state.pathParameters['productSlug'] ?? '',
           ),
           state,

@@ -38,9 +38,11 @@ class CheckoutFooter extends ConsumerWidget {
       DeliveryMode.delivery => hasDeliveryAddress,
       DeliveryMode.multidrop => hasMultidropDestinations,
     };
+    final isRfq = state.hasPendingQuoteItems;
     final canPlace =
         state.items.isNotEmpty &&
-        state.paymentMethod != null &&
+        !state.hasMixedPricingModes &&
+        (isRfq || state.paymentMethod != null) &&
         hasRequiredDestination;
 
     return Container(
@@ -67,66 +69,79 @@ class CheckoutFooter extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total',
-                    style: AppTypography.caption.copyWith(
-                      color: colors.onSurfaceDim,
-                      fontSize: 11,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    formatCurrency(fees.total),
-                    style: AppTypography.h2.copyWith(
-                      color: colors.onBackground,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      height: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => context.go('/customer/home'),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      HugeIcon(
-                        icon: HugeIcons.strokeRoundedHome01,
-                        size: 16,
+          if (!isRfq)
+            Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total',
+                      style: AppTypography.caption.copyWith(
                         color: colors.onSurfaceDim,
+                        fontSize: 11,
+                        letterSpacing: 0.5,
                       ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Home',
-                        style: AppTypography.caption.copyWith(
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      formatCurrency(fees.total),
+                      style: AppTypography.h2.copyWith(
+                        color: colors.onBackground,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        height: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => context.go('/customer/home'),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        HugeIcon(
+                          icon: HugeIcons.strokeRoundedHome01,
+                          size: 16,
                           color: colors.onSurfaceDim,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 5),
+                        Text(
+                          'Home',
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
+              ],
+            ),
+          if (isRfq) ...[
+            Text(
+              state.hasMixedPricingModes
+                  ? 'Submit priced and quote-request items separately.'
+                  : 'Price and turnaround pending review',
+              style: AppTypography.bodyBold.copyWith(
+                color: colors.onBackground,
               ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ] else
+            const SizedBox(height: AppSpacing.md),
           KeyedSubtree(
             key: placeOrderKey,
             child: _PlaceOrderButton(
               enabled: canPlace,
+              label: isRfq ? 'Submit quote request' : 'Place Order',
               onTap: canPlace ? onPlaceOrder : null,
               colors: colors,
             ),
@@ -142,10 +157,12 @@ class _PlaceOrderButton extends StatelessWidget {
     required this.enabled,
     required this.onTap,
     required this.colors,
+    required this.label,
   });
   final bool enabled;
   final VoidCallback? onTap;
   final AppColorSet colors;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +192,7 @@ class _PlaceOrderButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Place Order',
+                label,
                 style: AppTypography.bodyBold.copyWith(
                   color: colors.background,
                   fontSize: 16,

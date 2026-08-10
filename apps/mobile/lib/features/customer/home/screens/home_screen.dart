@@ -508,9 +508,11 @@ class _ResumeQueueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = cart.itemCount;
     final printJobLabel = count == 1 ? 'print job' : 'print jobs';
-    final formattedSubtotal = formatCurrency(cart.subtotal);
+    final formattedSubtotal = cart.subtotal == null
+        ? 'price pending review'
+        : '${formatCurrency(cart.subtotal!)} subtotal';
     final semanticsLabel =
-        'Resume your queue, $count $printJobLabel, $formattedSubtotal subtotal';
+        'Resume your queue, $count $printJobLabel, $formattedSubtotal';
 
     void openQueue() => context.push('/customer/order/checkout');
 
@@ -1340,7 +1342,9 @@ class _CartDropdown extends ConsumerWidget {
                         ),
                         const SizedBox(width: AppSpacing.sm),
                         Text(
-                          formatCurrency(item.printSubtotal),
+                          item.printSubtotal == null
+                              ? 'Price pending'
+                              : formatCurrency(item.printSubtotal!),
                           style: AppTypography.caption.copyWith(
                             color: colors.onSurface,
                             fontSize: 11,
@@ -1392,7 +1396,9 @@ class _CartDropdown extends ConsumerWidget {
                       ),
                       const Spacer(),
                       Text(
-                        formatCurrency(cart.subtotal),
+                        cart.subtotal == null
+                            ? 'Pending review'
+                            : formatCurrency(cart.subtotal!),
                         style: AppTypography.bodyBold.copyWith(
                           color: colors.onBackground,
                           fontSize: 13,
