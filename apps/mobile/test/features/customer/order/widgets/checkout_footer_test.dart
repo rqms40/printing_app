@@ -5,6 +5,7 @@ import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/models/destination_group.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_footer.dart';
 import 'package:printing_app/shared/models/enums.dart';
 
@@ -149,6 +150,45 @@ void main() {
 
     expect(placed, 1);
   });
+
+  testWidgets('RFQ footer fails closed without current catalog authority', (
+    tester,
+  ) async {
+    var submitted = 0;
+    final container = ProviderContainer(
+      overrides: [
+        productCatalogLoaderProvider.overrideWithValue(
+          () async => throw StateError('offline'),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(checkoutProvider.notifier)
+      ..addItem(_rfqItem())
+      ..setMode(DeliveryMode.pickup);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: const SizedBox(),
+            bottomNavigationBar: CheckoutFooter(
+              onPlaceOrder: () => submitted++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Submit quote request'));
+    await tester.pump();
+
+    expect(submitted, 0);
+    expect(
+      find.text('Refresh the catalog to submit this request.'),
+      findsOneWidget,
+    );
+  });
 }
 
 CartItem _item(String id) => CartItem(
@@ -162,4 +202,19 @@ CartItem _item(String id) => CartItem(
   pageCount: 1,
   printSubtotal: 100,
   createdAt: DateTime.now(),
+);
+
+CartItem _rfqItem() => CartItem(
+  id: 'rfq',
+  category: 'flyers',
+  productSlug: 'flyers',
+  quoteRequired: true,
+  requiredDate: DateTime(2099, 12, 31),
+  catalogServerBacked: true,
+  fileName: 'art.pdf',
+  fileMetadataId: 4,
+  specs: const {'stock': 'matte'},
+  quantity: 1,
+  pageCount: 1,
+  createdAt: DateTime(2026),
 );

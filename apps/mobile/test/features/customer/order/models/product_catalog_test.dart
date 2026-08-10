@@ -2,6 +2,85 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 
 void main() {
+  test('server-null spec defaults remain unset for every input type', () {
+    const definitions = [
+      ProductSpecDefinition.select(
+        id: 1,
+        categoryId: 1,
+        key: 'stock',
+        label: 'Stock',
+        pricingRole: 'none',
+        sortOrder: 1,
+        options: [
+          ProductSpecOption(label: 'Single-sided', value: 'single'),
+          ProductSpecOption(label: 'Double-sided', value: 'double'),
+        ],
+      ),
+      ProductSpecDefinition(
+        id: 2,
+        categoryId: 1,
+        key: 'copies',
+        label: 'Copies',
+        inputType: 'number',
+        valueType: 'number',
+        pricingRole: 'none',
+        minValue: 1,
+        sortOrder: 2,
+      ),
+      ProductSpecDefinition(
+        id: 3,
+        categoryId: 1,
+        key: 'food_grade_requirement',
+        label: 'Food-grade requirement',
+        inputType: 'boolean',
+        valueType: 'boolean',
+        pricingRole: 'none',
+        sortOrder: 3,
+      ),
+      ProductSpecDefinition(
+        id: 4,
+        categoryId: 1,
+        key: 'finish',
+        label: 'Finish',
+        inputType: 'text',
+        valueType: 'string',
+        pricingRole: 'none',
+        sortOrder: 4,
+      ),
+    ];
+    const product = ProductCategory(
+      id: 1,
+      name: 'Packaging',
+      slug: 'packaging',
+      fileProcessingType: 'generic_file',
+      pricingModel: 'quote_required',
+      baseRate: null,
+      quantityUnit: 'piece',
+      maxFileSizeMb: 100,
+      allowedExtensions: ['pdf'],
+      isActive: true,
+      sortOrder: 1,
+      specs: definitions,
+    );
+
+    expect(product.defaultSpecValues(), {
+      'stock': null,
+      'copies': null,
+      'food_grade_requirement': null,
+      'finish': null,
+    });
+
+    final snapshot = ProductCatalog.v110Snapshot();
+    final snapshotSpecs = snapshot.categories.expand((item) => item.specs);
+    final sides = snapshotSpecs.firstWhere((spec) => spec.key == 'sides');
+    final foodGrade = snapshotSpecs.firstWhere(
+      (spec) => spec.key == 'food_grade_requirement',
+    );
+    expect(sides.inputType, 'number');
+    expect(sides.defaultSelection, isNull);
+    expect(foodGrade.inputType, 'boolean');
+    expect(foodGrade.defaultSelection, isNull);
+  });
   group('ProductCatalog.fromJson', () {
     test('parses grouped camelCase data in stable active order', () {
       final catalog = ProductCatalog.fromJson({
@@ -222,7 +301,7 @@ Map<String, dynamic> _product({
     'slug': slug,
     'description': '$slug description',
     'examples': ['Example one'],
-    if (groupSlug != null) 'groupSlug': groupSlug,
+    'groupSlug': ?groupSlug,
     if (groupSlug != null) 'groupName': 'Group',
     if (groupSlug != null) 'groupDescription': 'Group description',
     if (groupSlug != null) 'groupSortOrder': 1,

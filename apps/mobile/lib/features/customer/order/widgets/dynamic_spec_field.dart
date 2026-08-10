@@ -37,14 +37,17 @@ class DynamicSpecField extends StatelessWidget {
             .toList(),
         onChanged: onChanged,
       ),
-      'boolean' => Semantics(
-        label: label,
-        child: SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(label),
-          value: value == true,
-          onChanged: onChanged,
-        ),
+      'boolean' => DropdownButtonFormField<bool>(
+        initialValue: value is bool ? value : null,
+        decoration: InputDecoration(labelText: label),
+        validator: (selected) => definition.isRequired && selected == null
+            ? '${definition.label} is required'
+            : null,
+        items: const [
+          DropdownMenuItem(value: true, child: Text('Yes')),
+          DropdownMenuItem(value: false, child: Text('No')),
+        ],
+        onChanged: onChanged,
       ),
       _ => TextFormField(
         initialValue: value?.toString() ?? '',

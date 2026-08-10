@@ -1349,18 +1349,17 @@ class ProductSpecDefinition {
       final defaultOption = options
           .where((option) => option.isDefault)
           .firstOrNull;
-      return defaultOption?.value ??
-          options.firstOrNull?.value ??
-          defaultValue ??
-          '';
+      return defaultOption?.value ?? defaultValue;
     }
     if (valueType == 'number') {
-      return _readDouble(defaultValue, minValue ?? 0);
+      return defaultValue == null
+          ? null
+          : double.tryParse(defaultValue!.trim());
     }
     if (valueType == 'boolean') {
-      return _readBool(defaultValue, false);
+      return defaultValue == null ? null : _readBool(defaultValue, false);
     }
-    return defaultValue ?? '';
+    return defaultValue;
   }
 
   ProductSpecOption? optionForValue(dynamic value) {

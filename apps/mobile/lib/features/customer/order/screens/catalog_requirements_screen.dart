@@ -7,6 +7,18 @@ import 'package:printing_app/features/customer/order/providers/product_catalog_p
 import 'package:printing_app/features/customer/order/widgets/catalog_authority_banner.dart';
 import 'package:printing_app/features/customer/order/widgets/dynamic_spec_field.dart';
 
+DateTime? parseStrictRequiredDate(String raw) {
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(raw.trim());
+  if (match == null) return null;
+  final year = int.parse(match.group(1)!);
+  final month = int.parse(match.group(2)!);
+  final day = int.parse(match.group(3)!);
+  final parsed = DateTime(year, month, day);
+  return parsed.year == year && parsed.month == month && parsed.day == day
+      ? parsed
+      : null;
+}
+
 class CatalogRequirementsScreen extends ConsumerStatefulWidget {
   const CatalogRequirementsScreen({super.key, required this.productSlug});
   final String productSlug;
@@ -129,7 +141,7 @@ class _CatalogRequirementsScreenState
   }
 
   void _continue(ProductCategory product, ProductCatalogState catalogState) {
-    final date = DateTime.tryParse(_dateController.text.trim());
+    final date = parseStrictRequiredDate(_dateController.text);
     final today = DateTime.now();
     final startOfToday = DateTime(today.year, today.month, today.day);
     setState(() {

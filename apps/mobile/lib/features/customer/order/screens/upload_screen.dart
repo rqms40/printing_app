@@ -19,6 +19,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/beta_demo_3d_upload.dart';
+import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/file_upload_card.dart';
@@ -73,6 +74,74 @@ bool canContinueCatalogUpload({
     errorText: errorText,
   );
 }
+
+class UploadPolicy {
+  const UploadPolicy({
+    required this.allowedExtensions,
+    required this.maxSizeMb,
+  });
+  final List<String> allowedExtensions;
+  final int maxSizeMb;
+}
+
+UploadPolicy? resolveUploadPolicy({
+  required String? category,
+  required String? productSlug,
+  required ProductCatalog catalog,
+}) {
+  if (productSlug != null) {
+    final product = catalog.productBySlug(productSlug);
+    if (product == null || !product.isActive) return null;
+    return UploadPolicy(
+      allowedExtensions: product.allowedExtensions,
+      maxSizeMb: product.maxFileSizeMb,
+    );
+  }
+  if (category == 'paper') {
+    return const UploadPolicy(
+      allowedExtensions: AppConstants.paperTypes,
+      maxSizeMb: AppConstants.paperMaxSizeMB,
+    );
+  }
+  if (category == '3d') {
+    return const UploadPolicy(
+      allowedExtensions: AppConstants.threeDTypes,
+      maxSizeMb: AppConstants.threeDMaxSizeMB,
+    );
+  }
+  return null;
+}
+
+class UploadFailureRetention {
+  const UploadFailureRetention({
+    required this.fileName,
+    required this.filePath,
+    required this.fileBytes,
+    required this.mimeType,
+    required this.fileSize,
+    this.fileMetadataId,
+  });
+  final String? fileName;
+  final String? filePath;
+  final Uint8List? fileBytes;
+  final String? mimeType;
+  final int? fileSize;
+  final int? fileMetadataId;
+}
+
+UploadFailureRetention retainUploadSelectionAfterFailure({
+  required String? fileName,
+  required String? filePath,
+  required Uint8List? fileBytes,
+  required String? mimeType,
+  required int? fileSize,
+}) => UploadFailureRetention(
+  fileName: fileName,
+  filePath: filePath,
+  fileBytes: fileBytes,
+  mimeType: mimeType,
+  fileSize: fileSize,
+);
 
 /// Step 3/6 -- File upload with real Dio progress.
 class UploadScreen extends ConsumerStatefulWidget {
@@ -204,27 +273,19 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         : AppColors.light;
   }
 
-  List<String> get _allowedTypes {
+  UploadPolicy? get _uploadPolicy {
     final state = ref.read(orderFlowProvider);
     final catalog = ref.read(productCatalogProvider).catalog;
-    final category = catalog.categoryBySlug(state.category);
-    if (category != null && category.allowedExtensions.isNotEmpty) {
-      return category.allowedExtensions;
-    }
-    return state.category == 'paper'
-        ? AppConstants.paperTypes
-        : AppConstants.threeDTypes;
+    return resolveUploadPolicy(
+      category: state.category,
+      productSlug: state.productSlug,
+      catalog: catalog,
+    );
   }
 
-  int get _maxSizeMB {
-    final state = ref.read(orderFlowProvider);
-    final catalog = ref.read(productCatalogProvider).catalog;
-    final category = catalog.categoryBySlug(state.category);
-    if (category != null) return category.maxFileSizeMb;
-    return state.category == 'paper'
-        ? AppConstants.paperMaxSizeMB
-        : AppConstants.threeDMaxSizeMB;
-  }
+  List<String> get _allowedTypes =>
+      _uploadPolicy?.allowedExtensions ?? const [];
+  int get _maxSizeMB => _uploadPolicy?.maxSizeMb ?? 0;
 
   bool get _isBetaDemo3dUploadActive {
     final state = ref.read(orderFlowProvider);
@@ -246,6 +307,13 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   }
 
   Future<void> _pickFile() async {
+    if (_uploadPolicy == null) {
+      setState(() {
+        _errorText =
+            'Upload policy unavailable. Return to the catalog and choose the product again.';
+      });
+      return;
+    }
     if (_isBetaDemo3dUploadActive) {
       await _loadBetaDemo3dFile();
       return;
@@ -509,11 +577,23 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       }
       debugPrint('[upload_screen] upload failed: $e');
       if (mounted) {
+        final retained = retainUploadSelectionAfterFailure(
+          fileName: _fileName,
+          filePath: _filePath,
+          fileBytes: _fileBytes,
+          mimeType: _fileMimeType,
+          fileSize: _fileSize,
+        );
         setState(() {
           _isUploading = false;
           _uploadProgress = 0;
           _errorText = message;
-          _fileMetadataId = null;
+          _fileName = retained.fileName;
+          _filePath = retained.filePath;
+          _fileBytes = retained.fileBytes;
+          _fileMimeType = retained.mimeType;
+          _fileSize = retained.fileSize;
+          _fileMetadataId = retained.fileMetadataId;
         });
       }
     }
@@ -523,7 +603,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     final flow = ref.read(orderFlowProvider);
     final catalogState = ref.read(productCatalogProvider);
     final currentProduct = catalogState.catalog.productBySlug(flow.productSlug);
-    return !_isBetaDemo3dUploadActive &&
+    return _uploadPolicy != null &&
+        !_isBetaDemo3dUploadActive &&
         canContinueCatalogUpload(
           productSlug: flow.productSlug,
           catalogServerBacked:
@@ -605,7 +686,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                         ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Accepted: ${_allowedTypes.map((e) => '.$e').join(', ')} (max $_maxSizeMB MB)',
+                      _uploadPolicy == null
+                          ? 'Upload policy unavailable for this product.'
+                          : 'Accepted: ${_allowedTypes.map((e) => '.$e').join(', ')} (max $_maxSizeMB MB)',
                       style: AppTypography.caption.copyWith(
                         color: colors.onSurfaceDim,
                       ),

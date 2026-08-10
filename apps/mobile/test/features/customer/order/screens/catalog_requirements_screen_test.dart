@@ -7,6 +7,11 @@ import 'package:printing_app/features/customer/order/providers/product_catalog_p
 import 'package:printing_app/features/customer/order/screens/catalog_requirements_screen.dart';
 
 void main() {
+  test('strict required dates reject normalized impossible calendar dates', () {
+    expect(parseStrictRequiredDate('2099-02-29'), isNull);
+    expect(parseStrictRequiredDate('2099-13-01'), isNull);
+    expect(parseStrictRequiredDate('2099-12-31'), DateTime(2099, 12, 31));
+  });
   testWidgets('validates requirements then stores server-owned RFQ identity', (
     tester,
   ) async {

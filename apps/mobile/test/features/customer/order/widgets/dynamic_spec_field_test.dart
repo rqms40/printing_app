@@ -87,7 +87,7 @@ void main() {
       sortOrder: 2,
     );
     await tester.pumpWidget(host(boolean, (_) {}));
-    expect(find.byType(Switch), findsOneWidget);
+    expect(find.byType(DropdownButtonFormField<bool>), findsOneWidget);
 
     const text = ProductSpecDefinition(
       id: 3,
@@ -103,5 +103,40 @@ void main() {
     await tester.pumpWidget(host(text, (_) {}));
     final textField = tester.widget<TextFormField>(find.byType(TextFormField));
     expect(textField.validator?.call('  '), 'Finish is required');
+  });
+
+  testWidgets('required sides and food-grade values stay unset until chosen', (
+    tester,
+  ) async {
+    dynamic changed;
+    final snapshotSpecs = ProductCatalog.v110Snapshot().categories.expand(
+      (item) => item.specs,
+    );
+    final sides = snapshotSpecs.firstWhere((spec) => spec.key == 'sides');
+    await tester.pumpWidget(host(sides, (value) => changed = value));
+    final sidesField = tester.widget<TextFormField>(find.byType(TextFormField));
+    expect(sides.defaultSelection, isNull);
+    expect(sidesField.initialValue, isEmpty);
+    expect(sidesField.validator?.call(''), 'Sides is required');
+
+    final foodGrade = snapshotSpecs.firstWhere(
+      (spec) => spec.key == 'food_grade_requirement',
+    );
+    await tester.pumpWidget(host(foodGrade, (value) => changed = value));
+    final booleanField = tester.widget<DropdownButtonFormField<bool>>(
+      find.byType(DropdownButtonFormField<bool>),
+    );
+    expect(foodGrade.defaultSelection, isNull);
+    expect(booleanField.initialValue, isNull);
+    expect(
+      booleanField.validator?.call(null),
+      'Food-grade requirement is required',
+    );
+    await tester.tap(find.text('Food-grade requirement *'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('No').last);
+    await tester.pumpAndSettle();
+    expect(changed, isFalse);
+    expect(find.text('No'), findsOneWidget);
   });
 }

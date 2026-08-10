@@ -8,6 +8,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 class CheckoutFooter extends ConsumerWidget {
@@ -23,6 +24,8 @@ class CheckoutFooter extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final fees = ref.watch(checkoutFeesProvider);
     final state = ref.watch(checkoutProvider);
+    final isRfq = state.hasPendingQuoteItems;
+    final catalogState = isRfq ? ref.watch(productCatalogProvider) : null;
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
@@ -38,10 +41,17 @@ class CheckoutFooter extends ConsumerWidget {
       DeliveryMode.delivery => hasDeliveryAddress,
       DeliveryMode.multidrop => hasMultidropDestinations,
     };
-    final isRfq = state.hasPendingQuoteItems;
+    final rfqCatalogAuthorized =
+        catalogState != null &&
+        catalogState.canSubmit &&
+        state.items.where((item) => item.quoteRequired).every((item) {
+          final product = catalogState.catalog.productBySlug(item.productSlug);
+          return product != null && product.pricingModel == 'quote_required';
+        });
     final canPlace =
         state.items.isNotEmpty &&
         !state.hasMixedPricingModes &&
+        (!isRfq || rfqCatalogAuthorized) &&
         (isRfq || state.paymentMethod != null) &&
         hasRequiredDestination;
 
@@ -129,6 +139,8 @@ class CheckoutFooter extends ConsumerWidget {
             Text(
               state.hasMixedPricingModes
                   ? 'Submit priced and quote-request items separately.'
+                  : !rfqCatalogAuthorized
+                  ? 'Refresh the catalog to submit this request.'
                   : 'Price and turnaround pending review',
               style: AppTypography.bodyBold.copyWith(
                 color: colors.onBackground,

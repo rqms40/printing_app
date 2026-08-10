@@ -8,6 +8,7 @@ import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
+import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -793,7 +794,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     this.onInitialLoadComplete,
     this.onInitialLoadResult,
     bool? realFlow,
-    this.canSubmitCatalogRfq,
+    this.catalogStateResolver = _unavailableCatalogState,
   }) : realFlow = realFlow ?? AppConstants.realFlow,
        super(initialState) {
     if (!skipBootstrap) {
@@ -806,7 +807,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   final VoidCallback? onInitialLoadComplete;
   final ValueChanged<bool>? onInitialLoadResult;
   final bool realFlow;
-  final bool Function()? canSubmitCatalogRfq;
+  final ProductCatalogState Function() catalogStateResolver;
   String? errorMessage;
   VoidCallback? _removeOrderUpdateListener;
   VoidCallback? _removeDeliveryQueueListener;
@@ -1240,7 +1241,8 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   }
 
   Future<List<Order>> submitRfq(CheckoutState checkout) async {
-    if (canSubmitCatalogRfq != null && !canSubmitCatalogRfq!()) {
+    final catalogState = catalogStateResolver();
+    if (!catalogState.canSubmit) {
       throw StateError('Refresh the catalog before submitting this request.');
     }
     if (checkout.items.isEmpty) throw StateError('RFQ cart is empty');
@@ -1257,11 +1259,12 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     for (final item in checkout.items) {
       final slug = item.productSlug?.trim();
       final requiredDate = item.requiredDate;
-      if (!item.catalogServerBacked) {
-        throw StateError('Refresh the catalog before submitting this request.');
-      }
       if (slug == null || slug.isEmpty || item.quantity < 1) {
         throw StateError('Each request needs an active product and quantity.');
+      }
+      final product = catalogState.catalog.productBySlug(slug);
+      if (product == null || product.pricingModel != 'quote_required') {
+        throw StateError('Refresh the catalog before submitting this request.');
       }
       if (requiredDate == null || !requiredDate.isAfter(DateTime.now())) {
         throw StateError('Each request needs a future required date.');
@@ -1453,11 +1456,18 @@ int? _deliveryAddressIdValue(String? id) {
 String _isoDateOnly(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
+ProductCatalogState _unavailableCatalogState() => ProductCatalogState(
+  catalog: ProductCatalog.v110Snapshot(),
+  isServerBacked: false,
+  isLoading: false,
+  error: StateError('Catalog authority unavailable'),
+);
+
 final ordersProvider = StateNotifierProvider<OrdersNotifier, List<Order>>((
   ref,
 ) {
   return OrdersNotifier(
-    canSubmitCatalogRfq: () => ref.read(productCatalogProvider).canSubmit,
+    catalogStateResolver: () => ref.read(productCatalogProvider),
     onCompletionUpdate: () => ref.read(accountStateProvider.notifier).refresh(),
     onInitialLoadComplete: () {
       ref.read(ordersInitialLoadCompleteProvider.notifier).state = true;

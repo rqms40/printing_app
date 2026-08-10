@@ -395,10 +395,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final notifier = ref.read(ordersProvider.notifier);
     try {
       final checkout = ref.read(checkoutProvider);
+      final submittedItemIds = checkout.items.map((item) => item.id).toSet();
       final placed = checkout.hasPendingQuoteItems
           ? await notifier.submitRfq(checkout)
           : await notifier.placeCheckout(checkout);
-      ref.read(checkoutProvider.notifier).reset();
+      ref
+          .read(checkoutProvider.notifier)
+          .removeSubmittedItems(submittedItemIds);
       if (!context.mounted) return;
       context.go(
         '/customer/order/success',
