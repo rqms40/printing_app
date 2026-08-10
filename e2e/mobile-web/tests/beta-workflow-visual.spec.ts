@@ -322,14 +322,16 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(completion).not.toContain("getByText(`Question");
   });
 
-  test("proves beta checkout, rider eligibility, rendered maps, and immediate surveys", () => {
+  test("proves RFQ checkout, rider eligibility, rendered maps, and immediate surveys", () => {
     const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
     const orderFlow = source.slice(
       source.lastIndexOf("async function placeCustomerOrder"),
       source.lastIndexOf("async function advanceProductionAndAssign"),
     );
-    expect(orderFlow).toContain("assertBetaOnlyPaymentOptions");
-    expect(orderFlow).toContain("assertStandardCheckoutPayload");
+    expect(orderFlow).toContain("assertRfqCheckoutPayload");
+    expect(orderFlow).toContain("prepareCatalogOrderForProduction");
+    expect(orderFlow).not.toContain("assertBetaOnlyPaymentOptions");
+    expect(orderFlow).not.toContain("assertStandardCheckoutPayload");
 
     const assignmentFlow = source.slice(
       source.lastIndexOf("async function advanceProductionAndAssign"),
@@ -370,18 +372,20 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(markDelivered).toBeGreaterThan(venDelivered);
   });
 
-  test("selects the credits payment row without matching tutorial controls", () => {
+  test("accepts the supplier quote through the real customer control", () => {
     const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
-    const orderFlow = source.slice(
-      source.lastIndexOf("async function placeCustomerOrder"),
+    const quoteFlow = source.slice(
+      source.lastIndexOf("async function prepareCatalogOrderForProduction"),
       source.lastIndexOf("async function advanceProductionAndAssign"),
     );
-    expect(orderFlow).toContain(
-      "await clickNamed(actor.page, /^GRIDGO Credits\\./i);",
+    expect(quoteFlow).toContain("/Pilot Credits/i");
+    expect(quoteFlow).toContain(
+      'clickNamed(customer.actor.page, "Accept quote")',
     );
-    expect(orderFlow).not.toContain(
-      "await clickNamed(actor.page, /GRIDGO Credits/i);",
+    expect(quoteFlow).toContain(
+      "`/api/orders/${customer.orderId}/accept-quote`",
     );
+    expect(quoteFlow).not.toContain("Top up once and pay instantly");
   });
 
   test("opens an assigned delivery detail before Juan accepts it", () => {
@@ -759,8 +763,16 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(orderFlow).toContain("Marketing & Promotional Collateral");
     expect(orderFlow).toContain("Flyers");
     expect(orderFlow).toContain("Flyers requirements");
+    expect(orderFlow).toContain("Submit quote request");
+    expect(orderFlow).toContain("/api/orders/requests/batch");
+    expect(orderFlow).toContain("prepareCatalogOrderForProduction");
     expect(orderFlow).not.toContain("Pick Paper Printing");
     expect(orderFlow).not.toContain("Paper Specs");
+    expect(orderFlow).not.toContain(
+      'clickNamed(actor.page, "Choose payment method")',
+    );
+    expect(orderFlow).not.toContain('clickNamed(actor.page, "Place Order")');
+    expect(orderFlow).not.toContain('apiPath(response, "/api/orders/batch")');
     expect(betaEvidenceSteps).toHaveLength(29);
     expect(betaEvidenceSteps.slice(20).map(({ id }) => id)).toEqual([
       21, 22, 23, 24, 25, 26, 27, 28, 29,
@@ -1491,11 +1503,30 @@ async function assertBetaOnlyPaymentOptions(page: Page): Promise<void> {
   ).toBeEnabled();
 }
 
-function assertStandardCheckoutPayload(payload: JsonRecord): void {
-  expect(payload.paymentMethod, "beta checkout payment method").toBe(
-    "gridCredits",
-  );
-  expect(payload.speedTier, "explicit checkout delivery mode").toBe("standard");
+function assertRfqCheckoutPayload(
+  payload: JsonRecord,
+  expected: { fileId: number; addressId: number; requiredDate: string },
+): void {
+  expect(payload).toMatchObject({
+    deliveryOption: "delivery",
+    deliveryAddressId: expected.addressId,
+  });
+  expect(payload).not.toHaveProperty("paymentMethod");
+  const items = payload.items as JsonRecord[];
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    categorySlug: "flyers",
+    quantity: 100,
+    requiredDate: expected.requiredDate,
+    fileMetadataId: expected.fileId,
+  });
+  expect(items[0].specs).toMatchObject({
+    dimensions_or_standard_size: "A5",
+    stock_or_material: "C2S 100gsm",
+    color: "Full color",
+    sides: 2,
+    finish: "Soft-touch matte",
+  });
 }
 
 // The rider status line under live tracking: "Live · location updating" when
@@ -1920,8 +1951,7 @@ async function completeCheckoutPipelineTutorial(page: Page): Promise<void> {
   for (const body of [
     /Quick review of what you're printing/i,
     /Choose Delivery, Pickup, or Multi-drop/i,
-    /Review the available payment option/i,
-    /That's the Place Order button/i,
+    /That's the Submit quote request button/i,
   ]) {
     await expect(page.locator("body")).toContainText(body);
     await clickNamed(page, /Got it/);
@@ -1936,9 +1966,20 @@ async function placeCustomerOrder(options: {
   >;
   mobileURL: string;
   run: EvidenceRun;
-  firstStep: 4 | 18;
+  request: APIRequestContext;
+  apiBaseURL: string;
+  adminToken: string;
+  supplierToken: string;
 }): Promise<CustomerRun> {
-  const { base, mobileURL, run, firstStep } = options;
+  const {
+    base,
+    mobileURL,
+    run,
+    request,
+    apiBaseURL,
+    adminToken,
+    supplierToken,
+  } = options;
   const { actor, name, userId } = base;
   const expectedAddress =
     name === "Ven" ? betaAddresses.ven : betaAddresses.mark;
@@ -2140,91 +2181,45 @@ async function placeCustomerOrder(options: {
       fileId,
       addressId,
     });
-  await clickNamed(actor.page, "Standard");
-  await clickNamed(actor.page, "Choose payment method");
   await expect(actor.page.locator("body")).toContainText(
-    /Only GRIDGO Credits is available during beta testing/i,
+    /Price and turnaround pending review/i,
   );
-  await actor.page.waitForTimeout(600);
-  const paymentTutorial = /Top up once and pay instantly/i;
+  await expect(actor.page.locator("body")).toContainText(
+    /Submit quote request/i,
+  );
+  await expect(actor.page.locator("body")).not.toContainText(
+    /Choose payment method|Payment method|₱\s*0(?:\.00)?/i,
+  );
   if (name === "Mark") {
-    await expect(actor.page.locator("body")).toContainText(paymentTutorial);
-    await clickNamed(actor.page, /Got it/);
-  } else if (
-    paymentTutorial.test(await actor.page.locator("body").innerText())
-  ) {
-    await clickNamed(actor.page, /Got it/);
-  }
-  await assertBetaOnlyPaymentOptions(actor.page);
-  await clickNamed(actor.page, /^GRIDGO Credits\./i);
-  if (name === "Mark")
-    await capture(
-      run,
-      actor,
-      11,
-      /GRIDGO Credits/i,
-      {
-        userId,
-        fileId,
-        addressId,
-      },
-      { allowBlockingDialog: true },
-    );
-  else
-    await capture(
-      run,
-      actor,
-      18,
-      /GRIDGO Credits/i,
-      {
-        userId,
-        betaRank: base.betaRank,
-        fileId,
-        addressId,
-      },
-      { variant: "ven-credits-checkout", allowBlockingDialog: true },
-    );
-  await clickNamed(actor.page, "Use this");
-  if (name === "Mark")
-    await capture(run, actor, 12, /Delivery|Priority|Standard|Order Summary/i, {
+    await capture(run, actor, 11, /Price and turnaround pending review/i, {
       userId,
       fileId,
       addressId,
     });
-  else
-    await capture(
-      run,
-      actor,
-      18,
-      /Delivery|Priority|Standard|Order Summary/i,
-      {
-        userId,
-        betaRank: base.betaRank,
-        fileId,
-        addressId,
-      },
-      { variant: "ven-order-summary" },
-    );
-
+  }
   const orderRequestPromise = actor.page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
-      new URL(request.url()).pathname.endsWith("/api/orders/batch"),
+      new URL(request.url()).pathname.endsWith("/api/orders/requests/batch"),
   );
   const orderBody = await waitForStrict2xx<JsonRecord>(
     actor.page,
     (response) =>
       response.request().method() === "POST" &&
-      apiPath(response, "/api/orders/batch"),
-    () => clickNamed(actor.page, "Place Order"),
-    `${name} credits checkout`,
+      apiPath(response, "/api/orders/requests/batch"),
+    () => clickNamed(actor.page, "Submit quote request"),
+    `${name} RFQ submission`,
   );
   const orderPayload = (await orderRequestPromise).postDataJSON() as JsonRecord;
-  assertStandardCheckoutPayload(orderPayload);
+  assertRfqCheckoutPayload(orderPayload, {
+    fileId,
+    addressId,
+    requiredDate,
+  });
   const { id: orderId, orderRef } = orderIdentity(orderBody);
   await expect(actor.page.locator("body")).toContainText(orderRef);
   if (name === "Mark") {
-    await capture(run, actor, 13, orderRef, {
+    await capture(run, actor, 12, orderRef, {
       userId,
       fileId,
       addressId,
@@ -2232,35 +2227,225 @@ async function placeCustomerOrder(options: {
       orderRef,
     });
     await navigateMobile(actor.page, mobileURL, "/customer/orders");
-    await capture(
-      run,
-      actor,
-      14,
-      orderRef,
-      { userId, fileId, addressId, orderId, orderRef },
-      { variant: "mark-order-list" },
-    );
-    await actor.page
-      .getByRole("button", { name: new RegExp(`^Order ${orderRef}\\b`, "i") })
-      .click();
-    await capture(run, actor, 14, new RegExp(`Order #${orderRef}`, "i"), {
+    await capture(run, actor, 13, orderRef, {
       userId,
-      fileId,
-      addressId,
-      orderId,
-      orderRef,
-    });
-  } else {
-    await capture(run, actor, firstStep, /Ven|GRIDGO Credits|Order/i, {
-      userId,
-      betaRank: base.betaRank,
       fileId,
       addressId,
       orderId,
       orderRef,
     });
   }
-  return { ...base, fileId, addressId, orderId, orderRef, assignmentId: 0 };
+  const customer = {
+    ...base,
+    fileId,
+    addressId,
+    orderId,
+    orderRef,
+    assignmentId: 0,
+  };
+  await prepareCatalogOrderForProduction({
+    request,
+    apiBaseURL,
+    adminToken,
+    supplierToken,
+    customer,
+    mobileURL,
+    run,
+    evidenceStepId: name === "Mark" ? 14 : 18,
+  });
+  return customer;
+}
+
+async function authenticatedPost<T>(options: {
+  request: APIRequestContext;
+  apiBaseURL: string;
+  endpoint: string;
+  token: string;
+  action: string;
+  data?: JsonRecord;
+}): Promise<T> {
+  const { request, apiBaseURL, endpoint, token, action, data } = options;
+  return strictJson<T>(
+    await request.post(`${apiBaseURL}${endpoint}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data,
+    }),
+    action,
+  );
+}
+
+async function prepareCatalogOrderForProduction(options: {
+  request: APIRequestContext;
+  apiBaseURL: string;
+  adminToken: string;
+  supplierToken: string;
+  customer: CustomerRun;
+  mobileURL: string;
+  run: EvidenceRun;
+  evidenceStepId: 14 | 18;
+}): Promise<void> {
+  const {
+    request,
+    apiBaseURL,
+    adminToken,
+    supplierToken,
+    customer,
+    mobileURL,
+    run,
+    evidenceStepId,
+  } = options;
+  const qa = await authenticatedPost<JsonRecord>({
+    request,
+    apiBaseURL,
+    endpoint: `/ops/qa/${customer.orderId}/decision`,
+    token: adminToken,
+    action: `${customer.name} RFQ QA approval`,
+    data: {
+      decision: "approved_for_matching",
+      checklist: { product_compatibility: true, address: true },
+      riskLevel: "low",
+      evidence: { fileMetadataId: customer.fileId },
+    },
+  });
+  expect(qa).toMatchObject({
+    order: { orderStatus: "approved_for_matching" },
+  });
+
+  const match = await authenticatedPost<JsonRecord>({
+    request,
+    apiBaseURL,
+    endpoint: `/ops/matching/${customer.orderId}/auto-match`,
+    token: adminToken,
+    action: `${customer.name} exact Flyers supplier match`,
+  });
+  const assignment = match.assignment as JsonRecord;
+  const supplierAssignmentId = positiveId(
+    assignment.id,
+    `${customer.name} supplier assignment id`,
+  );
+  expect(assignment.decision).toBe("pending");
+
+  const promisedDate = new Date(Date.now() + 3 * 86_400_000).toISOString();
+  const quote = await authenticatedPost<JsonRecord>({
+    request,
+    apiBaseURL,
+    endpoint: `/supplier/jobs/${supplierAssignmentId}/accept`,
+    token: supplierToken,
+    action: `${customer.name} supplier goods quote`,
+    // Keep goods plus the server-owned delivery fee within the fresh beta
+    // account's 100 Pilot Credit authorization budget.
+    data: { finalPriceMinor: 5_000, promisedDate },
+  });
+  expect(quote).toMatchObject({
+    assignment: { id: supplierAssignmentId, decision: "accepted" },
+    order: { orderStatus: "supplier_accepted", pricingStatus: "quoted" },
+  });
+  expect(
+    Number((quote.order as JsonRecord).quotedTotalMinor),
+    `${customer.name} quoted total must fit the fresh beta credit budget`,
+  ).toBeLessThanOrEqual(10_000);
+
+  await navigateMobile(
+    customer.actor.page,
+    mobileURL,
+    `/customer/orders/${customer.orderId}`,
+  );
+  await expect(customer.actor.page.locator("body")).toContainText(
+    /Supplier quote/i,
+  );
+  await expect(customer.actor.page.locator("body")).toContainText(
+    /Pilot Credits/i,
+  );
+  const accepted = await waitForStrict2xx<JsonRecord>(
+    customer.actor.page,
+    (response) =>
+      response.request().method() === "POST" &&
+      apiPath(response, `/api/orders/${customer.orderId}/accept-quote`),
+    () => clickNamed(customer.actor.page, "Accept quote"),
+    `${customer.name} customer quote acceptance`,
+  );
+  expect(accepted).toMatchObject({
+    orderStatus: "awaiting_payment",
+    pricingStatus: "accepted",
+  });
+  await expect(customer.actor.page.locator("body")).toContainText(
+    /Quote accepted/i,
+  );
+  await capture(
+    run,
+    customer.actor,
+    evidenceStepId,
+    /Quote accepted|Pilot Credits/i,
+    {
+      userId: customer.userId,
+      fileId: customer.fileId,
+      addressId: customer.addressId,
+      orderId: customer.orderId,
+      orderRef: customer.orderRef,
+    },
+    evidenceStepId === 18 ? { variant: "ven-quote-accepted" } : {},
+  );
+
+  const authorized = await authenticatedPost<JsonRecord>({
+    request,
+    apiBaseURL,
+    endpoint: `/orders/${customer.orderId}/authorize-payment`,
+    token: adminToken,
+    action: `${customer.name} Operations payment authorization`,
+  });
+  expect(authorized).toMatchObject({
+    orderStatus: "payment_authorized",
+    paymentAuthorizationStatus: "authorized",
+  });
+
+  await authenticatedPost<JsonRecord>({
+    request,
+    apiBaseURL,
+    endpoint: `/supplier/jobs/${supplierAssignmentId}/production-status`,
+    token: supplierToken,
+    action: `${customer.name} supplier production`,
+    data: { milestone: "in_production", notes: "Visual RFQ production" },
+  });
+  const evidenceUpload = await strictJson<JsonRecord>(
+    await request.post(`${apiBaseURL}/files/upload`, {
+      headers: { Authorization: `Bearer ${supplierToken}` },
+      multipart: {
+        file: {
+          name: "catalog-self-qc.png",
+          mimeType: "image/png",
+          buffer: readFileSync(uploadFixture),
+        },
+        purpose: "general",
+      },
+    }),
+    `${customer.name} supplier self-QC upload`,
+  );
+  const evidenceFileId = positiveId(
+    evidenceUpload.id,
+    `${customer.name} supplier self-QC file id`,
+  );
+  await authenticatedPost<JsonRecord>({
+    request,
+    apiBaseURL,
+    endpoint: `/supplier/jobs/${supplierAssignmentId}/self-qc`,
+    token: supplierToken,
+    action: `${customer.name} supplier self-QC`,
+    data: {
+      evidenceFileIds: [evidenceFileId],
+      checklist: { artwork: true, finish: true },
+      notes: "Visual RFQ self-QC",
+    },
+  });
+  const ready = await authenticatedPost<JsonRecord>({
+    request,
+    apiBaseURL,
+    endpoint: `/supplier/jobs/${supplierAssignmentId}/ready-for-pickup`,
+    token: supplierToken,
+    action: `${customer.name} supplier ready for dispatch`,
+  });
+  expect(ready).toMatchObject({
+    order: { orderStatus: "ready_for_dispatch" },
+  });
 }
 
 async function advanceProductionAndAssign(options: {
@@ -2290,35 +2475,6 @@ async function advanceProductionAndAssign(options: {
     assignment_eligible: true,
   });
   await expect(admin.page.locator("body")).toContainText(customer.orderRef);
-  for (const label of [
-    "File Verified",
-    "Printing",
-    "Finishing",
-    "Quality Checked",
-    "Ready for Dispatch",
-  ]) {
-    await admin.page
-      .getByLabel(`Update status for ${customer.orderRef}`)
-      .first()
-      .click({ timeout: 15_000 });
-    await admin.page
-      .locator(".ant-select-dropdown:visible")
-      .getByText(label, { exact: true })
-      .click({ timeout: 15_000 });
-    const responsePromise = admin.page.waitForResponse(
-      (response) =>
-        response.request().method() === "PATCH" &&
-        apiPath(response, `/api/admin/orders/${customer.orderId}/status`),
-    );
-    await admin.page
-      .getByRole("button", { name: "OK" })
-      .click({ timeout: 15_000 });
-    await strictBrowserJson(
-      await responsePromise,
-      `${customer.name} production transition ${label}`,
-    );
-    await expect(admin.page.locator(".ant-modal-wrap:visible")).toHaveCount(0);
-  }
   await admin.page.evaluate(() => window.scrollTo(0, 0));
   await expect(admin.page.getByText(customer.orderRef).first()).toBeVisible();
   await expect(
@@ -2374,6 +2530,89 @@ async function loginMobile(
     () => clickNamed(actor.page, /Sign In|Login/i),
     `${actor.name} UI login`,
   );
+}
+
+async function loginApi(
+  request: APIRequestContext,
+  apiBaseURL: string,
+  email: string,
+  password: string,
+  clientIp: string,
+): Promise<AuthPayload> {
+  return strictJson<AuthPayload>(
+    await request.post(`${apiBaseURL}/auth/login`, {
+      headers: { "x-forwarded-for": clientIp },
+      data: { email, password },
+    }),
+    `${email} isolated API login`,
+  );
+}
+
+async function provisionVisualSupplier(options: {
+  request: APIRequestContext;
+  apiBaseURL: string;
+  adminPassword: string;
+  supplierPassword: string;
+}): Promise<{ supplierToken: string; superToken: string }> {
+  const { request, apiBaseURL, adminPassword, supplierPassword } = options;
+  const [superAuth, supplierAuth] = await Promise.all([
+    loginApi(
+      request,
+      apiBaseURL,
+      "superadmin@gridgo.ph",
+      adminPassword,
+      "198.51.100.80",
+    ),
+    loginApi(
+      request,
+      apiBaseURL,
+      "supplier@gridgo.ph",
+      supplierPassword,
+      "198.51.100.81",
+    ),
+  ]);
+  const profile = await authenticatedPost<JsonRecord>({
+    request,
+    apiBaseURL,
+    endpoint: "/suppliers",
+    token: superAuth.access_token,
+    action: "provision isolated visual supplier profile",
+    data: {
+      userId: supplierAuth.user.id,
+      businessName: "Davao Print Co",
+      serviceZones: [],
+      serviceFocusRanks: [],
+      isActive: true,
+    },
+  });
+  const profileId = positiveId(profile.id, "visual supplier profile id");
+  await strictJson(
+    await request.patch(`${apiBaseURL}/suppliers/${profileId}/verification`, {
+      headers: { Authorization: `Bearer ${superAuth.access_token}` },
+      data: {
+        status: "verified",
+        payoutDetailsRef: "visual-evidence-only",
+      },
+    }),
+    "verify isolated visual supplier",
+  );
+  await authenticatedPost({
+    request,
+    apiBaseURL,
+    endpoint: "/suppliers/me/capabilities",
+    token: supplierAuth.access_token,
+    action: "provision exact Flyers supplier capability",
+    data: {
+      productFamily: "flyers",
+      materials: [],
+      maxCapacity: 10_000,
+      leadTimeDays: 3,
+    },
+  });
+  return {
+    supplierToken: supplierAuth.access_token,
+    superToken: superAuth.access_token,
+  };
 }
 
 async function riderAction(
@@ -2680,10 +2919,15 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
     const adminPassword = process.env.GRIDGO_ADMIN_PASSWORD;
     const riderEmail = process.env.GRIDGO_RIDER_EMAIL;
     const riderPassword = process.env.GRIDGO_RIDER_PASSWORD;
+    const supplierPassword = process.env.GRIDGO_SEED_CUSTOMER_PASSWORD;
     expect(adminEmail, "GRIDGO_ADMIN_EMAIL is required").toBeTruthy();
     expect(adminPassword, "GRIDGO_ADMIN_PASSWORD is required").toBeTruthy();
     expect(riderEmail, "GRIDGO_RIDER_EMAIL is required").toBeTruthy();
     expect(riderPassword, "GRIDGO_RIDER_PASSWORD is required").toBeTruthy();
+    expect(
+      supplierPassword,
+      "GRIDGO_SEED_CUSTOMER_PASSWORD is required for the isolated supplier",
+    ).toBeTruthy();
 
     const runLabel = randomUUID();
     const markPassword = generateVisualCustomerPassword();
@@ -2717,6 +2961,17 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       );
       registerEvidenceSecrets(run, [adminAuth.access_token]);
       await setBetaThroughAdmin(actors.admin, adminURL, true, run);
+      const supplier = await provisionVisualSupplier({
+        request,
+        apiBaseURL,
+        adminPassword: adminPassword!,
+        supplierPassword: supplierPassword!,
+      });
+      registerEvidenceSecrets(run, [
+        supplier.supplierToken,
+        supplier.superToken,
+        supplierPassword,
+      ]);
 
       const markBase = await registerCustomerThroughUi({
         actor: actors.mark,
@@ -2732,7 +2987,10 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         base: markBase,
         mobileURL,
         run,
-        firstStep: 4,
+        request,
+        apiBaseURL,
+        adminToken: adminAuth.access_token,
+        supplierToken: supplier.supplierToken,
       });
       await advanceProductionAndAssign({
         admin: actors.admin,
@@ -2796,7 +3054,10 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         base: venBase,
         mobileURL,
         run,
-        firstStep: 18,
+        request,
+        apiBaseURL,
+        adminToken: adminAuth.access_token,
+        supplierToken: supplier.supplierToken,
       });
       await advanceProductionAndAssign({
         admin: actors.admin,

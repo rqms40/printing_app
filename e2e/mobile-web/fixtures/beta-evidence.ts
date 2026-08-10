@@ -105,16 +105,16 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
   },
   {
     id: 11,
-    slug: "credits-only-payment",
+    slug: "rfq-pending-no-payment",
     actor: "mark",
-    assertion: "GRIDGO Credits is the only enabled beta payment option",
+    assertion: "Pending RFQ shows no payment control or fabricated zero price",
     axe: true,
   },
   {
     id: 12,
-    slug: "mark-order-summary",
+    slug: "mark-rfq-submitted",
     actor: "mark",
-    assertion: "Print and delivery mode summary matches checkout",
+    assertion: "Mark receives a durable RFQ submission confirmation",
   },
   {
     id: 13,
@@ -126,13 +126,13 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
     id: 14,
     slug: "mark-order-details",
     actor: "mark",
-    assertion: "Mark order list and detail show the exact reference",
+    assertion: "Mark accepts the real supplier quote before authorization",
   },
   {
     id: 15,
     slug: "mark-production-progress",
     actor: "admin",
-    assertion: "Mark progressed through every allowed production state",
+    assertion: "Mark passed authorization, supplier production, and self-QC",
   },
   {
     id: 16,
@@ -150,9 +150,9 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
   },
   {
     id: 18,
-    slug: "ven-order-placed",
+    slug: "ven-quote-accepted",
     actor: "ven",
-    assertion: "Ven registered after Mark and placed a credits order",
+    assertion: "Ven registered after Mark and accepted the real supplier quote",
   },
   {
     id: 19,

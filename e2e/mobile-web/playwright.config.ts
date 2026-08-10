@@ -17,11 +17,13 @@ export default defineConfig({
   fullyParallel: false,
   workers: visualWorkflow ? 1 : undefined,
   reporter: [["list"]],
-  outputDir: visualWorkflow
-    ? (process.env.GRIDGO_BETA_PLAYWRIGHT_OUTPUT ??
-      process.env.GRIDGO_CATALOG_RFQ_PLAYWRIGHT_OUTPUT ??
-      "/tmp/gridgo-visual/playwright")
-    : "test-results",
+  outputDir: catalogVisualWorkflow
+    ? (process.env.GRIDGO_CATALOG_RFQ_PLAYWRIGHT_OUTPUT ??
+      "/tmp/gridgo-catalog-rfq-visual/playwright")
+    : betaVisualWorkflow
+      ? (process.env.GRIDGO_BETA_PLAYWRIGHT_OUTPUT ??
+        "/tmp/gridgo-beta-visual/playwright")
+      : "test-results",
   use: {
     baseURL,
     trace: visualWorkflow ? "off" : "retain-on-failure",
@@ -55,6 +57,9 @@ export default defineConfig({
       ? [
           {
             name: "beta-visual",
+            outputDir:
+              process.env.GRIDGO_BETA_PLAYWRIGHT_OUTPUT ??
+              "/tmp/gridgo-beta-visual/playwright",
             use: {
               ...devices["Desktop Chrome"],
               viewport: { width: 1440, height: 900 },
@@ -77,6 +82,9 @@ export default defineConfig({
       ? [
           {
             name: "catalog-rfq-visual",
+            outputDir:
+              process.env.GRIDGO_CATALOG_RFQ_PLAYWRIGHT_OUTPUT ??
+              "/tmp/gridgo-catalog-rfq-visual/playwright",
             use: {
               ...devices["Desktop Chrome"],
               viewport: { width: 1440, height: 900 },

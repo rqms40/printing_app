@@ -26,6 +26,23 @@ import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart'
 import 'package:printing_app/features/tutorial/widgets/feature_overlay_card.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
+PipelineStep checkoutTutorialStepAfterDelivery({required bool isRfq}) =>
+    isRfq ? PipelineStep.placeOrderButton : PipelineStep.checkoutPayment;
+
+({String title, String body}) checkoutSubmitTutorialCopy({
+  required bool isRfq,
+}) => isRfq
+    ? (
+        title: 'Submit quote request',
+        body:
+            "That's the Submit quote request button — tap it whenever you're ready to send your requirements.",
+      )
+    : (
+        title: 'Place Order',
+        body:
+            "That's the Place Order button — tap it whenever you're ready to send your order.",
+      );
+
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
 
@@ -196,9 +213,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ),
       ],
       () {
-        ref.read(pipelineTutorialProvider.notifier).advance();
+        final pipeline = ref.read(pipelineTutorialProvider.notifier);
+        pipeline.advance();
+        final next = checkoutTutorialStepAfterDelivery(
+          isRfq: ref.read(checkoutProvider).hasPendingQuoteItems,
+        );
+        if (next == PipelineStep.placeOrderButton) pipeline.advance();
         Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) _firePipelinePayment();
+          if (!mounted) return;
+          if (next == PipelineStep.placeOrderButton) {
+            _firePipelinePlaceOrder();
+          } else {
+            _firePipelinePayment();
+          }
         });
       },
       onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
@@ -236,15 +263,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (!mounted) return;
     await _ensureVisible(_placeOrderKey);
     if (!mounted) return;
+    final copy = checkoutSubmitTutorialCopy(
+      isRfq: ref.read(checkoutProvider).hasPendingQuoteItems,
+    );
     showCoachMark(
       context,
       [
         TutorialStep(
           targetKey: _placeOrderKey,
           icon: HugeIcons.strokeRoundedCheckmarkCircle02,
-          title: 'Place Order',
-          body:
-              "That's the Place Order button — tap it whenever you're ready to send your order.",
+          title: copy.title,
+          body: copy.body,
           align: ContentAlign.top,
           advanceOnSpotlightTap: false,
         ),

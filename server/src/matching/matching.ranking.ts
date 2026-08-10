@@ -5,6 +5,7 @@ import {
   SupplierVerificationStatus,
 } from '../suppliers/entities/supplier-verification.entity';
 import { SupplierAssignmentDecision } from './entities/supplier-assignment.entity';
+import { findExactActiveLeafCapability } from './exact-leaf-capability';
 
 /**
  * Matching score formula (Task 4.2 — simple weighted sum):
@@ -115,14 +116,7 @@ function findMatchingCapability(
   capabilities: SupplierCapability[] | undefined,
   category: string,
 ): SupplierCapability | null {
-  if (!capabilities?.length) return null;
-  const target = normalizeToken(category);
-  if (!target) return null;
-  return (
-    capabilities.find(
-      (c) => c.isActive === true && normalizeToken(c.productFamily) === target,
-    ) ?? null
-  );
+  return findExactActiveLeafCapability(capabilities, category);
 }
 
 function zoneFitScore(

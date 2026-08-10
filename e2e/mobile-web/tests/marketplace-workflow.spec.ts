@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { CATALOG_V1_10_GROUPS } from "../../../server/src/products/catalog-v1-10.definition";
+import { assertRfqAuthorizationReady } from "../../../server/src/orders/rfq-authorization-gate";
+import { hasExactActiveLeafCapability } from "../../../server/src/matching/exact-leaf-capability";
 
 /**
  * Marketplace workflow contract (non-mutating by default).
@@ -38,45 +41,7 @@ type KnownGap = {
   affectedSteps: number[];
 };
 
-const catalogGroups = [
-  {
-    slug: "marketing-promo",
-    products: [
-      "flyers",
-      "brochures",
-      "posters-standees",
-      "business-cards",
-      "stickers-packaging-labels",
-      "tarpaulins-outdoor-banners",
-    ],
-  },
-  {
-    slug: "corporate-merch",
-    products: [
-      "lanyards-id-accessories",
-      "custom-apparel",
-      "drinkware",
-      "corporate-giveaways",
-    ],
-  },
-  {
-    slug: "awards-signages",
-    products: [
-      "certificates-diplomas",
-      "plaques-trophies",
-      "medals-ribbons",
-      "business-store-signages",
-    ],
-  },
-  {
-    slug: "specialized-prototyping",
-    products: [
-      "3d-printing-scale-models",
-      "blueprint-cad-plotting",
-      "packaging-box-production",
-    ],
-  },
-] as const;
+const catalogGroups = CATALOG_V1_10_GROUPS;
 
 const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
   {
@@ -100,7 +65,7 @@ const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
     surface: "mobile-client",
     action: "Choose a catalog leaf and submit a structured RFQ with artwork.",
     expected:
-      "Order enters needs_qa with pricing_status=pending_quote, a null quote, and no payment controls.",
+      "Order enters submitted with pricing_status=pending_quote, a null quote, and no payment controls.",
   },
   {
     id: 4,
@@ -215,6 +180,18 @@ const repoRoot = path.resolve(
 const marketplacePlanRel =
   "docs/superpowers/plans/2026-08-04-managed-marketplace-migration.md";
 
+function authorizeUnacceptedProductionRfq(): Promise<unknown> {
+  return Promise.resolve().then(() =>
+    assertRfqAuthorizationReady({
+      id: 910001,
+      orderStatus: "supplier_accepted",
+      pricingStatus: "quoted",
+      quotedTotalMinor: "175000",
+      quotedAt: new Date("2026-08-10T10:00:00.000Z"),
+    }),
+  );
+}
+
 test.describe("GRIDGO marketplace workflow contract", () => {
   test("records the complete super/ops/client/supplier/rider pilot flow", () => {
     expect(marketplaceWorkflowSteps).toHaveLength(13);
@@ -252,6 +229,7 @@ test.describe("GRIDGO marketplace workflow contract", () => {
   });
 
   test("freezes the v1.10 browsing catalog at four groups and seventeen leaves", () => {
+    expect(catalogGroups).toBe(CATALOG_V1_10_GROUPS);
     expect(catalogGroups.map(({ slug }) => slug)).toEqual([
       "marketing-promo",
       "corporate-merch",
@@ -263,7 +241,11 @@ test.describe("GRIDGO marketplace workflow contract", () => {
     ]);
     expect(catalogGroups.flatMap(({ products }) => products)).toHaveLength(17);
     expect(
-      new Set(catalogGroups.flatMap(({ products }) => products)).size,
+      new Set(
+        catalogGroups.flatMap(({ products }) =>
+          products.map((product) => product.slug),
+        ),
+      ).size,
     ).toBe(17);
   });
 
@@ -289,6 +271,32 @@ test.describe("GRIDGO marketplace workflow contract", () => {
     expect(joined.indexOf("pricing_status=accepted")).toBeLessThan(
       joined.indexOf("authorize payment"),
     );
+  });
+
+  test("executes the production authorization gate before accepting an RFQ quote", async () => {
+    await expect(authorizeUnacceptedProductionRfq()).rejects.toMatchObject({
+      response: {
+        code: "rfq_quote_not_accepted",
+      },
+    });
+  });
+
+  test("executes the production exact active leaf capability matcher", () => {
+    expect(
+      hasExactActiveLeafCapability(
+        [
+          { productFamily: "flyer", isActive: true },
+          { productFamily: "flyers", isActive: false },
+        ],
+        "flyers",
+      ),
+    ).toBe(false);
+    expect(
+      hasExactActiveLeafCapability(
+        [{ productFamily: "  FLYERS ", isActive: true }],
+        "flyers",
+      ),
+    ).toBe(true);
   });
 
   test("runs the exact marketplace contract in mobile web CI", () => {

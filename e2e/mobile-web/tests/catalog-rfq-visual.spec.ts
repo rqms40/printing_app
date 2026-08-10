@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { CATALOG_V1_10_GROUPS } from "../../../server/src/products/catalog-v1-10.definition";
 
 import {
   enableFlutterSemantics,
@@ -18,6 +19,8 @@ type CatalogVisualStep = {
   surface: "mobile-client" | "admin-web";
   assertion: string;
 };
+
+type JsonRecord = Record<string, unknown>;
 
 const catalogVisualSteps: readonly CatalogVisualStep[] = [
   {
@@ -72,12 +75,7 @@ const catalogVisualSteps: readonly CatalogVisualStep[] = [
   },
 ] as const;
 
-const groupContract = [
-  ["marketing-promo", "Marketing & Promotional Collateral", 6],
-  ["corporate-merch", "Corporate & Event Merchandise", 4],
-  ["awards-signages", "Recognition, Awards & Signage", 4],
-  ["specialized-prototyping", "Specialized & Prototyping Services", 3],
-] as const;
+const groupContract = CATALOG_V1_10_GROUPS;
 
 const evidenceRoot = path.resolve(
   process.env.GRIDGO_CATALOG_RFQ_EVIDENCE_DIR ??
@@ -89,6 +87,16 @@ function evidenceFile(step: CatalogVisualStep): string {
 }
 
 test.describe("GRIDGO catalog RFQ visual contract", () => {
+  test("keeps catalog artifacts in the catalog output when both visual flags are present", async ({}, testInfo) => {
+    test.skip(
+      process.env.GRIDGO_TEST_DUAL_VISUAL_OUTPUT !== "1",
+      "dual-flag output regression is exercised by its focused command",
+    );
+    expect(testInfo.project.outputDir).toBe(
+      path.resolve(process.env.GRIDGO_CATALOG_RFQ_PLAYWRIGHT_OUTPUT!),
+    );
+  });
+
   test("defines the required eight release captures", () => {
     expect(catalogVisualSteps.map(({ id }) => id)).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8,
@@ -107,14 +115,18 @@ test.describe("GRIDGO catalog RFQ visual contract", () => {
   });
 
   test("freezes the visual catalog at four groups and seventeen leaves", () => {
-    expect(groupContract.map(([slug]) => slug)).toEqual([
+    expect(groupContract.map(({ slug }) => slug)).toEqual([
       "marketing-promo",
       "corporate-merch",
       "awards-signages",
       "specialized-prototyping",
     ]);
-    expect(groupContract.map(([, , count]) => count)).toEqual([6, 4, 4, 3]);
-    expect(groupContract.reduce((sum, [, , count]) => sum + count, 0)).toBe(17);
+    expect(groupContract.map(({ products }) => products.length)).toEqual([
+      6, 4, 4, 3,
+    ]);
+    expect(
+      groupContract.reduce((sum, { products }) => sum + products.length, 0),
+    ).toBe(17);
   });
 
   test("keeps evidence outside source with sanitized URLs, hashes, manifest, and videos", () => {
@@ -130,6 +142,58 @@ test.describe("GRIDGO catalog RFQ visual contract", () => {
     expect(source).toContain('path.join(evidenceRoot, "manifest.json")');
     expect(source).toContain('path.join(evidenceRoot, "videos")');
     expect(config).toContain('trace: visualWorkflow ? "off"');
+  });
+
+  test("registers the quoted order before provider bootstrap and executes acceptance", async ({
+    page,
+  }) => {
+    await bootstrapQuotedCustomerEvidence(page, async () => {
+      await page.route("https://mobile.gridgo.test/bootstrap", (route) =>
+        route.fulfill({
+          contentType: "text/html",
+          body: `
+            <main id="order"></main>
+            <script>
+              fetch("/api/orders")
+                .then((response) => response.json())
+                .then((orders) => {
+                  const order = orders.find(({ id }) => id === 910001);
+                  document.querySelector("#order").innerHTML =
+                    '<h1>Order #' + order.id + '</h1>' +
+                    '<p>' + order.orderStatus + ' / ' + order.pricingStatus + '</p>' +
+                    '<button id="accept">Accept quote</button>';
+                  document.querySelector("#accept").addEventListener("click", async () => {
+                    const accepted = await fetch("/api/orders/910001/accept-quote", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({
+                        supplierAssignmentId: order.quoteAssignmentId,
+                        paymentMethod: "pilot_credit",
+                      }),
+                    }).then((response) => response.json());
+                    document.querySelector("#order").dataset.status = accepted.orderStatus;
+                    document.querySelector("#order").append("Quote accepted");
+                  });
+                });
+            </script>
+          `,
+        }),
+      );
+      await page.goto("https://mobile.gridgo.test/bootstrap");
+    });
+    await expect(
+      page.getByRole("heading", { name: "Order #910001" }),
+    ).toBeVisible();
+    await expect(page.locator("body")).toContainText(
+      "supplier_accepted / quoted",
+    );
+    await page.getByRole("button", { name: "Accept quote" }).click();
+    await expect(page.locator("#order")).toHaveAttribute(
+      "data-status",
+      "awaiting_payment",
+    );
+    await expect(page.locator("body")).toContainText("Quote accepted");
+    expect((await page.screenshot()).byteLength).toBeGreaterThan(0);
   });
 });
 
@@ -187,8 +251,8 @@ test.describe.serial("opt-in catalog RFQ screenshot evidence", () => {
         entries,
         /Browse by product group/i,
       );
-      for (const [, groupName] of groupContract) {
-        await expect(customerPage.locator("body")).toContainText(groupName);
+      for (const { name } of groupContract) {
+        await expect(customerPage.locator("body")).toContainText(name);
       }
 
       await customerPage.emulateMedia({ colorScheme: "dark" });
@@ -201,8 +265,8 @@ test.describe.serial("opt-in catalog RFQ screenshot evidence", () => {
         entries,
         /Browse by product group/i,
       );
-      for (const [, groupName] of groupContract) {
-        await expect(customerPage.locator("body")).toContainText(groupName);
+      for (const { name } of groupContract) {
+        await expect(customerPage.locator("body")).toContainText(name);
       }
 
       await customerPage
@@ -244,7 +308,10 @@ test.describe.serial("opt-in catalog RFQ screenshot evidence", () => {
         },
       );
 
-      await mockQuotedOrder(customerPage);
+      await bootstrapQuotedCustomerEvidence(customerPage, async () => {
+        await customerPage.reload();
+        await enableFlutterSemantics(customerPage);
+      });
       await navigateMobile(customerPage, mobileURL, "/customer/orders/910001");
       await customerPage.getByRole("button", { name: "Accept quote" }).click();
       await capture(
@@ -265,7 +332,7 @@ test.describe.serial("opt-in catalog RFQ screenshot evidence", () => {
         entries,
         /Products & Services/i,
       );
-      for (const [, name] of groupContract)
+      for (const { name } of groupContract)
         await expect(adminPage.locator("body")).toContainText(name);
 
       await mockAdminDynamicOrder(adminPage);
@@ -421,6 +488,14 @@ async function mockQuotedOrder(page: Page): Promise<void> {
       },
     });
   });
+}
+
+async function bootstrapQuotedCustomerEvidence(
+  page: Page,
+  bootstrapProvider: () => Promise<void>,
+): Promise<void> {
+  await mockQuotedOrder(page);
+  await bootstrapProvider();
 }
 
 async function mockAdminDynamicOrder(page: Page): Promise<void> {

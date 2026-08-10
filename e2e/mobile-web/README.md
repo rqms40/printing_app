@@ -77,6 +77,7 @@ MOBILE_WEB_E2E_NO_SERVER=1 \
 GRIDGO_API_URL=http://127.0.0.1:3000/api \
 GRIDGO_ADMIN_EMAIL=<dev-admin-email> \
 GRIDGO_ADMIN_PASSWORD=<dev-admin-password> \
+GRIDGO_SEED_CUSTOMER_PASSWORD=<dev-customer-and-supplier-password> \
 GRIDGO_RIDER_EMAIL=<dev-rider-email> \
 GRIDGO_RIDER_PASSWORD=<dev-rider-password> \
 npm test -- tests/beta-workflow-destructive.spec.ts
@@ -107,6 +108,11 @@ GRIDGO_RIDER_EMAIL=<dev-rider-email> \
 GRIDGO_RIDER_PASSWORD=<dev-rider-password> \
 npm run test:beta:visual
 ```
+
+On the fresh stack, the harness uses the seeded Super Admin and supplier
+accounts to provision and verify an exact Flyers capability. Each customer RFQ
+then passes real Ops QA and matching, supplier quote, customer quote acceptance,
+Ops authorization, supplier production/self-QC, and rider dispatch APIs.
 
 The Browser plugin is not installed in this environment, so this approved
 workflow uses repository Playwright Chromium. It does not complete an external

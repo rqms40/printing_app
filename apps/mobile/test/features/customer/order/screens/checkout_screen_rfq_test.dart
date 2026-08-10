@@ -12,12 +12,25 @@ import 'package:printing_app/features/customer/order/providers/delivery_slot_pro
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/screens/checkout_screen.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
 
 import '../providers/delivery_slot_provider_test.mocks.dart';
 
 void main() {
+  test('RFQ tutorial skips payment and names the quote-request action', () {
+    expect(
+      checkoutTutorialStepAfterDelivery(isRfq: true),
+      PipelineStep.placeOrderButton,
+    );
+    expect(checkoutSubmitTutorialCopy(isRfq: true), (
+      title: 'Submit quote request',
+      body:
+          "That's the Submit quote request button — tap it whenever you're ready to send your requirements.",
+    ));
+  });
+
   testWidgets('RFQ review exposes pending copy without payment or totals', (
     tester,
   ) async {

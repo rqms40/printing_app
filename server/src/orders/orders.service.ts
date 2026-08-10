@@ -118,6 +118,10 @@ import {
 import { ProductCategory } from '../products/entities/product-category.entity';
 import { isActiveOrderableRfqLeaf } from '../products/catalog-v1-10.definition';
 import { CatalogValidationService } from '../products/catalog-validation.service';
+import {
+  assertRfqAuthorizationReady,
+  isRfqQuoteOrder,
+} from './rfq-authorization-gate';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -2530,17 +2534,7 @@ export class OrdersService {
     }
 
     const precheckIsRfq = this.isRfqQuoteOrder(precheck);
-    if (
-      precheckIsRfq &&
-      (precheck.orderStatus !== OrderStatus.AWAITING_PAYMENT ||
-        precheck.pricingStatus !== PricingStatus.ACCEPTED)
-    ) {
-      throw new BadRequestException({
-        code: 'rfq_quote_not_accepted',
-        message:
-          'RFQ payment requires customer acceptance of the current quote',
-      });
-    }
+    assertRfqAuthorizationReady(precheck);
 
     if (
       !precheckIsRfq &&
@@ -2591,17 +2585,7 @@ export class OrdersService {
         return { previous: null as Order | null, order: locked };
       }
 
-      if (
-        this.isRfqQuoteOrder(locked) &&
-        (locked.orderStatus !== OrderStatus.AWAITING_PAYMENT ||
-          locked.pricingStatus !== PricingStatus.ACCEPTED)
-      ) {
-        throw new BadRequestException({
-          code: 'rfq_quote_not_accepted',
-          message:
-            'RFQ payment requires customer acceptance of the current quote',
-        });
-      }
+      assertRfqAuthorizationReady(locked);
 
       if (
         !this.isRfqQuoteOrder(locked) &&
@@ -2836,12 +2820,7 @@ export class OrdersService {
   }
 
   private isRfqQuoteOrder(order: Partial<Order>): boolean {
-    return (
-      order.quotedTotalMinor != null ||
-      order.quotedAt != null ||
-      order.pricingStatus === PricingStatus.PENDING_QUOTE ||
-      order.pricingStatus === PricingStatus.QUOTED
-    );
+    return isRfqQuoteOrder(order);
   }
 
   /**
