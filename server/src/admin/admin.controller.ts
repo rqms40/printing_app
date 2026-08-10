@@ -594,7 +594,8 @@ export class AdminController {
           assignedSupplierContact?: Record<string, unknown> | null;
         }
       ).assignedSupplierContact;
-      return Object.assign(order, {
+      return {
+        ...order,
         assignedRiderContact:
           this.assignedRiderContactFromAssignment(assignment) ??
           (
@@ -635,27 +636,38 @@ export class AdminController {
             }
           : null,
         deliveryProof: this.deliveryProofFromAssignment(assignment),
-      });
+      } as Order;
     });
   }
 
   private async attachMatchingOutcomes(orders: Order[]): Promise<Order[]> {
     if (!this.matchingService) return orders;
-    return Promise.all(
-      orders.map(async (order) => {
+    const projected = new Array<Order>(orders.length);
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < orders.length) {
+        const index = nextIndex++;
+        const order = orders[index];
         if (order.orderStatus !== OrderStatus.APPROVED_FOR_MATCHING) {
-          return Object.assign(order, {
+          projected[index] = {
+            ...order,
             matchingOutcome: null,
             unmetCoverage: false,
-          });
+          } as Order;
+          continue;
         }
         const result = await this.matchingService!.getCandidates(order.id);
-        return Object.assign(order, {
+        projected[index] = {
+          ...order,
           matchingOutcome: result.outcome,
           unmetCoverage: result.outcome.code === 'no_eligible_supplier',
-        });
-      }),
+        } as Order;
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(4, orders.length) }, () => worker()),
     );
+    return projected;
   }
 
   private currentSupplierAssignment(order: Order) {

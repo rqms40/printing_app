@@ -780,6 +780,42 @@ describe('AdminController analytics', () => {
     });
   });
 
+  describe('matching outcome enrichment', () => {
+    it('bounds candidate lookups to four concurrent orders', async () => {
+      let active = 0;
+      let peak = 0;
+      const matchingService = {
+        getCandidates: jest.fn(async () => {
+          active += 1;
+          peak = Math.max(peak, active);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          active -= 1;
+          return {
+            outcome: { code: 'no_eligible_supplier', message: 'No coverage' },
+            candidates: [],
+          };
+        }),
+      };
+      Object.defineProperty(controller, 'matchingService', {
+        value: matchingService,
+      });
+      const orders = Array.from({ length: 9 }, (_, index) => ({
+        id: index + 1,
+        orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
+      })) as Order[];
+
+      const resultPromise = (controller as any).attachMatchingOutcomes(orders);
+      await jest.runAllTimersAsync();
+      const result = (await resultPromise) as Array<
+        Order & { unmetCoverage?: boolean }
+      >;
+
+      expect(peak).toBe(4);
+      expect(matchingService.getCandidates).toHaveBeenCalledTimes(9);
+      expect(result.every((order) => order.unmetCoverage === true)).toBe(true);
+    });
+  });
+
   describe('updateOrderStatus', () => {
     it('records an admin-provided status reason without accepting an actor id', async () => {
       const savedOrder = { id: 42 } as Order;

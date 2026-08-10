@@ -480,7 +480,8 @@ export class OrdersService {
           optionId: spec.optionId,
           optionLabel: spec.optionLabel,
         }));
-        return Object.assign(item, {
+        return {
+          ...item,
           categorySlug: item.categorySlug ?? item.category,
           categoryName: item.categoryName ?? product?.name ?? null,
           groupSlug: product?.groupSlug ?? null,
@@ -499,9 +500,9 @@ export class OrdersService {
               }
             : null,
           specs,
-        });
+        };
       });
-      return Object.assign(order, { items });
+      return { ...order, items } as Order;
     });
   }
 
@@ -641,6 +642,11 @@ export class OrdersService {
 
     return Promise.all(
       orders.map(async (order) => {
+        const {
+          quotedByUserId: _quotedByUserId,
+          quotedByUser: _quotedByUser,
+          ...customerSafeOrder
+        } = order;
         const assignment = assignmentByOrderId.get(order.id);
         const supplierAssignment = supplierByOrderId.get(order.id);
         const plan = assignment?.riderId
@@ -680,7 +686,14 @@ export class OrdersService {
             ? (assignment.deliveryOtpCode ?? null)
             : null;
 
-        return Object.assign(order, {
+        const supplierContact =
+          await this.assignedSupplierContactFromAssignment(supplierAssignment);
+        const acceptedQuoteAssignmentId =
+          supplierAssignment?.decision === SupplierAssignmentDecision.ACCEPTED
+            ? supplierAssignment.id
+            : null;
+        return {
+          ...customerSafeOrder,
           deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
           deliveryQueuePosition: queuePosition,
           deliveryQueueSize:
@@ -705,29 +718,15 @@ export class OrdersService {
             assignment,
             canTrackDelivery,
           ),
-          assignedSupplierContact:
-            await this.assignedSupplierContactFromAssignment(
-              supplierAssignment,
-            ),
-          currentSupplierAssignment: supplierAssignment
-            ? {
-                id: supplierAssignment.id,
-                supplierId: supplierAssignment.supplierId,
-                decision: supplierAssignment.decision,
-                rankPosition: supplierAssignment.rankPosition,
-                acceptanceDeadline:
-                  supplierAssignment.acceptanceDeadline ?? null,
-                finalPriceMinor: supplierAssignment.finalPriceMinor ?? null,
-                promisedDate: supplierAssignment.promisedDate ?? null,
-                decidedAt: supplierAssignment.decidedAt ?? null,
-              }
-            : null,
+          assignedSupplierContact: supplierContact,
+          quoteAssignmentId: acceptedQuoteAssignmentId,
+          quote_assignment_id: acceptedQuoteAssignmentId,
           assignedSlot:
             order.batchOrderId == null
               ? undefined
               : assignedSlotByBatchOrderId.get(order.batchOrderId),
           claims: claimsByOrderId.get(order.id) ?? [],
-        });
+        } as unknown as Order;
       }),
     );
   }
@@ -735,11 +734,7 @@ export class OrdersService {
   private assignedSupplierContactFromAssignment(
     assignment: SupplierAssignment | undefined,
   ): Promise<{
-    supplierId: number;
     businessName: string;
-    decision: string;
-    acceptanceDeadline: Date | null;
-    assignmentId: number;
     logoUrl: string | null;
     address: string | null;
     broadAddress: string | null;
@@ -752,11 +747,7 @@ export class OrdersService {
   private async buildAssignedSupplierContact(
     assignment: SupplierAssignment | undefined,
   ): Promise<{
-    supplierId: number;
     businessName: string;
-    decision: string;
-    acceptanceDeadline: Date | null;
-    assignmentId: number;
     logoUrl: string | null;
     address: string | null;
     broadAddress: string | null;
@@ -785,12 +776,8 @@ export class OrdersService {
     }
 
     return {
-      supplierId: assignment.supplierId,
       businessName:
         supplier?.businessName?.trim() || `Supplier #${assignment.supplierId}`,
-      decision: assignment.decision,
-      acceptanceDeadline: assignment.acceptanceDeadline ?? null,
-      assignmentId: assignment.id,
       logoUrl,
       address,
       broadAddress,

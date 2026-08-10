@@ -1,7 +1,17 @@
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  INestApplication,
+  RequestMethod,
+  ValidationPipe,
+} from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+import * as bcrypt from 'bcrypt';
 import { Client as MinioClient } from 'minio';
 import { Client } from 'pg';
 import { DataSource, type DataSourceOptions } from 'typeorm';
@@ -64,12 +74,18 @@ import {
   SupplierVerification,
   SupplierVerificationStatus,
 } from '../src/suppliers/entities/supplier-verification.entity';
-import { SupplierAssignment } from '../src/matching/entities/supplier-assignment.entity';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../src/matching/entities/supplier-assignment.entity';
 import { MatchingService } from '../src/matching/matching.service';
 import { SupplierJobsService } from '../src/suppliers/supplier-jobs.service';
 import { TamSurvey } from '../src/tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../src/tam-surveys/entities/tam-survey-settings.entity';
 import { AdminController } from '../src/admin/admin.controller';
+import { AppModule } from '../src/app.module';
+import { AllExceptionsFilter } from '../src/common/filters/http-exception.filter';
+import { configureTrustedProxy } from '../src/config/trusted-proxy';
 
 describe('catalog RFQ PostgreSQL locks (e2e)', () => {
   jest.setTimeout(120_000);
@@ -560,6 +576,490 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
       ).resolves.toBe(true);
     } finally {
       await dataSource.destroy();
+      await emptyAndRemoveBucket(storage.client, bucket);
+    }
+  });
+
+  it('publishes the two-line RFQ lifecycle through authenticated production HTTP routes', async () => {
+    const database = await createDatabase('http');
+    const bucket = `gridgo-rfq-http-${process.pid}`;
+    const migrated = await initializeDatabase(database);
+    await migrated.destroy();
+    const seeded = runSeed(database, bucket);
+    expect(seeded.status).toBe(0);
+
+    const previous = {
+      DATABASE_NAME: process.env.DATABASE_NAME,
+      MINIO_BUCKET: process.env.MINIO_BUCKET,
+    };
+    Object.assign(process.env, {
+      NODE_ENV: 'test',
+      DATABASE_HOST: adminConfig.host,
+      DATABASE_PORT: String(adminConfig.port),
+      DATABASE_NAME: database,
+      DATABASE_USER: adminConfig.user,
+      DATABASE_PASSWORD: adminConfig.password,
+      JWT_SECRET: 'catalog-rfq-http-test-only',
+      MINIO_ENDPOINT: requiredLifecycleEnv('GRIDGO_LIFECYCLE_MINIO_ENDPOINT'),
+      MINIO_PORT: requiredLifecycleEnv('GRIDGO_LIFECYCLE_MINIO_PORT'),
+      MINIO_USE_SSL: 'false',
+      MINIO_ACCESS_KEY: requiredLifecycleEnv(
+        'GRIDGO_LIFECYCLE_MINIO_ACCESS_KEY',
+      ),
+      MINIO_SECRET_KEY: requiredLifecycleEnv(
+        'GRIDGO_LIFECYCLE_MINIO_SECRET_KEY',
+      ),
+      MINIO_BUCKET: bucket,
+      GRIDGO_TRUST_PROXY_HOPS: '1',
+    });
+    const storage = createStorage(bucket);
+    let app: INestApplication<App> | undefined;
+    try {
+      const module = await Test.createTestingModule({
+        imports: [AppModule],
+      }).compile();
+      app = module.createNestApplication();
+      configureTrustedProxy(app);
+      app.setGlobalPrefix('api', {
+        exclude: [{ path: '/', method: RequestMethod.GET }],
+      });
+      app.useGlobalPipes(
+        new ValidationPipe({
+          whitelist: true,
+          transform: true,
+          forbidNonWhitelisted: true,
+        }),
+      );
+      app.useGlobalFilters(new AllExceptionsFilter());
+      await app.init();
+
+      const http = app.getHttpServer();
+      const dataSource = app.get(DataSource);
+      const password = 'Task9-http-password-123!';
+      const passwordHash = await bcrypt.hash(password, 4);
+      const users = dataSource.getRepository(User);
+      const saveUser = (email: string, role: UserRole, credits = 0) =>
+        users.save(
+          users.create({
+            email,
+            passwordHash,
+            role,
+            isActive: true,
+            credits,
+          }),
+        );
+      const customer = await saveUser(
+        `http-customer-${process.pid}@example.test`,
+        UserRole.CLIENT,
+        1_000,
+      );
+      const stranger = await saveUser(
+        `http-stranger-${process.pid}@example.test`,
+        UserRole.CLIENT,
+      );
+      const ops = await saveUser(
+        `http-ops-${process.pid}@example.test`,
+        UserRole.OPS_ADMIN,
+      );
+      const superAdmin = await saveUser(
+        `http-super-${process.pid}@example.test`,
+        UserRole.SUPER_ADMIN,
+      );
+      const supplierUsers = await Promise.all(
+        ['flyer-a', 'flyer-b', 'apparel'].map((label) =>
+          saveUser(
+            `http-${label}-${process.pid}@example.test`,
+            UserRole.SUPPLIER,
+          ),
+        ),
+      );
+      let loginAddress = 1;
+      const login = async (email: string) => {
+        const address = `192.0.2.${loginAddress++}`;
+        const response = await request(http)
+          .post('/api/auth/login')
+          .set('X-Forwarded-For', address)
+          .send({ email, password })
+          .expect(201);
+        return response.body.access_token as string;
+      };
+      const [customerToken, strangerToken, opsToken, superToken] =
+        await Promise.all([
+          login(customer.email),
+          login(stranger.email),
+          login(ops.email),
+          login(superAdmin.email),
+        ]);
+      const supplierTokens = await Promise.all(
+        supplierUsers.map((user) => login(user.email)),
+      );
+      const bearer = (token: string) => `Bearer ${token}`;
+
+      await request(http).get('/api/orders').expect(401);
+      await request(http)
+        .post('/api/orders/requests/batch')
+        .set('Authorization', bearer(customerToken))
+        .send({ unexpected: true })
+        .expect(400);
+
+      const upload = async (slug: string) => {
+        const response = await request(http)
+          .post('/api/files/upload')
+          .set('Authorization', bearer(customerToken))
+          .field('purpose', FilePurpose.CATALOG_ARTWORK)
+          .field('productSlug', slug)
+          .attach(
+            'file',
+            Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n'),
+            { filename: `${slug}.pdf`, contentType: 'application/pdf' },
+          )
+          .expect(201);
+        return response.body as FileMetadata;
+      };
+      const [flyerFile, apparelFile] = await Promise.all([
+        upload('flyers'),
+        upload('custom-apparel'),
+      ]);
+      const requiredDate = new Date(Date.now() + 7 * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      const submitBody = {
+        deliveryOption: 'delivery',
+        temporaryAddress: {
+          label: 'HTTP RFQ address',
+          fullAddress: '123 Isolated HTTP Street, Davao City',
+          barangay: 'Poblacion',
+          city: 'Davao City',
+          province: 'Davao del Sur',
+          zipCode: '8000',
+          latitude: 7.0731,
+          longitude: 125.6128,
+        },
+        items: [
+          {
+            categorySlug: 'flyers',
+            quantity: 100,
+            requiredDate,
+            fileMetadataId: flyerFile.id,
+            specs: {
+              dimensions_or_standard_size: 'A5',
+              stock_or_material: 'Matte 120 gsm',
+              color: 'Full color',
+              sides: 2,
+              finish: 'Trimmed',
+            },
+          },
+          {
+            categorySlug: 'custom-apparel',
+            quantity: 12,
+            requiredDate,
+            fileMetadataId: apparelFile.id,
+            specs: {
+              item_subtype: 'T-shirt',
+              variant_or_size: 'Mixed adult sizes',
+              color: 'Black',
+              branding_method: 'Screen print',
+              artwork_placement: 'Front chest',
+            },
+          },
+        ],
+      };
+      const submittedResponse = await request(http)
+        .post('/api/orders/requests/batch')
+        .set('Authorization', bearer(customerToken))
+        .send(submitBody)
+        .expect(201);
+      const submitted = submittedResponse.body.orders as Order[];
+      expect(submitted).toHaveLength(2);
+      await request(http)
+        .get(`/api/orders/${submitted[0].id}`)
+        .set('Authorization', bearer(strangerToken))
+        .expect(403);
+      await expectNoPaymentMutation(dataSource, customer.id);
+
+      for (const order of submitted) {
+        await request(http)
+          .post(`/api/ops/qa/${order.id}/decision`)
+          .set('Authorization', bearer(opsToken))
+          .send({
+            decision: 'approved_for_matching',
+            checklist: { product_compatibility: true, address: true },
+            riskLevel: 'low',
+            evidence: { fileMetadataId: order.fileMetadataId },
+          })
+          .expect(201);
+        await request(http)
+          .get(`/api/ops/matching/${order.id}/candidates`)
+          .set('Authorization', bearer(opsToken))
+          .expect(200)
+          .expect((response) => {
+            expect(response.body.outcome.code).toBe('no_eligible_supplier');
+          });
+      }
+      await request(http)
+        .get('/api/admin/orders')
+        .set('Authorization', bearer(opsToken))
+        .expect(200)
+        .expect((response) => {
+          const rows = response.body.filter((row: { id: number }) =>
+            submitted.some((order) => order.id === row.id),
+          );
+          expect(rows).toHaveLength(2);
+          expect(
+            rows.every(
+              (row: { unmet_coverage: boolean }) => row.unmet_coverage,
+            ),
+          ).toBe(true);
+        });
+
+      const profiles: SupplierProfile[] = [];
+      for (const [index, user] of supplierUsers.entries()) {
+        const profileResponse = await request(http)
+          .post('/api/suppliers')
+          .set('Authorization', bearer(superToken))
+          .send({
+            userId: user.id,
+            businessName: `HTTP supplier ${index + 1}`,
+            serviceZones: [],
+            serviceFocusRanks: [],
+            isActive: true,
+          })
+          .expect(201);
+        const profile = profileResponse.body as SupplierProfile;
+        profiles.push(profile);
+        await request(http)
+          .patch(`/api/suppliers/${profile.id}/verification`)
+          .set('Authorization', bearer(superToken))
+          .send({
+            status: 'verified',
+            payoutDetailsRef: `test-vault://http-${index}`,
+          })
+          .expect(200);
+        await request(http)
+          .post('/api/suppliers/me/capabilities')
+          .set('Authorization', bearer(supplierTokens[index]))
+          .send({
+            productFamily: index < 2 ? 'flyers' : 'custom-apparel',
+            materials: [],
+            maxCapacity: 10_000,
+            leadTimeDays: 3,
+          })
+          .expect(201);
+      }
+
+      const flyerOrder = submitted.find(
+        (order) => order.category === 'flyers',
+      )!;
+      const apparelOrder = submitted.find(
+        (order) => order.category === 'custom-apparel',
+      )!;
+      const firstMatch = await request(http)
+        .post(`/api/ops/matching/${flyerOrder.id}/auto-match`)
+        .set('Authorization', bearer(opsToken))
+        .expect(201);
+      const staleAssignmentId = firstMatch.body.assignment.id as number;
+      await request(http)
+        .post(`/api/supplier/jobs/${staleAssignmentId}/decline`)
+        .set('Authorization', bearer(supplierTokens[0]))
+        .send({ reason: 'Force isolated rematch' })
+        .expect(201);
+      const rematch = await request(http)
+        .post(`/api/ops/matching/${flyerOrder.id}/auto-match`)
+        .set('Authorization', bearer(opsToken))
+        .expect(201);
+      const apparelMatch = await request(http)
+        .post(`/api/ops/matching/${apparelOrder.id}/auto-match`)
+        .set('Authorization', bearer(opsToken))
+        .expect(201);
+      const assignments = [
+        rematch.body.assignment as SupplierAssignment,
+        apparelMatch.body.assignment as SupplierAssignment,
+      ];
+      const promisedDate = new Date(Date.now() + 3 * 86_400_000).toISOString();
+      await request(http)
+        .post(`/api/supplier/jobs/${assignments[0].id}/accept`)
+        .set('Authorization', bearer(supplierTokens[1]))
+        .send({ finalPriceMinor: 10_000, promisedDate })
+        .expect(201);
+      await request(http)
+        .post(`/api/supplier/jobs/${assignments[1].id}/accept`)
+        .set('Authorization', bearer(supplierTokens[2]))
+        .send({ finalPriceMinor: 20_000, promisedDate })
+        .expect(201);
+      await expectNoPaymentMutation(dataSource, customer.id);
+
+      await request(http)
+        .get(`/api/admin/orders/${flyerOrder.id}`)
+        .set('Authorization', bearer(opsToken))
+        .expect(200)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            unmet_coverage: false,
+            quoted_total_minor: '12700',
+            current_supplier_assignment: {
+              id: assignments[0].id,
+              supplier_id: profiles[1].id,
+              decision: 'accepted',
+              rank_position: 1,
+              final_price_minor: '10000',
+              promised_date: expect.any(String),
+            },
+          });
+        });
+
+      const customerOrders = await request(http)
+        .get('/api/orders')
+        .set('Authorization', bearer(customerToken))
+        .expect(200);
+      const publicFlyer = customerOrders.body.find(
+        (order: { id: number }) => order.id === flyerOrder.id,
+      );
+      expect(publicFlyer).toMatchObject({
+        quoteAssignmentId: assignments[0].id,
+        quote_assignment_id: assignments[0].id,
+        quotedTotalMinor: '12700',
+      });
+      expect(publicFlyer.quotedAt).toEqual(expect.any(String));
+      expect(publicFlyer.promisedCompletionAt).toEqual(expect.any(String));
+      expect(publicFlyer).not.toHaveProperty('currentSupplierAssignment');
+      expect(publicFlyer).not.toHaveProperty('quotedByUserId');
+      for (const forbidden of [
+        'supplierId',
+        'rankPosition',
+        'acceptanceDeadline',
+        'finalPriceMinor',
+      ]) {
+        expect(JSON.stringify(publicFlyer)).not.toContain(forbidden);
+      }
+
+      await request(http)
+        .post(`/api/orders/${flyerOrder.id}/accept-quote`)
+        .set('Authorization', bearer(customerToken))
+        .send({
+          supplierAssignmentId: staleAssignmentId,
+          paymentMethod: 'pilot_credit',
+        })
+        .expect(400);
+      for (const [order, assignment] of [
+        [flyerOrder, assignments[0]],
+        [apparelOrder, assignments[1]],
+      ] as const) {
+        await request(http)
+          .post(`/api/orders/${order.id}/accept-quote`)
+          .set('Authorization', bearer(customerToken))
+          .send({
+            supplierAssignmentId: assignment.id,
+            paymentMethod: 'pilot_credit',
+          })
+          .expect(201);
+      }
+      await expectNoPaymentMutation(dataSource, customer.id);
+
+      for (const order of [flyerOrder, apparelOrder]) {
+        await request(http)
+          .post(`/api/orders/${order.id}/authorize-payment`)
+          .set('Authorization', bearer(opsToken))
+          .expect(201);
+      }
+      const finalOrders = await dataSource.getRepository(Order).find({
+        where: [{ id: flyerOrder.id }, { id: apparelOrder.id }],
+        order: { id: 'ASC' },
+      });
+      expect(finalOrders.map((order) => order.authorizationSnapshot)).toEqual([
+        expect.objectContaining({
+          priceMinor: '10000',
+          deliveryFeeMinor: '2700',
+          finalTotalMinor: '12700',
+        }),
+        expect.objectContaining({
+          priceMinor: '20000',
+          deliveryFeeMinor: '0',
+          finalTotalMinor: '20000',
+        }),
+      ]);
+      const ledger = await dataSource.getRepository(CreditTransaction).find({
+        where: { userId: customer.id },
+        order: { id: 'ASC' },
+      });
+      expect(
+        ledger.map((entry) => [entry.type, Number(entry.amountCredits)]),
+      ).toEqual([
+        ['reserve', 127],
+        ['spend', 127],
+        ['reserve', 200],
+        ['spend', 200],
+      ]);
+      expect(ledger.map((entry) => Number(entry.balanceAfter))).toEqual([
+        873, 873, 673, 673,
+      ]);
+      expect(await dataSource.getRepository(PaymentTransaction).count()).toBe(
+        0,
+      );
+      expect(await dataSource.getRepository(CodCollection).count()).toBe(0);
+      expect(
+        await dataSource.getRepository(SupplierAssignment).findOneByOrFail({
+          id: staleAssignmentId,
+        }),
+      ).toMatchObject({ decision: SupplierAssignmentDecision.DECLINED });
+      for (const order of [flyerOrder, apparelOrder]) {
+        const history = await dataSource
+          .getRepository(OrderStatusHistory)
+          .find({
+            where: { orderId: order.id },
+            order: { id: 'ASC' },
+          });
+        expect(history.at(-1)?.toStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
+        const audit = await dataSource.getRepository(AuditEvent).find({
+          where: { orderId: order.id },
+        });
+        expect(audit.map((event) => event.action)).toEqual(
+          expect.arrayContaining([
+            'quality_review_decision',
+            'supplier_assigned',
+            'supplier_job_accepted',
+            'customer_quote_accepted',
+          ]),
+        );
+      }
+      const boundFiles = await dataSource
+        .getRepository(FileMetadata)
+        .findBy([{ id: flyerFile.id }, { id: apparelFile.id }]);
+      expect(boundFiles.map((file) => file.catalogProductSlug).sort()).toEqual([
+        'custom-apparel',
+        'flyers',
+      ]);
+      const boundItems = await dataSource.getRepository(OrderItem).find({
+        where: [{ orderId: flyerOrder.id }, { orderId: apparelOrder.id }],
+        relations: { specValues: true },
+      });
+      expect(boundItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            categorySlug: 'flyers',
+            fileMetadataId: flyerFile.id,
+            specValues: expect.arrayContaining([
+              expect.objectContaining({
+                specKey: 'dimensions_or_standard_size',
+                displayValue: 'A5',
+              }),
+            ]),
+          }),
+          expect.objectContaining({
+            categorySlug: 'custom-apparel',
+            fileMetadataId: apparelFile.id,
+            specValues: expect.arrayContaining([
+              expect.objectContaining({
+                specKey: 'item_subtype',
+                displayValue: 'T-shirt',
+              }),
+            ]),
+          }),
+        ]),
+      );
+    } finally {
+      await app?.close();
+      process.env.DATABASE_NAME = previous.DATABASE_NAME;
+      process.env.MINIO_BUCKET = previous.MINIO_BUCKET;
       await emptyAndRemoveBucket(storage.client, bucket);
     }
   });

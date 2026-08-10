@@ -2313,7 +2313,7 @@ describe('OrdersService', () => {
         ],
         order: { createdAt: 'DESC' },
       });
-      expect(result).toEqual(orders);
+      expect(result).toMatchObject(orders);
     });
 
     it('masks RFQ compatibility money on subsequent customer reads', async () => {
@@ -2421,6 +2421,85 @@ describe('OrdersService', () => {
       });
       expect(result.items[0].specValues[0]).not.toHaveProperty('fixedFee');
       expect(result.items[0].specValues[0]).not.toHaveProperty('unitCost');
+    });
+
+    it('exposes only the accepted quote assignment id to the customer', async () => {
+      repo.find.mockResolvedValue([{ ...mockOrder, id: 41 }] as Order[]);
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 901,
+          orderId: 41,
+          supplierId: 77,
+          decision: SupplierAssignmentDecision.ACCEPTED,
+          rankPosition: 1,
+          acceptanceDeadline: new Date('2026-08-11T00:00:00Z'),
+          finalPriceMinor: '10000',
+        } as SupplierAssignment,
+      ]);
+
+      const [result] = await service.findByUser(1);
+
+      expect(result).toMatchObject({ quoteAssignmentId: 901 });
+      expect(result).not.toHaveProperty('currentSupplierAssignment');
+      expect(result).not.toHaveProperty('supplierId');
+      expect(JSON.stringify(result)).not.toContain('supplierId');
+      expect(JSON.stringify(result)).not.toContain('assignmentId');
+      expect(JSON.stringify(result)).not.toContain('acceptanceDeadline');
+      expect(JSON.stringify(result)).not.toContain('rankPosition');
+      expect(JSON.stringify(result)).not.toContain('finalPriceMinor');
+    });
+
+    it('withholds a pending assignment id from the customer', async () => {
+      repo.find.mockResolvedValue([{ ...mockOrder, id: 42 }] as Order[]);
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 902,
+          orderId: 42,
+          supplierId: 78,
+          decision: SupplierAssignmentDecision.PENDING,
+        } as SupplierAssignment,
+      ]);
+
+      const [result] = await service.findByUser(1);
+
+      expect(result).toMatchObject({ quoteAssignmentId: null });
+      expect(result).not.toHaveProperty('currentSupplierAssignment');
+    });
+
+    it('projects catalog metadata without mutating loaded ORM entities', async () => {
+      const item = {
+        id: 10,
+        category: 'flyers',
+        categorySlug: 'flyers',
+        specValues: [],
+      } as OrderItem;
+      const order = { ...mockOrder, items: [item] } as Order;
+      catalogReadService.getPublicCatalog.mockResolvedValueOnce({
+        version: '1.10.0',
+        groups: [],
+        categories: [
+          {
+            id: 1,
+            slug: 'flyers',
+            name: 'Flyers',
+            groupSlug: 'marketing-promo',
+            examples: [],
+            pricingModel: 'quote_required',
+          },
+        ],
+      });
+
+      const [projected] = await service.attachCatalogSnapshots([order]);
+
+      expect(projected).not.toBe(order);
+      expect(projected.items[0]).not.toBe(item);
+      expect(order).not.toHaveProperty('catalogProduct');
+      expect(item).not.toHaveProperty('groupSlug');
+      expect(projected.items[0]).toMatchObject({
+        groupSlug: 'marketing-promo',
+      });
     });
 
     it('batch-loads and maps assigned slots across multiple order batches', async () => {
@@ -2701,7 +2780,7 @@ describe('OrdersService', () => {
           'statusHistory',
         ],
       });
-      expect(result).toEqual(mockOrder);
+      expect(result).toMatchObject(mockOrder);
     });
 
     it('attaches the active batch slot to an individual order', async () => {
@@ -2760,7 +2839,7 @@ describe('OrdersService', () => {
 
       await expect(
         service.updateStatus(1, status, {}, statusContext),
-      ).resolves.toEqual(current);
+      ).resolves.toMatchObject(current);
 
       expect(repo.update).not.toHaveBeenCalled();
       expect(historyRepo.insert).not.toHaveBeenCalled();
@@ -3313,7 +3392,9 @@ describe('OrdersService', () => {
       repo.findOneOrFail.mockResolvedValue(gcashOrder);
       repo.update.mockResolvedValue(undefined as any);
 
-      await expect(service.cancelOrder(1, 1)).resolves.toEqual(gcashOrder);
+      await expect(service.cancelOrder(1, 1)).resolves.toMatchObject(
+        gcashOrder,
+      );
 
       expect(creditsService.refundCredits).not.toHaveBeenCalled();
       expect(repo.update).toHaveBeenCalledWith(
@@ -4005,7 +4086,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {},
         { actorUserId: 51, reason: 'Customer collected pickup' },
       ),
-    ).resolves.toEqual(completed);
+    ).resolves.toMatchObject(completed);
 
     // collected + issue-window endsAt + issue_window_open status
     expect(ordersRepo.update).toHaveBeenCalledTimes(3);
@@ -4022,7 +4103,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {},
         { actorUserId: 51, reason: 'Retry after response failure' },
       ),
-    ).resolves.toEqual(completed);
+    ).resolves.toMatchObject(completed);
 
     // Retry is idempotent when already collected/windowed (no extra writes).
     expect(ordersRepo.update).toHaveBeenCalledTimes(3);
@@ -4066,7 +4147,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {},
         { actorUserId: 51, reason: 'Customer collected pickup' },
       ),
-    ).resolves.toEqual(completed);
+    ).resolves.toMatchObject(completed);
 
     expect(ordersRepo.update).toHaveBeenCalledTimes(3);
     expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(2);
@@ -4108,7 +4189,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {},
         { actorUserId: 51, reason: 'Customer collected pickup' },
       ),
-    ).resolves.toEqual(completed);
+    ).resolves.toMatchObject(completed);
 
     // collected + issue window endsAt + issue_window_open
     expect(ordersRepo.update).toHaveBeenCalledTimes(3);
@@ -4228,7 +4309,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         service.publishStatusUpdate(order, 1, 'delivered', {
           id: 42,
         } as TamSurveyRequirement),
-      ).resolves.toEqual(order);
+      ).resolves.toMatchObject(order);
 
       expect(mockNotifications.create).toHaveBeenCalledWith(
         expect.objectContaining({
