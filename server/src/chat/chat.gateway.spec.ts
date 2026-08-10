@@ -323,7 +323,9 @@ describe('ChatGateway', () => {
     });
 
     it('does not notify anyone after a customer message', async () => {
-      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      const socket = makeSocket({
+        data: { userId: 1, role: UserRole.CLIENT },
+      });
       chatService.saveMessageForActor.mockResolvedValue({
         id: 10,
         conversationId: 5,
