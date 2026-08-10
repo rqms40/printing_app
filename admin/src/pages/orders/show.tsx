@@ -774,15 +774,19 @@ export function OrderShow() {
         {/* Price Breakdown */}
         <Card title="Price Breakdown">
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="Subtotal">
-              <OrderPrice pricingStatus={order.pricing_status} minor={order.quoted_total_minor} legacyAmount={order.total_price} />
+            <Descriptions.Item label="Goods quote">
+              <OrderPrice
+                pricingStatus={order.pricing_status}
+                minor={order.current_supplier_assignment?.final_price_minor}
+                legacyAmount={order.total_price}
+              />
             </Descriptions.Item>
             <Descriptions.Item label="Delivery Fee">
               {order.pricing_status === "pending_quote" || order.delivery_fee == null
                 ? "Pending quote"
                 : formatCurrency(order.delivery_fee)}
             </Descriptions.Item>
-            <Descriptions.Item label="Total">
+            <Descriptions.Item label="Quoted total">
               <OrderPrice pricingStatus={order.pricing_status} minor={order.quoted_total_minor} legacyAmount={order.total_price == null || order.delivery_fee == null ? null : order.total_price + order.delivery_fee} />
             </Descriptions.Item>
             <Descriptions.Item label="Payment Method">

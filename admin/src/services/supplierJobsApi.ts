@@ -73,13 +73,14 @@ export interface SupplierJobDetail {
     orderStatus: string;
     category: string;
     quantity: number;
-    totalPrice: number;
-    deliveryFee: number;
+    pricingStatus: 'pending_quote' | 'quoted' | 'accepted';
+    totalPrice: number | null;
+    deliveryFee: number | null;
     finalTotalMinor: string | null;
+    quotedTotalMinor: string | null;
     deliveryFeeMinor: string | null;
     paymentMethod: string;
     paymentAuthorizationStatus: string;
-    pricingStatus?: 'pending_quote' | 'quoted' | 'accepted';
     deliveryOption: string;
     estimatedCompletionAt: string | null;
     createdAt: string;

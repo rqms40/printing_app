@@ -142,6 +142,36 @@ describe("OrderShow", () => {
     expect(screen.queryByText(/₱0\.00/)).not.toBeInTheDocument();
   });
 
+  it("labels goods, delivery, and quoted total without losing bigint assignment money", async () => {
+    mockGet.mockImplementation((url: string) => Promise.resolve({
+      data: url === "/admin/riders" ? riders : {
+        ...baseOrder,
+        pricing_status: "quoted",
+        total_price: 900719925474099.4,
+        delivery_fee: 25,
+        quoted_total_minor: "90071992547410181",
+        current_supplier_assignment: {
+          id: 88,
+          supplier_id: 44,
+          decision: "accepted",
+          rank_position: 1,
+          acceptance_deadline: "2026-08-11T00:00:00.000Z",
+          final_price_minor: "90071992547409931",
+          promised_date: "2026-08-13T00:00:00.000Z",
+        },
+      },
+    }));
+
+    render(<OrderShow />);
+
+    expect(await screen.findByText("Goods quote")).toBeInTheDocument();
+    expect(screen.getByText("₱900,719,925,474,099.31")).toBeInTheDocument();
+    expect(screen.getByText("Quoted total")).toBeInTheDocument();
+    expect(screen.getByText("₱900,719,925,474,101.81")).toBeInTheDocument();
+    expect(screen.queryByText("Subtotal")).not.toBeInTheDocument();
+    expect(screen.getAllByText("₱25.00")).toHaveLength(1);
+  });
+
   it("shows only server-eligible riders in the assignment dialog", async () => {
     mockGet.mockImplementation((url: string) =>
       Promise.resolve({

@@ -150,9 +150,11 @@ export type SupplierJobDetail = {
     orderStatus: OrderStatus;
     category: string;
     quantity: number;
-    totalPrice: number;
-    deliveryFee: number;
+    pricingStatus: PricingStatus;
+    totalPrice: number | null;
+    deliveryFee: number | null;
     finalTotalMinor: string | null;
+    quotedTotalMinor: string | null;
     deliveryFeeMinor: string | null;
     paymentMethod: string;
     paymentAuthorizationStatus: PaymentAuthorizationStatus;
@@ -202,6 +204,7 @@ export type SupplierJobActionResult = {
     id: number;
     orderId: string;
     orderStatus: OrderStatus;
+    pricingStatus?: PricingStatus;
   };
   fromStatus: OrderStatus;
   toStatus: OrderStatus;
@@ -400,9 +403,17 @@ export class SupplierJobsService {
         orderStatus: order.orderStatus,
         category: order.category,
         quantity: order.quantity,
-        totalPrice: Number(order.totalPrice),
-        deliveryFee: Number(order.deliveryFee),
+        pricingStatus: order.pricingStatus,
+        totalPrice:
+          order.pricingStatus === PricingStatus.PENDING_QUOTE
+            ? null
+            : Number(order.totalPrice),
+        deliveryFee:
+          order.pricingStatus === PricingStatus.PENDING_QUOTE
+            ? null
+            : Number(order.deliveryFee),
         finalTotalMinor: order.finalTotalMinor,
+        quotedTotalMinor: order.quotedTotalMinor,
         deliveryFeeMinor: order.deliveryFeeMinor,
         paymentMethod: order.paymentMethod,
         paymentAuthorizationStatus:
@@ -728,6 +739,7 @@ export class SupplierJobsService {
         id: result.order.id,
         orderId: result.order.orderId,
         orderStatus: result.order.orderStatus,
+        pricingStatus: PricingStatus.QUOTED,
       },
       fromStatus: result.fromStatus,
       toStatus: result.toStatus,

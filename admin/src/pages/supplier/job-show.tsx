@@ -8,6 +8,7 @@ import {
   Col,
   DatePicker,
   Descriptions,
+  Form,
   Input,
   InputNumber,
   Radio,
@@ -134,6 +135,7 @@ export function SupplierJobShowPage() {
 
   const [detail, setDetail] = useState<SupplierJobDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Accept form
@@ -158,17 +160,29 @@ export function SupplierJobShowPage() {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await fetchSupplierJob(jobId);
       setDetail(data);
-      // Seed price from order total if not yet committed
-      if (data.assignment.finalPriceMinor == null && data.order.totalPrice) {
+      const exactLegacyPriced =
+        data.order.category === 'paper' || data.order.category === '3d';
+      // Only exact legacy priced jobs may seed from a compatibility total.
+      if (
+        data.assignment.finalPriceMinor == null &&
+        exactLegacyPriced &&
+        data.order.pricingStatus !== 'pending_quote' &&
+        data.order.totalPrice != null
+      ) {
         setPricePesos(Number(data.order.totalPrice));
       } else if (data.assignment.finalPriceMinor != null) {
         setPricePesos(Number(data.assignment.finalPriceMinor) / 100);
+      } else {
+        setPricePesos(null);
       }
     } catch (err) {
-      message.error(extractApiError(err));
+      const apiError = extractApiError(err);
+      message.error(apiError);
+      setLoadError(apiError);
       setDetail(null);
     } finally {
       setLoading(false);
@@ -280,7 +294,7 @@ export function SupplierJobShowPage() {
         try {
           const result = await acceptSupplierJob(jobId, payload);
           message.success(
-            `Quote submitted · pricing status ${result.order.pricingStatus ?? 'quoted'}`,
+            `Quote submitted · pricing status ${result.order.pricingStatus}`,
           );
           await load();
         } catch (err) {
@@ -405,7 +419,12 @@ export function SupplierJobShowPage() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label="Loading supplier job"
+        style={{ display: 'flex', justifyContent: 'center', padding: 80 }}
+      >
         <Spin size="large" />
       </div>
     );
@@ -416,11 +435,12 @@ export function SupplierJobShowPage() {
       <Alert
         type="error"
         showIcon
-        message="Job not found"
+        message={loadError ?? 'Unable to load supplier job'}
         action={
-          <Button onClick={() => navigate('/supplier/jobs')}>
-            Back to jobs
-          </Button>
+          <Space>
+            <Button onClick={() => void load()}>Retry</Button>
+            <Button onClick={() => navigate('/supplier/jobs')}>Back to jobs</Button>
+          </Space>
         }
       />
     );
@@ -469,9 +489,17 @@ export function SupplierJobShowPage() {
                 {order.quantity}
               </Descriptions.Item>
               <Descriptions.Item label="Guide total">
-                {formatMinorAsCurrency(
-                  order.finalTotalMinor ??
-                    Math.round(Number(order.totalPrice) * 100),
+                {order.pricingStatus === 'pending_quote' ? (
+                  <Tag color="gold">Price pending quote</Tag>
+                ) : (
+                  formatMinorAsCurrency(
+                    order.quotedTotalMinor ??
+                      order.finalTotalMinor ??
+                      ((order.category === 'paper' || order.category === '3d') &&
+                      order.totalPrice != null
+                        ? Math.round(order.totalPrice * 100)
+                        : null),
+                  )
                 )}
               </Descriptions.Item>
               <Descriptions.Item label="Committed price">
@@ -622,11 +650,16 @@ export function SupplierJobShowPage() {
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                 {acceptWindowOpen && (
                   <>
-                    <div>
-                      <Title level={5} style={{ marginTop: 0 }}>
-                        Final price (₱)
-                      </Title>
+                    <Form.Item
+                      label="Final price (₱)"
+                      htmlFor="supplier-final-price"
+                      required
+                      style={{ marginBottom: 8 }}
+                    >
                       <InputNumber
+                        id="supplier-final-price"
+                        aria-label="Final price (₱)"
+                        required
                         min={0.01}
                         step={1}
                         precision={2}
@@ -638,10 +671,17 @@ export function SupplierJobShowPage() {
                       <Text type="secondary" style={{ fontSize: 12 }}>
                         Sent as minor units (centavos) to the API.
                       </Text>
-                    </div>
-                    <div>
-                      <Title level={5}>Promised ready date</Title>
+                    </Form.Item>
+                    <Form.Item
+                      label="Promised ready date"
+                      htmlFor="supplier-promised-date"
+                      required
+                      style={{ marginBottom: 8 }}
+                    >
                       <DatePicker
+                        id="supplier-promised-date"
+                        aria-label="Promised ready date"
+                        required
                         showTime
                         style={{ width: '100%' }}
                         value={promisedDate}
@@ -650,7 +690,7 @@ export function SupplierJobShowPage() {
                           d != null && d.isBefore(dayjs().startOf('day'))
                         }
                       />
-                    </div>
+                    </Form.Item>
                     <Button
                       type="primary"
                       block

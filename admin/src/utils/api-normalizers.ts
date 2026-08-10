@@ -1064,6 +1064,47 @@ export function normalizeOrder(input: unknown): Order & {
         self_qc_evidence_file_ids: evidenceIds,
       };
     })(),
+    current_supplier_assignment: (() => {
+      const raw = read(
+        record,
+        "current_supplier_assignment",
+        "currentSupplierAssignment",
+      );
+      if (raw == null) return null;
+      const assignment = asRecord(raw);
+      return {
+        id:
+          read(assignment, "id", "assignment_id", "assignmentId") == null
+            ? null
+            : toNumberValue(assignment, 0, "id", "assignment_id", "assignmentId"),
+        supplier_id:
+          read(assignment, "supplier_id", "supplierId") == null
+            ? null
+            : toNumberValue(assignment, 0, "supplier_id", "supplierId"),
+        decision: toOptionalString(assignment, "decision") ?? null,
+        rank_position:
+          read(assignment, "rank_position", "rankPosition") == null
+            ? null
+            : toNumberValue(assignment, 0, "rank_position", "rankPosition"),
+        acceptance_deadline:
+          toOptionalString(
+            assignment,
+            "acceptance_deadline",
+            "acceptanceDeadline",
+          ) ?? null,
+        final_price_minor:
+          toOptionalString(
+            assignment,
+            "final_price_minor",
+            "finalPriceMinor",
+          ) ?? null,
+        promised_date:
+          toOptionalString(assignment, "promised_date", "promisedDate") ??
+          null,
+        decided_at:
+          toOptionalString(assignment, "decided_at", "decidedAt") ?? null,
+      };
+    })(),
     assigned_rider_contact: normalizeAssignedRiderContact(
       read(
         record,

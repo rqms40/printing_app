@@ -1,6 +1,5 @@
 import { apiClient } from '@/providers/api-client';
 import type { OrderItem } from '@/types/order';
-import { normalizeOrder, normalizeOrders } from '@/utils/api-normalizers';
 
 export interface QaProjectedItem {
   id: number;
@@ -58,6 +57,8 @@ export interface QaQueueItem {
   pricingStatus?: 'pending_quote' | 'quoted' | 'accepted';
   quotedTotalMinor?: string | null;
   items?: QaProjectedItem[];
+  unmetCoverage?: boolean;
+  matchingOutcome?: { code: string; message?: string | null } | null;
   fileName: string | null;
   fileMetadataId: number | null;
   userId: number;
@@ -85,6 +86,8 @@ export interface QaWorkspaceDetail {
     pricingStatus?: 'pending_quote' | 'quoted' | 'accepted';
     quotedTotalMinor?: string | null;
     items?: QaProjectedItem[];
+    unmetCoverage?: boolean;
+    matchingOutcome?: { code: string; message?: string | null } | null;
     paymentMethod: string;
     deliveryOption: string;
     fileName: string | null;
@@ -146,55 +149,15 @@ export interface QaDecisionResult {
 }
 
 export async function fetchQaQueue(): Promise<QaQueueItem[]> {
-  const [qaResponse, adminResponse] = await Promise.all([
-    apiClient.get<QaQueueItem[]>('/ops/qa/queue'),
-    apiClient.get('/admin/orders'),
-  ]);
-  const byId = new Map(normalizeOrders(adminResponse.data).map((order) => [order.id, order]));
-  return qaResponse.data.map((row) => mergeAdminProjection(row, byId.get(String(row.id))));
+  const response = await apiClient.get<QaQueueItem[]>('/ops/qa/queue');
+  return response.data;
 }
 
 export async function fetchQaWorkspace(
   orderId: number,
 ): Promise<QaWorkspaceDetail> {
-  const [qaResponse, adminResponse] = await Promise.all([
-    apiClient.get<QaWorkspaceDetail>(`/ops/qa/${orderId}`),
-    apiClient.get(`/admin/orders/${orderId}`),
-  ]);
-  const adminOrder = normalizeOrder(adminResponse.data);
-  return {
-    ...qaResponse.data,
-    order: mergeAdminProjection(qaResponse.data.order, adminOrder),
-  };
-}
-
-function mergeAdminProjection<T extends QaRenderableOrder>(
-  target: T,
-  adminOrder: ReturnType<typeof normalizeOrder> | undefined,
-): T & Pick<QaQueueItem, 'pricingStatus' | 'quotedTotalMinor' | 'items'> {
-  if (!adminOrder) return target as T & Pick<QaQueueItem, 'pricingStatus' | 'quotedTotalMinor' | 'items'>;
-  return {
-    ...target,
-    category: adminOrder.category,
-    quantity: adminOrder.quantity,
-    totalPrice: adminOrder.total_price,
-    pricingStatus: adminOrder.pricing_status,
-    quotedTotalMinor: adminOrder.quoted_total_minor,
-    items: adminOrder.items?.map((item) => ({
-      id: Number(item.id),
-      category: item.category_slug ?? item.category,
-      categoryName: item.category_name,
-      groupName: item.group_name,
-      quantity: item.quantity,
-      totalPrice: item.total_price,
-      specs: item.specs?.map((spec) => ({
-        key: spec.key,
-        label: spec.label,
-        value: spec.value,
-        displayValue: spec.display_value,
-      })),
-    })),
-  };
+  const response = await apiClient.get<QaWorkspaceDetail>(`/ops/qa/${orderId}`);
+  return response.data;
 }
 
 export async function submitQaDecision(

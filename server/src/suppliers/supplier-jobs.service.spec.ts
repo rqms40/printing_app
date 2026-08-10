@@ -255,6 +255,7 @@ describe('SupplierJobsService', () => {
 
       expect(result.toStatus).toBe(OrderStatus.SUPPLIER_ACCEPTED);
       expect(result.fromStatus).toBe(OrderStatus.SUPPLIER_ASSIGNED);
+      expect(result.order.pricingStatus).toBe(PricingStatus.QUOTED);
       expect(result.assignment.decision).toBe(
         SupplierAssignmentDecision.ACCEPTED,
       );
@@ -1052,6 +1053,27 @@ describe('SupplierJobsService', () => {
   });
 
   describe('getJob privacy and production specs', () => {
+    it('explicitly serializes pending quote pricing without zero-value money', async () => {
+      const order = baseOrder({
+        pricingStatus: PricingStatus.PENDING_QUOTE,
+        totalPrice: 0,
+        deliveryFee: 0,
+        finalTotalMinor: null,
+        quotedTotalMinor: null,
+      });
+      assignmentRepo.findOne!.mockResolvedValue(baseAssignment({ order }));
+
+      const detail = await service.getJob(7, actor);
+
+      expect(detail.order).toMatchObject({
+        pricingStatus: PricingStatus.PENDING_QUOTE,
+        totalPrice: null,
+        deliveryFee: null,
+        finalTotalMinor: null,
+        quotedTotalMinor: null,
+      });
+    });
+
     it('never exposes adminNotes (or as specialInstructions) on job detail', async () => {
       const order = baseOrder({
         adminNotes: 'OPS INTERNAL: escalate pricing to finance',

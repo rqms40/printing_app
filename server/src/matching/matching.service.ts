@@ -92,6 +92,8 @@ export type CandidatesResult = {
   }>;
 };
 
+export type MatchingCoverageOutcome = CandidatesResult['outcome'];
+
 function assertOpsActor(actor: MatchingActor): void {
   if (actor.role !== 'ops_admin' && actor.role !== 'super_admin') {
     throw new BadRequestException(
@@ -174,6 +176,72 @@ export class MatchingService {
           : this.noEligibleSupplierOutcome(orderId),
       verifiedSuppliers,
     };
+  }
+
+  /**
+   * Read-only coverage preview for a bounded set of already-loaded orders.
+   * Supplier capacity inputs and catalog leaves are loaded once for the batch.
+   */
+  async getCoverageOutcomes(
+    orders: readonly Order[],
+  ): Promise<Map<number, MatchingCoverageOutcome>> {
+    const outcomes = new Map<number, MatchingCoverageOutcome>();
+    if (orders.length === 0) return outcomes;
+
+    const profiles = await this.supplierRepo.find({
+      relations: { verification: true, capabilities: true },
+      order: { id: 'ASC' },
+    });
+    const { openLoads, acceptanceStats } = await this.loadAssignmentAggregates(
+      profiles.map(({ id }) => id),
+    );
+    const slugs = [
+      ...new Set(
+        orders
+          .map(({ category }) =>
+            String(category ?? '')
+              .trim()
+              .toLowerCase(),
+          )
+          .filter(Boolean),
+      ),
+    ];
+    const products = slugs.length
+      ? await this.categoryRepo.find({ where: { slug: In(slugs) } })
+      : [];
+    const productBySlug = new Map(
+      products.map((product) => [product.slug, product]),
+    );
+
+    for (const order of orders) {
+      const slug = String(order.category ?? '')
+        .trim()
+        .toLowerCase();
+      const product = productBySlug.get(slug);
+      const categoryEligible = product
+        ? product.isActive &&
+          (order.pricingStatus !== PricingStatus.PENDING_QUOTE ||
+            isActiveOrderableRfqLeaf(product))
+        : order.pricingStatus !== PricingStatus.PENDING_QUOTE;
+      const count = categoryEligible
+        ? rankSupplierCandidates(
+            this.toMatchContext(order),
+            profiles,
+            openLoads,
+            acceptanceStats,
+          ).candidates.length
+        : 0;
+      outcomes.set(
+        order.id,
+        count > 0
+          ? {
+              code: 'eligible_suppliers_found',
+              message: `${count} eligible supplier${count === 1 ? '' : 's'} found`,
+            }
+          : this.noEligibleSupplierOutcome(order.id),
+      );
+    }
+    return outcomes;
   }
 
   async getAssignmentForOrder(

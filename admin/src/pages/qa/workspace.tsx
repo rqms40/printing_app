@@ -39,6 +39,7 @@ import { OrderProductLabel } from '@/pages/orders/components/order-product-label
 import { OrderSpecifications } from '@/pages/orders/components/order-specifications';
 import { OrderPrice } from '@/pages/orders/components/order-price';
 import type { OrderStatus } from '@/types/enums';
+import { QaCoverageWarning } from './coverage-warning';
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
@@ -252,6 +253,12 @@ export function QaWorkspacePage() {
     >
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={14}>
+          <div style={{ marginBottom: 16 }}>
+            <QaCoverageWarning
+              unmetCoverage={order.unmetCoverage}
+              matchingOutcome={order.matchingOutcome}
+            />
+          </div>
           <Card title="Order" size="small" style={{ marginBottom: 16 }}>
             <Descriptions column={2} size="small">
               <Descriptions.Item label="Status">

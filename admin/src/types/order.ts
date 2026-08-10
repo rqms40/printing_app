@@ -75,6 +75,17 @@ export interface AssignedSupplierContact {
   self_qc_evidence_file_ids?: number[];
 }
 
+export interface CurrentSupplierAssignment {
+  id: number | null;
+  supplier_id: number | null;
+  decision: string | null;
+  rank_position: number | null;
+  acceptance_deadline: string | null;
+  final_price_minor: string | null;
+  promised_date: string | null;
+  decided_at: string | null;
+}
+
 export type PricingStatus = "pending_quote" | "quoted" | "accepted";
 
 export interface OrderSpecSnapshot {
@@ -138,6 +149,7 @@ export interface Order {
   assigned_rider_id?: string;
   assigned_rider_contact?: AssignedRiderContact | null;
   assigned_supplier_contact?: AssignedSupplierContact | null;
+  current_supplier_assignment?: CurrentSupplierAssignment | null;
   delivery_proof?: DeliveryProof | null;
   estimated_completion_at?: string;
   admin_notes?: string;

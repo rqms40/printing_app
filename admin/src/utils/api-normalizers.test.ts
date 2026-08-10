@@ -321,6 +321,46 @@ describe("api normalizers", () => {
     });
   });
 
+  it("preserves complete current supplier assignment terms as string-safe money", () => {
+    const order = normalizeOrder({
+      id: 7,
+      orderId: "ORD-RFQ-7",
+      userId: 3,
+      category: "flyers",
+      totalPrice: "900719925474099.31",
+      deliveryFee: "25",
+      pricingStatus: "quoted",
+      quotedTotalMinor: "90071992547410181",
+      currentSupplierAssignment: {
+        id: 88,
+        supplierId: 44,
+        decision: "accepted",
+        rankPosition: 2,
+        acceptanceDeadline: "2026-08-11T10:00:00.000Z",
+        finalPriceMinor: "90071992547409931",
+        promisedDate: "2026-08-13T10:00:00.000Z",
+      },
+      paymentMethod: "grid_credits",
+      paymentStatus: "pending",
+      orderStatus: "supplier_accepted",
+      deliveryOption: "delivery",
+      createdAt: "2026-08-10T00:00:00.000Z",
+      updatedAt: "2026-08-10T00:00:00.000Z",
+    });
+
+    expect(order.current_supplier_assignment).toEqual({
+      id: 88,
+      supplier_id: 44,
+      decision: "accepted",
+      rank_position: 2,
+      acceptance_deadline: "2026-08-11T10:00:00.000Z",
+      final_price_minor: "90071992547409931",
+      promised_date: "2026-08-13T10:00:00.000Z",
+      decided_at: null,
+    });
+    expect(order.quoted_total_minor).toBe("90071992547410181");
+  });
+
   it("preserves order destination snapshots and coordinates", () => {
     const order = normalizeOrder({
       id: 7,

@@ -18,6 +18,7 @@ import { OrderProductLabel } from '@/pages/orders/components/order-product-label
 import { OrderPrice } from '@/pages/orders/components/order-price';
 import { StatusBadge } from '@/components/status-badge';
 import type { OrderStatus } from '@/types/enums';
+import { QaCoverageWarning } from './coverage-warning';
 
 const { Text } = Typography;
 
@@ -101,7 +102,17 @@ export function QaQueuePage() {
         <Table.Column
           title="Category"
           dataIndex="category"
-          render={(_cat: string, row: QaQueueItem) => <OrderProductLabel item={qaOrderItems(row)[0]} />}
+          render={(_cat: string, row: QaQueueItem) => (
+            <Space direction="vertical" size={4}>
+              {qaOrderItems(row).map((item) => (
+                <OrderProductLabel key={item.id} item={item} />
+              ))}
+              <QaCoverageWarning
+                unmetCoverage={row.unmetCoverage}
+                matchingOutcome={row.matchingOutcome}
+              />
+            </Space>
+          )}
         />
         <Table.Column title="Qty" dataIndex="quantity" width={70} />
         <Table.Column
