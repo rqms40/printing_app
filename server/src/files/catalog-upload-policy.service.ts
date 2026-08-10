@@ -91,6 +91,23 @@ type OpcContentTypes = {
   overrides: Map<string, string>;
 };
 
+type DxfValueType =
+  | 'string'
+  | 'double'
+  | 'int16'
+  | 'int32'
+  | 'int64'
+  | 'boolean'
+  | 'binary'
+  | 'handle'
+  | 'xdata_string'
+  | 'xdata_application'
+  | 'xdata_control'
+  | 'xdata_layer'
+  | 'xdata_binary'
+  | 'xdata_int16'
+  | 'xdata_int32';
+
 const inflateRawAsync = promisify(inflateRaw);
 const yieldToEventLoop = (): Promise<void> =>
   new Promise((resolve) => setImmediate(resolve));
@@ -747,6 +764,8 @@ export class CatalogUploadPolicyService {
     let sawSection = false;
     let expectingSectionName = false;
     let sawEof = false;
+    let xdataApplicationActive = false;
+    let xdataControlDepth = 0;
     const valid = await reader.scanLines((rawLine) => {
       const line = rawLine.trim();
       if (pendingCode === null) {
@@ -759,6 +778,24 @@ export class CatalogUploadPolicyService {
       const code = pendingCode;
       pendingCode = null;
       if (!this.isValidDxfValue(code, line)) return false;
+      if (code === 1001) {
+        if (xdataControlDepth !== 0) return false;
+        xdataApplicationActive = true;
+      } else if (code >= 1000) {
+        if (!xdataApplicationActive) return false;
+        if (code === 1002) {
+          if (line === '{') {
+            if (++xdataControlDepth > 64) return false;
+          } else if (xdataControlDepth === 0) {
+            return false;
+          } else {
+            xdataControlDepth -= 1;
+          }
+        }
+      } else {
+        if (xdataControlDepth !== 0) return false;
+        xdataApplicationActive = false;
+      }
       if (expectingSectionName) {
         if (code !== 2 || !line) return false;
         expectingSectionName = false;
@@ -787,76 +824,138 @@ export class CatalogUploadPolicyService {
       pendingCode === null &&
       !inSection &&
       !expectingSectionName &&
+      xdataControlDepth === 0 &&
       sawEof
     );
   }
 
   private isValidDxfValue(code: number, value: string): boolean {
+    const type = this.dxfValueType(code);
+    if (!type) return false;
+    switch (type) {
+      case 'string':
+        return true;
+      case 'double':
+        return this.isFiniteNumber(value);
+      case 'int16':
+        return this.isDxfInteger(value, -32768n, 65535n);
+      case 'int32':
+        return this.isDxfInteger(value, -2147483648n, 4294967295n);
+      case 'int64':
+        return this.isDxfInteger(
+          value,
+          -9223372036854775808n,
+          9223372036854775807n,
+        );
+      case 'boolean':
+        return value === '0' || value === '1';
+      case 'binary':
+        return value.length <= 254 && /^(?:[0-9A-Fa-f]{2})*$/.test(value);
+      case 'handle':
+        return /^[0-9A-Fa-f]+$/.test(value);
+      case 'xdata_string':
+        return value.length <= 255;
+      case 'xdata_application':
+        return value.length >= 1 && value.length <= 31;
+      case 'xdata_control':
+        return value === '{' || value === '}';
+      case 'xdata_layer':
+        return value.length >= 1 && value.length <= 255;
+      case 'xdata_binary':
+        return (
+          value.length >= 2 &&
+          value.length <= 254 &&
+          /^(?:[0-9A-Fa-f]{2})+$/.test(value)
+        );
+      case 'xdata_int16':
+        return this.isDxfInteger(value, -32768n, 32767n);
+      case 'xdata_int32':
+        return this.isDxfInteger(value, -2147483648n, 2147483647n);
+    }
+  }
+
+  private dxfValueType(code: number): DxfValueType | null {
+    if (code === 1000) return 'xdata_string';
+    if (code === 1001) return 'xdata_application';
+    if (code === 1002) return 'xdata_control';
+    if (code === 1003) return 'xdata_layer';
+    if (code === 1004) return 'xdata_binary';
+    if (code === 1005) return 'handle';
+    if (
+      (code >= 1010 && code <= 1013) ||
+      (code >= 1020 && code <= 1023) ||
+      (code >= 1030 && code <= 1033) ||
+      (code >= 1040 && code <= 1042)
+    ) {
+      return 'double';
+    }
+    if (code === 1070) return 'xdata_int16';
+    if (code === 1071) return 'xdata_int32';
+    if (
+      code === 5 ||
+      code === 105 ||
+      (code >= 320 && code <= 369) ||
+      (code >= 390 && code <= 399) ||
+      code === 480 ||
+      code === 481
+    ) {
+      return 'handle';
+    }
+    if (
+      (code >= 0 && code <= 4) ||
+      (code >= 6 && code <= 9) ||
+      code === 100 ||
+      code === 102 ||
+      (code >= 300 && code <= 309) ||
+      (code >= 410 && code <= 419) ||
+      (code >= 430 && code <= 439) ||
+      (code >= 470 && code <= 479) ||
+      code === 999
+    ) {
+      return 'string';
+    }
     if (
       (code >= 10 && code <= 59) ||
       (code >= 110 && code <= 149) ||
       (code >= 210 && code <= 239) ||
-      (code >= 460 && code <= 469) ||
-      (code >= 1010 && code <= 1059)
+      (code >= 460 && code <= 469)
     ) {
-      return this.isFiniteNumber(value);
+      return 'double';
     }
-    if (code >= 290 && code <= 299) return value === '0' || value === '1';
-    if (code >= 310 && code <= 319) {
-      return value.length <= 254 && /^(?:[0-9A-Fa-f]{2})*$/.test(value);
-    }
-    if (
-      code === 105 ||
-      (code >= 320 && code <= 369) ||
-      (code >= 390 && code <= 399)
-    ) {
-      return /^[0-9A-Fa-f]+$/.test(value);
-    }
-    const integerRange = this.dxfIntegerRange(code);
-    if (integerRange) {
-      if (!/^[+-]?\d+$/.test(value)) return false;
-      try {
-        const parsed = BigInt(value);
-        return parsed >= integerRange[0] && parsed <= integerRange[1];
-      } catch {
-        return false;
-      }
-    }
-    return (
-      (code >= 0 && code <= 9) ||
-      (code >= 100 && code <= 104) ||
-      (code >= 300 && code <= 309) ||
-      (code >= 410 && code <= 419) ||
-      (code >= 430 && code <= 439) ||
-      (code >= 470 && code <= 481) ||
-      code === 999 ||
-      (code >= 1000 && code <= 1009)
-    );
-  }
-
-  private dxfIntegerRange(code: number): readonly [bigint, bigint] | null {
     if (
       (code >= 60 && code <= 79) ||
       (code >= 170 && code <= 179) ||
       (code >= 270 && code <= 289) ||
       (code >= 370 && code <= 389) ||
-      (code >= 400 && code <= 409) ||
-      (code >= 1060 && code <= 1070)
+      (code >= 400 && code <= 409)
     ) {
-      return [-32768n, 65535n];
+      return 'int16';
     }
     if (
       (code >= 90 && code <= 99) ||
       (code >= 420 && code <= 429) ||
-      (code >= 440 && code <= 459) ||
-      code === 1071
+      (code >= 440 && code <= 459)
     ) {
-      return [-2147483648n, 4294967295n];
+      return 'int32';
     }
-    if (code >= 160 && code <= 169) {
-      return [-9223372036854775808n, 9223372036854775807n];
-    }
+    if (code >= 160 && code <= 169) return 'int64';
+    if (code >= 290 && code <= 299) return 'boolean';
+    if (code >= 310 && code <= 319) return 'binary';
     return null;
+  }
+
+  private isDxfInteger(
+    value: string,
+    minimum: bigint,
+    maximum: bigint,
+  ): boolean {
+    if (!/^[+-]?\d+$/.test(value)) return false;
+    try {
+      const parsed = BigInt(value);
+      return parsed >= minimum && parsed <= maximum;
+    } catch {
+      return false;
+    }
   }
 
   private isFiniteNumber(value: string): boolean {

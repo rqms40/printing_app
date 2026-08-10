@@ -502,6 +502,122 @@ describe('CatalogUploadPolicyService', () => {
     ).rejects.toThrow('File content does not match its type');
   });
 
+  it('accepts explicitly typed handles and a balanced XDATA application', async () => {
+    const content = Buffer.from(
+      [
+        '0',
+        'SECTION',
+        '2',
+        'ENTITIES',
+        '0',
+        'LINE',
+        '480',
+        'ABC123',
+        '481',
+        'def456',
+        '1001',
+        'GRIDAPP',
+        '1000',
+        'catalog metadata',
+        '1002',
+        '{',
+        '1002',
+        '{',
+        '1004',
+        '00A1ff',
+        '1005',
+        '10AB',
+        '1003',
+        'CATALOG_LAYER',
+        '1010',
+        '1.25',
+        '1020',
+        '2.25',
+        '1030',
+        '3.25',
+        '1011',
+        '-2',
+        '1012',
+        '3e2',
+        '1013',
+        '.5',
+        '1040',
+        '4',
+        '1041',
+        '5.5',
+        '1042',
+        '-6',
+        '1070',
+        '-7',
+        '1071',
+        '2147483647',
+        '1002',
+        '}',
+        '1002',
+        '}',
+        '0',
+        'ENDSEC',
+        '0',
+        'EOF',
+        '',
+      ].join('\n'),
+    );
+
+    await expect(
+      policy.validate(cad, makeUpload('xdata.dxf', 'image/vnd.dxf', content)),
+    ).resolves.toBeUndefined();
+  });
+
+  it('allows a new XDATA application only after ordinary data resets the prior one', async () => {
+    const content = Buffer.from(
+      '0\nSECTION\n2\nENTITIES\n0\nLINE\n1001\nFIRST\n1000\none\n8\nLayer0\n1001\nSECOND\n1000\ntwo\n0\nENDSEC\n0\nEOF\n',
+    );
+
+    await expect(
+      policy.validate(cad, makeUpload('reset.dxf', 'image/vnd.dxf', content)),
+    ).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ['odd-length XDATA bytes', '1001\nAPP\n1004\nABC'],
+    ['non-hex XDATA bytes', '1001\nAPP\n1004\n00XZ'],
+    ['oversized XDATA bytes', `1001\nAPP\n1004\n${'AA'.repeat(128)}`],
+    ['empty XDATA handle', '1001\nAPP\n1005\n'],
+    ['non-hex XDATA handle', '1001\nAPP\n1005\nnot-hex'],
+    ['empty 480 handle', '480\n'],
+    ['non-hex 481 handle', '481\nnot-hex'],
+    ['reserved group code 101', '101\nreserved'],
+    ['reserved group code 103', '103\nreserved'],
+    ['reserved group code 104', '104\nreserved'],
+    ['undefined XDATA group code 1006', '1001\nAPP\n1006\nreserved'],
+    ['undefined XDATA group code 1009', '1001\nAPP\n1009\nreserved'],
+    ['unmapped XDATA group code 1014', '1001\nAPP\n1014\n1'],
+    ['unmapped XDATA group code 1060', '1001\nAPP\n1060\n1'],
+    ['out-of-range XDATA int16', '1001\nAPP\n1070\n32768'],
+    ['out-of-range XDATA int32', '1001\nAPP\n1071\n2147483648'],
+    ['XDATA value without application', '1000\nmetadata'],
+    ['XDATA bytes without application', '1004\n00AA'],
+    ['invalid XDATA control token', '1001\nAPP\n1002\nbegin'],
+    ['closing XDATA control without open', '1001\nAPP\n1002\n}'],
+    [
+      'unclosed XDATA control at entity boundary',
+      '1001\nAPP\n1002\n{\n0\nLINE',
+    ],
+    ['new application inside XDATA control', '1001\nAPP\n1002\n{\n1001\nOTHER'],
+    [
+      'XDATA resumed without new application',
+      '1001\nAPP\n1000\none\n8\nLayer0\n1000\ntwo',
+    ],
+  ])('rejects DXF with %s', async (_case, pairs) => {
+    const content = Buffer.from(
+      `0\nSECTION\n2\nENTITIES\n0\nLINE\n${pairs}\n0\nENDSEC\n0\nEOF\n`,
+    );
+
+    await expect(
+      policy.validate(cad, makeUpload('invalid.dxf', 'image/vnd.dxf', content)),
+    ).rejects.toThrow('File content does not match its type');
+  });
+
   it.each([
     Buffer.from('AutoCAD Binary DXF\r\n\u001a\u0000', 'binary'),
     Buffer.concat([
