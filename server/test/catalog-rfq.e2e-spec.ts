@@ -995,6 +995,24 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
       await dataSource
         .getRepository(SupplierAssignment)
         .update(assignments[0].id, { selfQcEvidenceFileIds: [apparelFile.id] });
+      await request(http)
+        .get(`/api/admin/orders/${flyerOrder.id}`)
+        .set('Authorization', bearer(opsToken))
+        .expect(200)
+        .expect((response) => {
+          expect(response.body.assigned_supplier_contact).toEqual({
+            supplier_id: profiles[1].id,
+            business_name: 'HTTP supplier 2',
+            decision: SupplierAssignmentDecision.ACCEPTED,
+            acceptance_deadline: assignments[0].acceptanceDeadline,
+            assignment_id: assignments[0].id,
+            logo_url: expect.any(String),
+            address: '789 Exact Supplier Address, Davao City',
+            broad_address: 'Exact Supplier Address, Davao City',
+            self_qc_evidence_urls: [expect.any(String)],
+            self_qc_evidence_file_ids: [apparelFile.id],
+          });
+        });
       const refreshedCustomerOrders = await request(http)
         .get('/api/orders')
         .set('Authorization', bearer(customerToken))

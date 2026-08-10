@@ -975,18 +975,47 @@ export class AdminController {
     const [withAssignments] = await this.attachDeliveryAssignmentDetails([
       withCatalog,
     ]);
-    const [enriched] = await this.attachMatchingOutcomes([withAssignments]);
+    let [enriched] = await this.attachMatchingOutcomes([withAssignments]);
     // Pull signed logo + self-QC evidence URLs from OrdersService enrichment.
     try {
       const withMedia = await this.ordersService.findById(id);
       if (withMedia) {
         const media = withMedia as Order & {
-          assignedSupplierContact?: Record<string, unknown> | null;
+          assignedSupplierContact?: {
+            logoUrl?: string | null;
+            broadAddress?: string | null;
+            selfQcEvidenceUrls?: string[];
+          } | null;
         };
-        if (media.assignedSupplierContact) {
-          Object.assign(enriched, {
-            assignedSupplierContact: media.assignedSupplierContact,
-          });
+        const adminContact = (
+          enriched as Order & {
+            assignedSupplierContact?: {
+              logoUrl?: string | null;
+              broadAddress?: string | null;
+              selfQcEvidenceUrls?: string[];
+              [key: string]: unknown;
+            } | null;
+          }
+        ).assignedSupplierContact;
+        if (adminContact && media.assignedSupplierContact) {
+          enriched = {
+            ...enriched,
+            assignedSupplierContact: {
+              ...adminContact,
+              logoUrl:
+                media.assignedSupplierContact.logoUrl ??
+                adminContact.logoUrl ??
+                null,
+              broadAddress:
+                media.assignedSupplierContact.broadAddress ??
+                adminContact.broadAddress ??
+                null,
+              selfQcEvidenceUrls:
+                media.assignedSupplierContact.selfQcEvidenceUrls ??
+                adminContact.selfQcEvidenceUrls ??
+                [],
+            },
+          } as Order;
         }
       }
     } catch {

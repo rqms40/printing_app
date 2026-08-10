@@ -24,7 +24,10 @@ import {
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
 import { SuppliersService } from '../suppliers/suppliers.service';
-import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../matching/entities/supplier-assignment.entity';
 import { In } from 'typeorm';
 import * as userInsights from './user-insights';
 
@@ -41,9 +44,12 @@ describe('AdminController analytics', () => {
   let usersRepo: jest.Mocked<Partial<Repository<User>>>;
   let riderProfilesRepo: jest.Mocked<Partial<Repository<RiderProfile>>>;
   let assignmentsRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
+  let supplierAssignmentsRepo: jest.Mocked<
+    Partial<Repository<SupplierAssignment>>
+  >;
   let creditsService: jest.Mocked<Partial<CreditsService>>;
   let ordersService: jest.Mocked<
-    Pick<OrdersService, 'updateStatus' | 'attachCatalogSnapshots'>
+    Pick<OrdersService, 'updateStatus' | 'attachCatalogSnapshots' | 'findById'>
   >;
   let ridersService: {
     getAllRidersWithUser: jest.Mock;
@@ -68,10 +74,14 @@ describe('AdminController analytics', () => {
       findOne: jest.fn(),
       save: jest.fn(),
     };
+    supplierAssignmentsRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
     creditsService = { getPendingCount: jest.fn() };
     ordersService = {
       updateStatus: jest.fn(),
       attachCatalogSnapshots: jest.fn(async (orders) => orders),
+      findById: jest.fn(),
     };
     ridersService = {
       getAllRidersWithUser: jest.fn(),
@@ -113,7 +123,7 @@ describe('AdminController analytics', () => {
         },
         {
           provide: getRepositoryToken(SupplierAssignment),
-          useValue: { find: jest.fn().mockResolvedValue([]) },
+          useValue: supplierAssignmentsRepo,
         },
         { provide: getRepositoryToken(TamSurvey), useValue: mockRepo() },
         {
@@ -527,6 +537,73 @@ describe('AdminController analytics', () => {
         decision: 'accepted',
         final_price_minor: '9007199254740993',
         promised_date: promisedAt,
+      });
+    });
+
+    it('merges signed supplier media into the full Admin contact without replacing private fields', async () => {
+      const acceptanceDeadline = new Date('2026-08-11T09:00:00.000Z');
+      const now = new Date('2026-08-10T09:00:00.000Z');
+      const order = {
+        id: 22,
+        orderId: 'ORD-10022',
+        userId: 2,
+        category: 'custom-apparel',
+        quantity: 12,
+        totalPrice: 100,
+        deliveryFee: 0,
+        pricingStatus: PricingStatus.QUOTED,
+        paymentMethod: 'unselected',
+        paymentStatus: 'pending',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+        orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
+        deliveryOption: 'delivery',
+        items: [],
+        statusHistory: [],
+        createdAt: now,
+        updatedAt: now,
+      } as unknown as Order;
+      const assignment = {
+        id: 91,
+        orderId: 22,
+        supplierId: 12,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        rankPosition: 1,
+        acceptanceDeadline,
+        finalPriceMinor: '10000',
+        promisedDate: now,
+        decidedAt: now,
+        selfQcEvidenceFileIds: [501],
+        supplier: {
+          id: 12,
+          businessName: 'Full Admin Print Co',
+          address: '789 Exact Supplier Address, Davao City',
+        },
+      } as SupplierAssignment;
+      ordersRepo.findOneOrFail.mockResolvedValue(order);
+      supplierAssignmentsRepo.find!.mockResolvedValue([assignment]);
+      ordersService.findById.mockResolvedValue({
+        ...order,
+        assignedSupplierContact: {
+          businessName: 'Full Admin Print Co',
+          logoUrl: 'https://signed/logo',
+          broadAddress: 'Exact Supplier, Davao City',
+          selfQcEvidenceUrls: ['https://signed/evidence'],
+        },
+      } as Order);
+
+      const result = await controller.getOrder(order.id);
+
+      expect(result.assigned_supplier_contact).toEqual({
+        supplier_id: 12,
+        business_name: 'Full Admin Print Co',
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        acceptance_deadline: acceptanceDeadline,
+        assignment_id: 91,
+        logo_url: 'https://signed/logo',
+        address: '789 Exact Supplier Address, Davao City',
+        broad_address: 'Exact Supplier, Davao City',
+        self_qc_evidence_urls: ['https://signed/evidence'],
+        self_qc_evidence_file_ids: [501],
       });
     });
 
