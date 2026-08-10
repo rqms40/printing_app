@@ -95,6 +95,10 @@ import {
   QuoteResult,
 } from '../products/catalog-pricing.service';
 import {
+  CatalogCategory,
+  CatalogReadService,
+} from '../products/catalog-read.service';
+import {
   DispatchPlan,
   DispatchPlanStatus,
 } from '../riders/entities/dispatch-plan.entity';
@@ -415,6 +419,7 @@ export class OrdersService {
     @Optional() private readonly geoZonesService?: GeoZonesService,
     @Optional() private readonly payoutsService?: PayoutsService,
     @Optional() private readonly issuesService?: IssuesService,
+    @Optional() private readonly catalogReadService?: CatalogReadService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -423,7 +428,8 @@ export class OrdersService {
       relations: OrdersService.ORDER_RELATIONS,
       order: { createdAt: 'DESC' },
     });
-    return (await this.attachDeliveryAssignmentIds(orders)).map((order) =>
+    const withCatalog = await this.attachCatalogSnapshots(orders);
+    return (await this.attachDeliveryAssignmentIds(withCatalog)).map((order) =>
       this.maskPendingRfqMoney(order),
     );
   }
@@ -434,8 +440,69 @@ export class OrdersService {
       relations: OrdersService.ORDER_RELATIONS,
     });
     if (!order) return null;
-    const [withTracking] = await this.attachDeliveryAssignmentIds([order]);
+    const [withCatalog] = await this.attachCatalogSnapshots([order]);
+    const [withTracking] = await this.attachDeliveryAssignmentIds([
+      withCatalog,
+    ]);
     return this.maskPendingRfqMoney(withTracking);
+  }
+
+  async attachCatalogSnapshots(orders: Order[]): Promise<Order[]> {
+    let categoryById = new Map<number, CatalogCategory>();
+    let categoryBySlug = new Map<string, CatalogCategory>();
+    if (this.catalogReadService) {
+      try {
+        const catalog = await this.catalogReadService.getPublicCatalog(true);
+        categoryById = new Map(
+          catalog.categories.map((category) => [category.id, category]),
+        );
+        categoryBySlug = new Map(
+          catalog.categories.map((category) => [category.slug, category]),
+        );
+      } catch (error) {
+        this.logger.warn(`Order catalog projection failed: ${String(error)}`);
+      }
+    }
+
+    return orders.map((order) => {
+      const items = (order.items ?? []).map((item) => {
+        const product =
+          (item.categoryId == null
+            ? undefined
+            : categoryById.get(item.categoryId)) ??
+          categoryBySlug.get(item.categorySlug ?? item.category);
+        const specs = (item.specValues ?? []).map((spec) => ({
+          key: spec.specKey,
+          label: spec.specLabel,
+          inputType: spec.inputType,
+          value: spec.value,
+          displayValue: spec.displayValue,
+          optionId: spec.optionId,
+          optionLabel: spec.optionLabel,
+        }));
+        return Object.assign(item, {
+          categorySlug: item.categorySlug ?? item.category,
+          categoryName: item.categoryName ?? product?.name ?? null,
+          groupSlug: product?.groupSlug ?? null,
+          groupName: product?.groupName ?? null,
+          groupDescription: product?.groupDescription ?? null,
+          examples: product?.examples ?? [],
+          pricingModel: item.pricingModel ?? product?.pricingModel ?? null,
+          catalogProduct: product
+            ? {
+                slug: product.slug,
+                name: product.name,
+                groupSlug: product.groupSlug,
+                groupName: product.groupName,
+                groupDescription: product.groupDescription,
+                examples: product.examples ?? [],
+              }
+            : null,
+          specs,
+        });
+      });
+      return Object.assign(order, { items });
+    });
   }
 
   private maskPendingRfqMoney(order: Order): Order {
@@ -642,6 +709,19 @@ export class OrdersService {
             await this.assignedSupplierContactFromAssignment(
               supplierAssignment,
             ),
+          currentSupplierAssignment: supplierAssignment
+            ? {
+                id: supplierAssignment.id,
+                supplierId: supplierAssignment.supplierId,
+                decision: supplierAssignment.decision,
+                rankPosition: supplierAssignment.rankPosition,
+                acceptanceDeadline:
+                  supplierAssignment.acceptanceDeadline ?? null,
+                finalPriceMinor: supplierAssignment.finalPriceMinor ?? null,
+                promisedDate: supplierAssignment.promisedDate ?? null,
+                decidedAt: supplierAssignment.decidedAt ?? null,
+              }
+            : null,
           assignedSlot:
             order.batchOrderId == null
               ? undefined

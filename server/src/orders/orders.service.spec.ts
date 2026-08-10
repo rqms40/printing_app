@@ -54,6 +54,7 @@ import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
+import { CatalogReadService } from '../products/catalog-read.service';
 import { CatalogValidationService } from '../products/catalog-validation.service';
 import { ProductCategory } from '../products/entities/product-category.entity';
 import {
@@ -237,6 +238,7 @@ describe('OrdersService', () => {
   };
   let notificationsService: Partial<NotificationsService>;
   let catalogPricingService: { quote: jest.Mock };
+  let catalogReadService: { getPublicCatalog: jest.Mock };
   let fileMetadataRepo: jest.Mocked<Partial<Repository<FileMetadata>>>;
   let auditService: {
     recordOrderStatusTransition: jest.Mock;
@@ -471,6 +473,13 @@ describe('OrdersService', () => {
         };
       }),
     };
+    catalogReadService = {
+      getPublicCatalog: jest.fn().mockResolvedValue({
+        version: '1.10.0',
+        groups: [],
+        categories: [],
+      }),
+    };
     auditService = {
       recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
       append: jest.fn().mockResolvedValue({ id: 1 }),
@@ -614,6 +623,7 @@ describe('OrdersService', () => {
         },
         catalogPricingProvider(),
         { provide: CatalogPricingService, useValue: catalogPricingService },
+        { provide: CatalogReadService, useValue: catalogReadService },
         { provide: AuditService, useValue: auditService },
       ],
     }).compile();
@@ -2307,9 +2317,26 @@ describe('OrdersService', () => {
     });
 
     it('masks RFQ compatibility money on subsequent customer reads', async () => {
+      catalogReadService.getPublicCatalog.mockResolvedValueOnce({
+        version: '1.10.0',
+        groups: [],
+        categories: [
+          {
+            id: 31,
+            slug: 'business-store-signages',
+            name: 'Business & Store Signages',
+            groupSlug: 'awards-signages',
+            groupName: 'Recognition, Awards & Signage',
+            groupDescription: 'Recognition and visible brand spaces.',
+            examples: ['Acrylic build-up letters', 'LED neon flex'],
+            pricingModel: 'quote_required',
+          },
+        ],
+      });
       repo.find.mockResolvedValue([
         {
           ...mockOrder,
+          category: 'business-store-signages',
           pricingStatus: PricingStatus.PENDING_QUOTE,
           totalPrice: 0,
           deliveryFee: 0,
@@ -2327,6 +2354,11 @@ describe('OrdersService', () => {
           items: [
             {
               id: 10,
+              category: 'business-store-signages',
+              categoryId: 31,
+              categorySlug: 'business-store-signages',
+              categoryName: 'Business & Store Signages',
+              pricingModel: 'quote_required',
               totalPrice: 0,
               specValues: [
                 {
@@ -2368,6 +2400,24 @@ describe('OrdersService', () => {
           extraDestinationFee: null,
         },
         items: [{ totalPrice: null }],
+      });
+      expect(result.items[0]).toMatchObject({
+        category: 'business-store-signages',
+        categorySlug: 'business-store-signages',
+        categoryName: 'Business & Store Signages',
+        groupSlug: 'awards-signages',
+        groupName: 'Recognition, Awards & Signage',
+        groupDescription: 'Recognition and visible brand spaces.',
+        examples: ['Acrylic build-up letters', 'LED neon flex'],
+        pricingModel: 'quote_required',
+        specs: [
+          expect.objectContaining({
+            key: 'size',
+            label: 'Size',
+            value: 'A5',
+            displayValue: 'A5',
+          }),
+        ],
       });
       expect(result.items[0].specValues[0]).not.toHaveProperty('fixedFee');
       expect(result.items[0].specValues[0]).not.toHaveProperty('unitCost');

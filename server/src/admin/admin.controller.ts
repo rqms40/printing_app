@@ -11,6 +11,7 @@ import {
   BadRequestException,
   Logger,
   Request,
+  Optional,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -20,7 +21,11 @@ import { RidersService } from '../riders/riders.service';
 import { UpdateStatusDto } from '../orders/dto/update-status.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { Order, OrderStatus } from '../orders/entities/order.entity';
+import {
+  Order,
+  OrderStatus,
+  PricingStatus,
+} from '../orders/entities/order.entity';
 import { adminAllowedNextOrderStatuses } from '../orders/order-status-transition';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
@@ -46,6 +51,7 @@ import {
   SupplierAssignmentDecision,
 } from '../matching/entities/supplier-assignment.entity';
 import { UpdateAdminRiderDto } from './dto/update-admin-rider.dto';
+import { MatchingService } from '../matching/matching.service';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -93,6 +99,7 @@ export class AdminController {
     private deliveryAssignmentsRepo: Repository<DeliveryAssignment>,
     @InjectRepository(SupplierAssignment)
     private supplierAssignmentsRepo: Repository<SupplierAssignment>,
+    @Optional() private readonly matchingService?: MatchingService,
   ) {}
 
   @Patch('tam-surveys/settings')
@@ -615,9 +622,68 @@ export class AdminController {
                   supplierAssignment.selfQcEvidenceFileIds ?? [],
               }
             : null),
+        currentSupplierAssignment: supplierAssignment
+          ? {
+              id: supplierAssignment.id,
+              supplierId: supplierAssignment.supplierId,
+              decision: supplierAssignment.decision,
+              rankPosition: supplierAssignment.rankPosition,
+              acceptanceDeadline: supplierAssignment.acceptanceDeadline ?? null,
+              finalPriceMinor: supplierAssignment.finalPriceMinor ?? null,
+              promisedDate: supplierAssignment.promisedDate ?? null,
+              decidedAt: supplierAssignment.decidedAt ?? null,
+            }
+          : null,
         deliveryProof: this.deliveryProofFromAssignment(assignment),
       });
     });
+  }
+
+  private async attachMatchingOutcomes(orders: Order[]): Promise<Order[]> {
+    if (!this.matchingService) return orders;
+    return Promise.all(
+      orders.map(async (order) => {
+        if (order.orderStatus !== OrderStatus.APPROVED_FOR_MATCHING) {
+          return Object.assign(order, {
+            matchingOutcome: null,
+            unmetCoverage: false,
+          });
+        }
+        const result = await this.matchingService!.getCandidates(order.id);
+        return Object.assign(order, {
+          matchingOutcome: result.outcome,
+          unmetCoverage: result.outcome.code === 'no_eligible_supplier',
+        });
+      }),
+    );
+  }
+
+  private currentSupplierAssignment(order: Order) {
+    const assignment = (
+      order as Order & {
+        currentSupplierAssignment?: {
+          id?: number;
+          supplierId?: number;
+          decision?: string;
+          rankPosition?: number;
+          acceptanceDeadline?: Date | string | null;
+          finalPriceMinor?: string | null;
+          promisedDate?: Date | string | null;
+          decidedAt?: Date | string | null;
+        } | null;
+      }
+    ).currentSupplierAssignment;
+    if (!assignment) return null;
+    return {
+      id: assignment.id ?? null,
+      supplier_id: assignment.supplierId ?? null,
+      decision: assignment.decision ?? null,
+      rank_position: assignment.rankPosition ?? null,
+      acceptance_deadline: assignment.acceptanceDeadline ?? null,
+      final_price_minor: assignment.finalPriceMinor ?? null,
+      promised_date: assignment.promisedDate ?? null,
+      decided_at: assignment.decidedAt ?? null,
+    };
   }
 
   private deliveryProof(o: Order) {
@@ -649,6 +715,11 @@ export class AdminController {
     );
     const paperSpecs = this.paperSpecsFromValues(firstPaperItem?.specValues);
     const threeDSpecs = this.threeDSpecsFromValues(firstThreeDItem?.specValues);
+    const pending = o.pricingStatus === PricingStatus.PENDING_QUOTE;
+    const projection = o as Order & {
+      matchingOutcome?: { code: string; message: string } | null;
+      unmetCoverage?: boolean;
+    };
 
     return {
       id: o.id,
@@ -660,8 +731,19 @@ export class AdminController {
       file_metadata_id: o.fileMetadataId ?? null,
       special_instructions: o.items?.[0]?.specialInstructions ?? null,
       quantity: o.quantity,
-      total_price: Number(o.totalPrice),
-      delivery_fee: Number(o.deliveryFee),
+      total_price: pending ? null : Number(o.totalPrice),
+      delivery_fee: pending ? null : Number(o.deliveryFee),
+      pricing_status: o.pricingStatus,
+      quoted_total_minor: o.quotedTotalMinor ?? null,
+      quoted_at: o.quotedAt ?? null,
+      quote_accepted_at: o.quoteAcceptedAt ?? null,
+      quoted_by_user_id: o.quotedByUserId ?? null,
+      promised_completion_at: o.promisedCompletionAt ?? null,
+      current_supplier_assignment: this.currentSupplierAssignment(o),
+      matching_outcome: projection.matchingOutcome ?? null,
+      unmet_coverage:
+        projection.unmetCoverage ??
+        projection.matchingOutcome?.code === 'no_eligible_supplier',
       payment_method: o.paymentMethod,
       payment_status: o.paymentStatus,
       order_status: o.orderStatus,
@@ -676,8 +758,10 @@ export class AdminController {
       delivery_slot_booking_id: o.batchOrder?.slotBookingId ?? null,
       speed_tier: o.batchOrder?.speedTier ?? null,
       priority_fee:
-        o.batchOrder?.priorityFee == null
-          ? 0
+        pending || o.batchOrder?.priorityFee == null
+          ? pending
+            ? null
+            : 0
           : Number(o.batchOrder.priorityFee),
       priority:
         o.batchOrder?.priorityFee == null
@@ -685,8 +769,10 @@ export class AdminController {
           : Number(o.batchOrder.priorityFee) > 0,
       delivery_type: o.batchOrder?.deliveryType ?? null,
       extra_destination_fee:
-        o.batchOrder?.extraDestinationFee == null
-          ? 0
+        pending || o.batchOrder?.extraDestinationFee == null
+          ? pending
+            ? null
+            : 0
           : Number(o.batchOrder.extraDestinationFee),
       admin_notes: o.adminNotes ?? null,
       decline_reason: o.declineReason ?? null,
@@ -700,27 +786,62 @@ export class AdminController {
       updated_at: o.updatedAt,
       paper_specs: paperSpecs,
       three_d_specs: threeDSpecs,
-      items: (o.items ?? []).map((item) => ({
-        id: item.id,
-        order_id: item.orderId,
-        destination_id: item.destinationId ?? null,
-        delivery_address_id: item.destination?.addressId ?? null,
-        delivery_address: this.destinationSnapshot(item.destination),
-        category: item.category,
-        file_url: item.fileUrl ?? null,
-        file_name: item.fileName ?? null,
-        file_metadata_id: item.fileMetadataId ?? null,
-        special_instructions: item.specialInstructions ?? null,
-        quantity: item.quantity,
-        total_price: Number(item.totalPrice),
-        category_id: item.categoryId,
-        category_slug: item.categorySlug,
-        category_name: item.categoryName,
-        pricing_model: item.pricingModel,
-        specs: this.specSnapshots(item.specValues),
-        paper_specs: this.paperSpecsFromValues(item.specValues),
-        three_d_specs: this.threeDSpecsFromValues(item.specValues),
-      })),
+      items: (o.items ?? []).map((item) => {
+        const dynamicItem = item as typeof item & {
+          groupSlug?: string | null;
+          groupName?: string | null;
+          groupDescription?: string | null;
+          examples?: string[];
+          catalogProduct?: {
+            groupSlug?: string | null;
+            groupName?: string | null;
+            groupDescription?: string | null;
+            examples?: string[];
+          } | null;
+        };
+        return {
+          id: item.id,
+          order_id: item.orderId,
+          destination_id: item.destinationId ?? null,
+          delivery_address_id: item.destination?.addressId ?? null,
+          delivery_address: this.destinationSnapshot(item.destination),
+          category: item.category,
+          file_url: item.fileUrl ?? null,
+          file_name: item.fileName ?? null,
+          file_metadata_id: item.fileMetadataId ?? null,
+          special_instructions: item.specialInstructions ?? null,
+          quantity: item.quantity,
+          total_price: pending ? null : Number(item.totalPrice),
+          category_id: item.categoryId,
+          category_slug: item.categorySlug,
+          category_name: item.categoryName,
+          pricing_model: item.pricingModel,
+          group_slug:
+            dynamicItem.groupSlug ??
+            dynamicItem.catalogProduct?.groupSlug ??
+            null,
+          group_name:
+            dynamicItem.groupName ??
+            dynamicItem.catalogProduct?.groupName ??
+            null,
+          group_description:
+            dynamicItem.groupDescription ??
+            dynamicItem.catalogProduct?.groupDescription ??
+            null,
+          examples:
+            dynamicItem.examples ?? dynamicItem.catalogProduct?.examples ?? [],
+          required_at: item.requiredAt ?? null,
+          specs: this.specSnapshots(item.specValues),
+          paper_specs:
+            (item.categorySlug ?? item.category) === 'paper'
+              ? this.paperSpecsFromValues(item.specValues)
+              : null,
+          three_d_specs:
+            (item.categorySlug ?? item.category) === '3d'
+              ? this.threeDSpecsFromValues(item.specValues)
+              : null,
+        };
+      }),
       status_history: (o.statusHistory ?? []).map((h) => ({
         id: h.id,
         order_id: h.orderId,
@@ -813,7 +934,10 @@ export class AdminController {
         'assignedRider',
       ],
     });
-    const enriched = await this.attachDeliveryAssignmentDetails(orders);
+    const withCatalog = await this.ordersService.attachCatalogSnapshots(orders);
+    const withAssignments =
+      await this.attachDeliveryAssignmentDetails(withCatalog);
+    const enriched = await this.attachMatchingOutcomes(withAssignments);
     return enriched.map((o) => this.mapOrder(o));
   }
 
@@ -833,7 +957,13 @@ export class AdminController {
         'assignedRider',
       ],
     });
-    const [enriched] = await this.attachDeliveryAssignmentDetails([order]);
+    const [withCatalog] = await this.ordersService.attachCatalogSnapshots([
+      order,
+    ]);
+    const [withAssignments] = await this.attachDeliveryAssignmentDetails([
+      withCatalog,
+    ]);
+    const [enriched] = await this.attachMatchingOutcomes([withAssignments]);
     // Pull signed logo + self-QC evidence URLs from OrdersService enrichment.
     try {
       const withMedia = await this.ordersService.findById(id);

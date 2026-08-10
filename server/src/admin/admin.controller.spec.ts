@@ -8,7 +8,12 @@ import { OrdersService } from '../orders/orders.service';
 import { RidersService } from '../riders/riders.service';
 import { OrdersGateway } from '../orders/orders.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
-import { Order, OrderStatus } from '../orders/entities/order.entity';
+import {
+  Order,
+  OrderStatus,
+  PaymentAuthorizationStatus,
+  PricingStatus,
+} from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
@@ -37,7 +42,9 @@ describe('AdminController analytics', () => {
   let riderProfilesRepo: jest.Mocked<Partial<Repository<RiderProfile>>>;
   let assignmentsRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
   let creditsService: jest.Mocked<Partial<CreditsService>>;
-  let ordersService: jest.Mocked<Pick<OrdersService, 'updateStatus'>>;
+  let ordersService: jest.Mocked<
+    Pick<OrdersService, 'updateStatus' | 'attachCatalogSnapshots'>
+  >;
   let ridersService: {
     getAllRidersWithUser: jest.Mock;
     assignOrderToRider: jest.Mock;
@@ -64,6 +71,7 @@ describe('AdminController analytics', () => {
     creditsService = { getPendingCount: jest.fn() };
     ordersService = {
       updateStatus: jest.fn(),
+      attachCatalogSnapshots: jest.fn(async (orders) => orders),
     };
     ridersService = {
       getAllRidersWithUser: jest.fn(),
@@ -353,6 +361,225 @@ describe('AdminController analytics', () => {
   });
 
   describe('mapOrder', () => {
+    it('projects an arbitrary pending RFQ leaf without Paper/3D coercion or compatibility zeros', () => {
+      const promisedAt = new Date('2026-08-14T09:00:00.000Z');
+      const createdAt = new Date('2026-08-10T09:00:00.000Z');
+      const order = {
+        id: 17,
+        orderId: 'ORD-10017',
+        userId: 2,
+        category: 'business-store-signages',
+        quantity: 2,
+        totalPrice: 0,
+        deliveryFee: 0,
+        finalTotalMinor: null,
+        deliveryFeeMinor: null,
+        quotedTotalMinor: null,
+        pricingStatus: PricingStatus.PENDING_QUOTE,
+        quotedAt: null,
+        quoteAcceptedAt: null,
+        quotedByUserId: null,
+        promisedCompletionAt: null,
+        paymentMethod: 'unselected',
+        paymentStatus: 'pending',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+        orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
+        deliveryOption: 'delivery',
+        batchOrder: {
+          subtotal: 0,
+          deliveryFee: 250,
+          totalPrice: 0,
+          priorityFee: 0,
+          extraDestinationFee: 0,
+        },
+        currentSupplierAssignment: null,
+        matchingOutcome: {
+          code: 'no_eligible_supplier',
+          message: 'No eligible supplier covers order 17',
+        },
+        items: [
+          {
+            id: 21,
+            orderId: 17,
+            category: 'business-store-signages',
+            categoryId: 31,
+            categorySlug: 'business-store-signages',
+            categoryName: 'Business & Store Signages',
+            pricingModel: 'quote_required',
+            requiredAt: promisedAt,
+            quantity: 2,
+            totalPrice: 0,
+            catalogProduct: {
+              slug: 'business-store-signages',
+              name: 'Business & Store Signages',
+              groupSlug: 'awards-signages',
+              groupName: 'Recognition, Awards & Signage',
+              groupDescription: 'Recognition and visible brand spaces.',
+              examples: ['Acrylic build-up letters', 'LED neon flex'],
+            },
+            specValues: [
+              {
+                specKey: 'material',
+                specLabel: 'Material',
+                inputType: 'text',
+                value: 'acrylic',
+                displayValue: 'Premium acrylic',
+                optionId: null,
+                optionLabel: null,
+                fixedFee: 0,
+                unitCost: 0,
+              },
+            ],
+          },
+        ],
+        statusHistory: [],
+        createdAt,
+        updatedAt: createdAt,
+      } as unknown as Order;
+
+      const projected = (controller as any).mapOrder(order);
+
+      expect(projected).toMatchObject({
+        category: 'business-store-signages',
+        pricing_status: 'pending_quote',
+        quoted_total_minor: null,
+        quoted_at: null,
+        quote_accepted_at: null,
+        quoted_by_user_id: null,
+        promised_completion_at: null,
+        current_supplier_assignment: null,
+        matching_outcome: { code: 'no_eligible_supplier' },
+        unmet_coverage: true,
+        total_price: null,
+        delivery_fee: null,
+        priority_fee: null,
+        extra_destination_fee: null,
+      });
+      expect(projected.items[0]).toMatchObject({
+        category: 'business-store-signages',
+        category_slug: 'business-store-signages',
+        category_name: 'Business & Store Signages',
+        group_slug: 'awards-signages',
+        group_name: 'Recognition, Awards & Signage',
+        group_description: 'Recognition and visible brand spaces.',
+        examples: ['Acrylic build-up letters', 'LED neon flex'],
+        required_at: promisedAt,
+        total_price: null,
+        specs: [
+          expect.objectContaining({
+            key: 'material',
+            label: 'Material',
+            value: 'acrylic',
+            display_value: 'Premium acrylic',
+          }),
+        ],
+        paper_specs: null,
+        three_d_specs: null,
+      });
+      expect(projected.items[0].specs[0]).not.toHaveProperty('fixed_fee');
+      expect(projected.items[0].specs[0]).not.toHaveProperty('unit_cost');
+    });
+
+    it('keeps quoted minor-unit money string-safe and exposes the current assignment terms', () => {
+      const quotedAt = new Date('2026-08-10T09:00:00.000Z');
+      const promisedAt = new Date('2026-08-14T09:00:00.000Z');
+      const order = {
+        id: 18,
+        orderId: 'ORD-10018',
+        userId: 2,
+        category: 'custom-apparel',
+        quantity: 12,
+        totalPrice: 0,
+        deliveryFee: 0,
+        quotedTotalMinor: '9007199254740993',
+        pricingStatus: PricingStatus.QUOTED,
+        quotedAt,
+        quoteAcceptedAt: null,
+        quotedByUserId: 77,
+        promisedCompletionAt: promisedAt,
+        paymentMethod: 'unselected',
+        paymentStatus: 'pending',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+        orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
+        deliveryOption: 'delivery',
+        currentSupplierAssignment: {
+          id: 91,
+          supplierId: 12,
+          decision: 'accepted',
+          rankPosition: 1,
+          acceptanceDeadline: new Date('2026-08-11T09:00:00.000Z'),
+          finalPriceMinor: '9007199254740993',
+          promisedDate: promisedAt,
+          decidedAt: quotedAt,
+        },
+        items: [],
+        statusHistory: [],
+        createdAt: quotedAt,
+        updatedAt: quotedAt,
+      } as unknown as Order;
+
+      const projected = (controller as any).mapOrder(order);
+
+      expect(projected.quoted_total_minor).toBe('9007199254740993');
+      expect(projected.current_supplier_assignment).toMatchObject({
+        id: 91,
+        supplier_id: 12,
+        decision: 'accepted',
+        final_price_minor: '9007199254740993',
+        promised_date: promisedAt,
+      });
+    });
+
+    it('preserves legacy spec branches only for exact paper and 3d leaves', () => {
+      const base = {
+        id: 19,
+        orderId: 'ORD-10019',
+        userId: 2,
+        quantity: 1,
+        totalPrice: 10,
+        deliveryFee: 0,
+        quotedTotalMinor: null,
+        pricingStatus: PricingStatus.ACCEPTED,
+        paymentMethod: 'cash',
+        paymentStatus: 'paid',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
+        orderStatus: OrderStatus.COMPLETED,
+        deliveryOption: 'pickup',
+        statusHistory: [],
+        createdAt: new Date('2026-08-01T09:00:00.000Z'),
+        updatedAt: new Date('2026-08-01T09:00:00.000Z'),
+      };
+      const values = [
+        {
+          specKey: 'file_format',
+          specLabel: 'File Format',
+          value: 'stl',
+          displayValue: 'STL',
+          optionId: null,
+          optionLabel: null,
+        },
+      ];
+
+      const unknown = (controller as any).mapOrder({
+        ...base,
+        category: 'future-model-service',
+        items: [{ category: 'future-model-service', specValues: values }],
+      } as unknown as Order);
+      const legacy = (controller as any).mapOrder({
+        ...base,
+        category: '3d',
+        items: [{ category: '3d', categorySlug: '3d', specValues: values }],
+      } as unknown as Order);
+
+      expect(unknown.category).toBe('future-model-service');
+      expect(unknown.three_d_specs).toBeNull();
+      expect(unknown.items[0].three_d_specs).toBeNull();
+      expect(legacy.three_d_specs).toMatchObject({ file_format: 'stl' });
+      expect(legacy.items[0].three_d_specs).toMatchObject({
+        file_format: 'stl',
+      });
+    });
+
     it('includes pinned delivery coordinates and unique multidrop destinations', () => {
       const order = {
         id: 7,
