@@ -5,13 +5,29 @@ import type { QueryRunner } from 'typeorm';
 import { CatalogRfqV1101784334500000 } from '../../migrations/1784334500000-catalog-rfq-v1-10';
 
 describe('CatalogRfqV1101784334500000', () => {
-  function createQueryRunner(hasColumn = false) {
-    const queries: string[] = [];
+  type DuplicateCapabilityRow = {
+    id: number;
+    supplier_id: number;
+    product_family: string;
+    payload_signature: string;
+  };
+
+  function createQueryRunner(
+    options: {
+      hasColumn?: boolean;
+      duplicateCapabilities?: DuplicateCapabilityRow[];
+    } = {},
+  ) {
+    const { hasColumn = false, duplicateCapabilities = [] } = options;
+    const queries: Array<{ sql: string; parameters?: unknown[] }> = [];
     const queryRunner = {
       hasTable: jest.fn(async () => true),
       hasColumn: jest.fn(async () => hasColumn),
-      query: jest.fn(async (sql: string) => {
-        queries.push(sql);
+      query: jest.fn(async (sql: string, parameters?: unknown[]) => {
+        queries.push({ sql, parameters });
+        if (sql.includes('payload_signature')) {
+          return duplicateCapabilities;
+        }
         return [];
       }),
     } as unknown as QueryRunner;
@@ -38,7 +54,7 @@ describe('CatalogRfqV1101784334500000', () => {
 
     await new CatalogRfqV1101784334500000().up(queryRunner);
 
-    const sql = queries.join('\n');
+    const sql = queries.map((query) => query.sql).join('\n');
     expect(sql).toContain('orders_pricing_status_enum');
     expect(sql).toContain("'pending_quote'");
     expect(sql).toContain("'quoted'");
@@ -56,12 +72,123 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(sql).toContain(`WHERE "slug" IN ('paper', '3d')`);
   });
 
+  it('preserves the lowest id when consolidating demonstrably identical capabilities', async () => {
+    const signature =
+      '{"is_active":true,"materials":["matte"],"max_capacity":10,"lead_time_days":2}';
+    const { queryRunner, queries } = createQueryRunner({
+      duplicateCapabilities: [
+        {
+          id: 9,
+          supplier_id: 7,
+          product_family: 'flyers',
+          payload_signature: signature,
+        },
+        {
+          id: 3,
+          supplier_id: 7,
+          product_family: 'flyers',
+          payload_signature: signature,
+        },
+      ],
+    });
+
+    await new CatalogRfqV1101784334500000().up(queryRunner);
+
+    const deleteIndex = queries.findIndex((query) =>
+      query.sql.includes('DELETE FROM "supplier_capabilities"'),
+    );
+    const constraintIndex = queries.findIndex((query) =>
+      query.sql.includes('ADD CONSTRAINT "uq_supplier_capability_product"'),
+    );
+    expect(deleteIndex).toBeGreaterThanOrEqual(0);
+    expect(queries[deleteIndex]?.parameters).toEqual([[9]]);
+    expect(constraintIndex).toBeGreaterThan(deleteIndex);
+  });
+
+  it('rejects conflicting capabilities with actionable pair and id details', async () => {
+    const { queryRunner, queries } = createQueryRunner({
+      duplicateCapabilities: [
+        {
+          id: 2,
+          supplier_id: 6,
+          product_family: 'brochures',
+          payload_signature:
+            '{"is_active":true,"materials":[],"max_capacity":5,"lead_time_days":2}',
+        },
+        {
+          id: 4,
+          supplier_id: 6,
+          product_family: 'brochures',
+          payload_signature:
+            '{"is_active":true,"materials":[],"max_capacity":5,"lead_time_days":2}',
+        },
+        {
+          id: 3,
+          supplier_id: 7,
+          product_family: 'flyers',
+          payload_signature:
+            '{"is_active":true,"materials":["matte"],"max_capacity":10,"lead_time_days":2}',
+        },
+        {
+          id: 9,
+          supplier_id: 7,
+          product_family: 'flyers',
+          payload_signature:
+            '{"is_active":true,"materials":["glossy"],"max_capacity":25,"lead_time_days":1}',
+        },
+      ],
+    });
+
+    await expect(
+      new CatalogRfqV1101784334500000().up(queryRunner),
+    ).rejects.toThrow(
+      'supplier_id=7, product_family="flyers", capability_ids=[3, 9]',
+    );
+    expect(
+      queries.some((query) =>
+        query.sql.includes('DELETE FROM "supplier_capabilities"'),
+      ),
+    ).toBe(false);
+    expect(
+      queries.some((query) =>
+        query.sql.includes('ADD CONSTRAINT "uq_supplier_capability_product"'),
+      ),
+    ).toBe(false);
+  });
+
+  it('snapshots legacy activation state before deactivation', async () => {
+    const { queryRunner, queries } = createQueryRunner();
+
+    await new CatalogRfqV1101784334500000().up(queryRunner);
+
+    const createSnapshotIndex = queries.findIndex((query) =>
+      query.sql.includes(
+        'CREATE TABLE IF NOT EXISTS "catalog_v1_10_legacy_activation_snapshot"',
+      ),
+    );
+    const snapshotIndex = queries.findIndex((query) =>
+      query.sql.includes(
+        'INSERT INTO "catalog_v1_10_legacy_activation_snapshot"',
+      ),
+    );
+    const deactivateIndex = queries.findIndex((query) =>
+      query.sql.includes('SET "is_active" = false'),
+    );
+    expect(createSnapshotIndex).toBeGreaterThanOrEqual(0);
+    expect(snapshotIndex).toBeGreaterThan(createSnapshotIndex);
+    expect(queries[snapshotIndex]?.sql).toContain('SELECT "slug", "is_active"');
+    expect(queries[snapshotIndex]?.sql).toContain(
+      'ON CONFLICT ("slug") DO NOTHING',
+    );
+    expect(deactivateIndex).toBeGreaterThan(snapshotIndex);
+  });
+
   it('reverses each schema addition in dependency-safe order', async () => {
-    const { queryRunner, queries } = createQueryRunner(true);
+    const { queryRunner, queries } = createQueryRunner({ hasColumn: true });
 
     await new CatalogRfqV1101784334500000().down(queryRunner);
 
-    const sql = queries.join('\n');
+    const sql = queries.map((query) => query.sql).join('\n');
     expect(sql).toContain(
       'DROP CONSTRAINT IF EXISTS "uq_supplier_capability_product"',
     );
@@ -73,8 +200,22 @@ describe('CatalogRfqV1101784334500000', () => {
       'DROP TYPE IF EXISTS "public"."orders_pricing_status_enum"',
     );
     expect(sql).toContain('TYPE varchar(120)');
-    expect(sql).toContain(
-      `SET "is_active" = true WHERE "slug" IN ('paper', '3d')`,
+    expect(sql).toContain('activation_snapshot."was_active"');
+    expect(sql).not.toContain('SET "is_active" = true');
+
+    const indexOf = (fragment: string) =>
+      queries.findIndex((query) => query.sql.includes(fragment));
+    expect(
+      indexOf('DROP INDEX IF EXISTS "idx_orders_pricing_status"'),
+    ).toBeLessThan(indexOf('DROP COLUMN "pricing_status"'));
+    expect(
+      indexOf('DROP CONSTRAINT IF EXISTS "fk_orders_quoted_by_user"'),
+    ).toBeLessThan(indexOf('DROP COLUMN "quoted_by_user_id"'));
+    expect(indexOf('DROP COLUMN "pricing_status"')).toBeLessThan(
+      indexOf('DROP TYPE IF EXISTS "public"."orders_pricing_status_enum"'),
+    );
+    expect(indexOf('activation_snapshot."was_active"')).toBeLessThan(
+      indexOf('DROP TABLE "catalog_v1_10_legacy_activation_snapshot"'),
     );
   });
 });

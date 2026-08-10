@@ -11,15 +11,7 @@ const GENERAL_ARTWORK_EXTENSIONS = [
   'psd',
 ] as const;
 
-const MODEL_3D_EXTENSIONS = [
-  'stl',
-  'obj',
-  '3mf',
-  'glb',
-  'gltf',
-  'step',
-  'stp',
-] as const;
+const MODEL_3D_EXTENSIONS = ['stl', 'obj', '3mf'] as const;
 
 const CAD_EXTENSIONS = ['pdf', 'dwg', 'dxf'] as const;
 

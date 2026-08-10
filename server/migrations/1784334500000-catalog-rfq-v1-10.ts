@@ -1,5 +1,18 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+type DuplicateCapabilityRow = {
+  id: number | string;
+  supplier_id: number | string;
+  product_family: string;
+  payload_signature: string;
+};
+
+type CapabilityDuplicateGroup = {
+  supplierId: number;
+  productFamily: string;
+  rows: Array<{ id: number; payloadSignature: string }>;
+};
+
 /**
  * Add the v1.10 browsing-group and RFQ persistence contract.
  *
@@ -10,8 +23,102 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class CatalogRfqV1101784334500000 implements MigrationInterface {
   name = 'CatalogRfqV1101784334500000';
 
+  private async reconcileCapabilityDuplicates(
+    queryRunner: QueryRunner,
+  ): Promise<void> {
+    const duplicateRows = (await queryRunner.query(`
+      WITH duplicate_capabilities AS (
+        SELECT
+          capability.*,
+          COUNT(*) OVER (
+            PARTITION BY "supplier_id", "product_family"
+          ) AS duplicate_count
+        FROM "supplier_capabilities" capability
+      )
+      SELECT
+        "id",
+        "supplier_id",
+        "product_family",
+        jsonb_build_object(
+          'materials', "materials",
+          'max_capacity', "max_capacity",
+          'lead_time_days', "lead_time_days",
+          'is_active', "is_active"
+        )::text AS payload_signature
+      FROM duplicate_capabilities
+      WHERE duplicate_count > 1
+      ORDER BY "supplier_id", "product_family", "id"
+    `)) as unknown as DuplicateCapabilityRow[];
+
+    const groups = new Map<string, CapabilityDuplicateGroup>();
+    for (const row of duplicateRows) {
+      const supplierId = Number(row.supplier_id);
+      const id = Number(row.id);
+      const key = JSON.stringify([supplierId, row.product_family]);
+      const group = groups.get(key) ?? {
+        supplierId,
+        productFamily: row.product_family,
+        rows: [],
+      };
+      group.rows.push({ id, payloadSignature: row.payload_signature });
+      groups.set(key, group);
+    }
+
+    const orderedGroups = [...groups.values()].sort(
+      (left, right) =>
+        left.supplierId - right.supplierId ||
+        left.productFamily.localeCompare(right.productFamily),
+    );
+    for (const group of orderedGroups) {
+      group.rows.sort((left, right) => left.id - right.id);
+    }
+
+    const conflicts = orderedGroups.filter(
+      (group) =>
+        new Set(group.rows.map((row) => row.payloadSignature)).size > 1,
+    );
+    if (conflicts.length > 0) {
+      const details = conflicts
+        .map(
+          (group) =>
+            `supplier_id=${group.supplierId}, product_family=${JSON.stringify(group.productFamily)}, capability_ids=[${group.rows.map((row) => row.id).join(', ')}]`,
+        )
+        .join('; ');
+      throw new Error(
+        `Cannot enforce uq_supplier_capability_product: conflicting duplicate supplier capabilities: ${details}. Resolve each pair so only identical rows remain before retrying the migration.`,
+      );
+    }
+
+    const redundantIds = orderedGroups.flatMap((group) =>
+      group.rows.slice(1).map((row) => row.id),
+    );
+    if (redundantIds.length > 0) {
+      await queryRunner.query(
+        `DELETE FROM "supplier_capabilities" WHERE "id" = ANY($1::int[])`,
+        [redundantIds],
+      );
+    }
+  }
+
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable('product_categories')) {
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS "catalog_v1_10_legacy_activation_snapshot" (
+          "slug" varchar(50) PRIMARY KEY,
+          "was_active" boolean NOT NULL
+        )
+      `);
+      await queryRunner.query(`
+        INSERT INTO "catalog_v1_10_legacy_activation_snapshot" (
+          "slug",
+          "was_active"
+        )
+        SELECT "slug", "is_active"
+        FROM "product_categories"
+        WHERE "slug" IN ('paper', '3d')
+        ON CONFLICT ("slug") DO NOTHING
+      `);
+
       const groupColumns = [
         ['group_slug', 'varchar(50)'],
         ['group_name', 'varchar(100)'],
@@ -144,6 +251,8 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
         `);
       }
 
+      await this.reconcileCapabilityDuplicates(queryRunner);
+
       await queryRunner.query(`
         DO $$
         BEGIN
@@ -231,10 +340,16 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
     }
 
     if (await queryRunner.hasTable('product_categories')) {
-      await queryRunner.query(`
-        UPDATE "product_categories"
-        SET "is_active" = true WHERE "slug" IN ('paper', '3d')
-      `);
+      if (
+        await queryRunner.hasTable('catalog_v1_10_legacy_activation_snapshot')
+      ) {
+        await queryRunner.query(`
+          UPDATE "product_categories" category
+          SET "is_active" = activation_snapshot."was_active"
+          FROM "catalog_v1_10_legacy_activation_snapshot" activation_snapshot
+          WHERE category."slug" = activation_snapshot."slug"
+        `);
+      }
 
       for (const column of [
         'group_sort_order',
@@ -248,6 +363,14 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
           );
         }
       }
+    }
+
+    if (
+      await queryRunner.hasTable('catalog_v1_10_legacy_activation_snapshot')
+    ) {
+      await queryRunner.query(`
+        DROP TABLE "catalog_v1_10_legacy_activation_snapshot"
+      `);
     }
   }
 }

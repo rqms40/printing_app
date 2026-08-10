@@ -71,4 +71,38 @@ describe('v1.10 catalog definition', () => {
         .every((product) => product.maxFileSizeMb === 100),
     ).toBe(true);
   });
+
+  it('uses the exact approved extension set for each upload policy', () => {
+    const products = CATALOG_V1_10_GROUPS.flatMap((group) => group.products);
+    const bySlug = new Map(products.map((product) => [product.slug, product]));
+
+    expect(bySlug.get('3d-printing-scale-models')?.allowedExtensions).toEqual([
+      'stl',
+      'obj',
+      '3mf',
+    ]);
+    expect(bySlug.get('blueprint-cad-plotting')?.allowedExtensions).toEqual([
+      'pdf',
+      'dwg',
+      'dxf',
+    ]);
+
+    const generalArtworkExtensions = [
+      'pdf',
+      'png',
+      'jpg',
+      'jpeg',
+      'tif',
+      'tiff',
+      'ai',
+      'psd',
+    ];
+    for (const product of products.filter(
+      (entry) =>
+        entry.slug !== '3d-printing-scale-models' &&
+        entry.slug !== 'blueprint-cad-plotting',
+    )) {
+      expect(product.allowedExtensions).toEqual(generalArtworkExtensions);
+    }
+  });
 });
