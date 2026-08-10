@@ -1,11 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import {
-  IsDateString,
-  IsInt,
-  IsPositive,
-  Min,
-} from 'class-validator';
+import { IsDateString, IsInt, IsPositive, Min } from 'class-validator';
 
 /**
  * Supplier accepts an assigned job with committed commercial terms.

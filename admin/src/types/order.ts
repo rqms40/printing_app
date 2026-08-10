@@ -56,6 +56,10 @@ export interface AssignedRiderContact {
   plate_number?: string | null;
   delivery_assignment_id?: number | string | null;
   delivery_status?: string | null;
+  /** Plain pickup OTP for ops to share with the rider (until verified). */
+  pickup_otp?: string | null;
+  /** Plain delivery OTP for ops/customer (after pickup, until verified). */
+  delivery_otp?: string | null;
 }
 
 export interface AssignedSupplierContact {

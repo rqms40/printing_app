@@ -655,7 +655,8 @@ export class MatchingService {
         capacityFit: 1,
         qualityScore: 0,
         acceptanceRate: 0.5,
-        matchedProductFamily: cap?.productFamily ?? order.category ?? 'ops_override',
+        matchedProductFamily:
+          cap?.productFamily ?? order.category ?? 'ops_override',
         maxCapacity: cap?.maxCapacity ?? 0,
         openLoad: 0,
         remainingCapacity: null,

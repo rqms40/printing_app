@@ -182,8 +182,7 @@ class RiderHomeScreen extends ConsumerWidget {
             ),
           ),
         ),
-        if (active != null)
-          Positioned(
+        Positioned(
             right: AppSpacing.xl,
             // The shell reports the nav bar's true height (66 + device inset)
             // via MediaQuery padding — anchor above it instead of hard-coding.
@@ -195,7 +194,7 @@ class RiderHomeScreen extends ConsumerWidget {
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 customBorder: const CircleBorder(),
-                onTap: () => _openChat(context, ref, active),
+                onTap: () => context.push('/rider/chat'),
                 child: SizedBox(
                   width: 52,
                   height: 52,

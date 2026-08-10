@@ -69,9 +69,15 @@ export class MockupService {
       where: { id: dto.artworkFileId },
     });
     if (!file) {
-      throw new NotFoundException(`Artwork file ${dto.artworkFileId} not found`);
+      throw new NotFoundException(
+        `Artwork file ${dto.artworkFileId} not found`,
+      );
     }
-    if (!isStaff && file.uploadedBy != null && file.uploadedBy !== actorUserId) {
+    if (
+      !isStaff &&
+      file.uploadedBy != null &&
+      file.uploadedBy !== actorUserId
+    ) {
       throw new ForbiddenException('Not allowed to preview this artwork');
     }
 
@@ -126,13 +132,22 @@ export class MockupService {
     if (!file) {
       throw new NotFoundException(`Artwork file ${artworkFileId} not found`);
     }
-    if (!isStaff && file.uploadedBy != null && file.uploadedBy !== actorUserId) {
-      throw new ForbiddenException('Not allowed to list mockups for this artwork');
+    if (
+      !isStaff &&
+      file.uploadedBy != null &&
+      file.uploadedBy !== actorUserId
+    ) {
+      throw new ForbiddenException(
+        'Not allowed to list mockups for this artwork',
+      );
     }
     const rows = await this.mockupRepo.find({
       where: {
         artworkFileId,
-        renderStatus: In([MockupRenderStatus.READY, MockupRenderStatus.PENDING]),
+        renderStatus: In([
+          MockupRenderStatus.READY,
+          MockupRenderStatus.PENDING,
+        ]),
       },
       order: { id: 'DESC' },
       take: 20,

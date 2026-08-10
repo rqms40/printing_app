@@ -33,6 +33,8 @@ class DeliveryAssignment {
     this.declineReason,
     this.proofPhotoUrl,
     this.proof,
+    this.pickupOtp,
+    this.deliveryOtp,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -50,6 +52,12 @@ class DeliveryAssignment {
   final String? declineReason;
   final String? proofPhotoUrl;
   final DeliveryProof? proof;
+
+  /// Active supplier pickup OTP (null after pickup verified).
+  final String? pickupOtp;
+
+  /// Active customer delivery OTP (null until after pickup / after delivery).
+  final String? deliveryOtp;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -67,6 +75,8 @@ class DeliveryAssignment {
     String? declineReason,
     String? proofPhotoUrl,
     DeliveryProof? proof,
+    String? pickupOtp,
+    String? deliveryOtp,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -84,6 +94,8 @@ class DeliveryAssignment {
       declineReason: declineReason ?? this.declineReason,
       proofPhotoUrl: proofPhotoUrl ?? this.proofPhotoUrl,
       proof: proof ?? this.proof,
+      pickupOtp: pickupOtp ?? this.pickupOtp,
+      deliveryOtp: deliveryOtp ?? this.deliveryOtp,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

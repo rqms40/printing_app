@@ -638,9 +638,7 @@ describe('OrdersService', () => {
       reason: 'Ops payment authorization',
     };
 
-    function awaitingPilotCreditOrder(
-      overrides: Partial<Order> = {},
-    ): Order {
+    function awaitingPilotCreditOrder(overrides: Partial<Order> = {}): Order {
       return {
         id: 42,
         orderId: 'ORD-10042',
@@ -688,8 +686,7 @@ describe('OrdersService', () => {
         125,
         OrdersService.creditSpendIdempotencyKey(42),
         expect.objectContaining({
-          reserveIdempotencyKey:
-            OrdersService.creditReserveIdempotencyKey(42),
+          reserveIdempotencyKey: OrdersService.creditReserveIdempotencyKey(42),
           manager: expect.anything(),
           actorUserId: 7,
         }),
@@ -2327,7 +2324,12 @@ describe('OrdersService', () => {
       repo.update.mockResolvedValue({ affected: 0 } as any);
 
       await expect(
-        service.updateStatus(1, OrderStatus.APPROVED_FOR_MATCHING, {}, statusContext),
+        service.updateStatus(
+          1,
+          OrderStatus.APPROVED_FOR_MATCHING,
+          {},
+          statusContext,
+        ),
       ).rejects.toThrow('Order changed during status update');
 
       expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
@@ -2503,12 +2505,7 @@ describe('OrdersService', () => {
         paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
       } as Order);
 
-      await service.updateStatus(
-        1,
-        OrderStatus.PRODUCTION,
-        {},
-        statusContext,
-      );
+      await service.updateStatus(1, OrderStatus.PRODUCTION, {}, statusContext);
 
       expect(notificationsService.createForAllAdmins).not.toHaveBeenCalled();
     });

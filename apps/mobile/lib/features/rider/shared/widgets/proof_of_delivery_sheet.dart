@@ -30,10 +30,14 @@ class ProofOfDeliverySheet extends StatefulWidget {
     super.key,
     required this.orderRef,
     this.kind = ProofSheetKind.delivery,
+    this.initialOtp,
   });
 
   final String orderRef;
   final ProofSheetKind kind;
+
+  /// Server-issued OTP to prefill (visible to rider for pilot handoff).
+  final String? initialOtp;
 
   @override
   State<ProofOfDeliverySheet> createState() => _ProofOfDeliverySheetState();
@@ -43,12 +47,19 @@ enum ProofSheetKind { pickup, delivery }
 
 class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
   final _points = <Offset?>[];
-  final _otpController = TextEditingController();
+  late final TextEditingController _otpController;
   late var _mode = widget.kind == ProofSheetKind.pickup ? 'photo' : 'signature';
   var _isUploading = false;
   String? _error;
   XFile? _pendingPhoto;
   Uint8List? _pendingPhotoBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    final seed = widget.initialOtp?.trim() ?? '';
+    _otpController = TextEditingController(text: seed);
+  }
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -66,8 +77,10 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
       : 'Proof of Delivery';
 
   String get _otpHint => widget.kind == ProofSheetKind.pickup
-      ? 'Enter the supplier pickup OTP'
-      : 'Enter the customer delivery OTP';
+      ? 'Pickup OTP (prefilled from server)'
+      : 'Delivery OTP (prefilled from server)';
+
+  bool get _otpPrefixed => (widget.initialOtp?.trim().isNotEmpty ?? false);
 
   @override
   void dispose() {
@@ -202,15 +215,66 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                 ),
               ),
               const SizedBox(height: AppSpacing.xs),
+              Text(
+                isPickup
+                    ? (_otpPrefixed
+                        ? 'Pickup OTP is prefilled from the server. Confirm with the print shop, then capture the photo.'
+                        : 'Ask the print shop or ops for the pickup OTP shown on the admin order.')
+                    : (_otpPrefixed
+                        ? 'Delivery OTP is prefilled and also shown to the customer on their order. Confirm at the door, then capture proof.'
+                        : 'Use the delivery OTP shared with the customer after pickup.'),
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              if (_otpPrefixed) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.primary.withValues(alpha: 0.12),
+                    borderRadius: AppRadius.borderMd,
+                    border: Border.all(color: colors.primary.withValues(alpha: 0.35)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isPickup ? 'Pickup OTP' : 'Delivery OTP',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _otpController.text,
+                        key: const Key('proof-otp-display'),
+                        style: AppTypography.h2.copyWith(
+                          color: colors.onBackground,
+                          letterSpacing: 4,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+              ],
               TextField(
                 key: const Key('proof-otp-field'),
                 controller: _otpController,
                 keyboardType: TextInputType.number,
                 maxLength: 8,
+                readOnly: _otpPrefixed,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   hintText: _otpHint,
+                  labelText: _otpPrefixed ? 'OTP (auto-filled)' : 'OTP',
                   counterText: '',
                   filled: true,
                   fillColor: colors.surfaceVariant,

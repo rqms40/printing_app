@@ -2,11 +2,13 @@ import type { QueryRunner } from 'typeorm';
 import { DeliveryAssignmentOtpProof1784333700000 } from '../../migrations/1784333700000-delivery-assignment-otp-proof';
 
 describe('DeliveryAssignmentOtpProof1784333700000', () => {
-  function createQueryRunner(opts: {
-    hasTable?: boolean;
-    existingColumns?: string[];
-    ownership?: string;
-  } = {}) {
+  function createQueryRunner(
+    opts: {
+      hasTable?: boolean;
+      existingColumns?: string[];
+      ownership?: string;
+    } = {},
+  ) {
     const {
       hasTable = true,
       existingColumns = [],

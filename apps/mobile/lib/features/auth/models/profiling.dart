@@ -66,6 +66,12 @@ const profileCategories = [
     description: 'Print shop — rank Signages, Tarpaulins, Apparel, and more.',
     icon: Icons.storefront_rounded,
   ),
+  ProfilingCategoryOption(
+    value: 'rider',
+    label: 'Rider',
+    description: 'Join the fleet and deliver prints to customers.',
+    icon: Icons.two_wheeler_rounded,
+  ),
 ];
 
 const profileFields = [
@@ -275,6 +281,7 @@ String profilingOrganizationLabel(String? profileCategory) {
 }
 
 bool isSupplierLane(String? profileCategory) => profileCategory == 'supplier';
+bool isRiderLane(String? profileCategory) => profileCategory == 'rider';
 
 String profileCategoryLabel(String? value) {
   return profileCategories

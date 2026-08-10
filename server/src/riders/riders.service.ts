@@ -24,6 +24,7 @@ import { assertOrderStatusTransition } from '../orders/order-status-transition';
 import { User, UserRole } from '../users/entities/user.entity';
 import { UpdateRiderProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
+import { UpdateAdminRiderDto } from '../admin/dto/update-admin-rider.dto';
 import { LocationGateway } from './location.gateway';
 import { OrdersService } from '../orders/orders.service';
 import { ProofOfDeliveryDto } from './dto/update-delivery-status.dto';
@@ -76,15 +77,28 @@ export function otpCodesMatch(
   return timingSafeEqual(left, right);
 }
 
-/** Strip OTP secrets before serializing assignment to riders. */
-export function sanitizeAssignmentSecrets<T extends object>(
-  assignment: T,
-): T {
-  const clone = { ...assignment } as T & Record<string, unknown>;
+/**
+ * Strip OTP hashes before serializing assignment to riders.
+ * Expose active handoff codes as `pickupOtp` / `deliveryOtp` so the rider UI
+ * can prefill/display them (customer also sees delivery OTP on the order).
+ */
+export function sanitizeAssignmentSecrets<T extends object>(assignment: T): T {
+  const clone = { ...(assignment as Record<string, unknown>) };
+  const pickupVerified = clone.pickupOtpVerifiedAt != null;
+  const deliveryVerified = clone.deliveryOtpVerifiedAt != null;
+  const pickupCode =
+    typeof clone.pickupOtpCode === 'string' ? clone.pickupOtpCode : null;
+  const deliveryCode =
+    typeof clone.deliveryOtpCode === 'string' ? clone.deliveryOtpCode : null;
+
   for (const field of OTP_SECRET_FIELDS) {
     delete clone[field];
   }
-  return clone;
+
+  clone.pickupOtp = !pickupVerified && pickupCode ? pickupCode : null;
+  clone.deliveryOtp =
+    pickupVerified && !deliveryVerified && deliveryCode ? deliveryCode : null;
+  return clone as T;
 }
 
 // Valid state transitions for delivery status
@@ -96,14 +110,8 @@ const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
     DeliveryStatus.ON_THE_WAY,
     DeliveryStatus.FAILED,
   ],
-  [DeliveryStatus.ON_THE_WAY]: [
-    DeliveryStatus.ARRIVED,
-    DeliveryStatus.FAILED,
-  ],
-  [DeliveryStatus.ARRIVED]: [
-    DeliveryStatus.DELIVERED,
-    DeliveryStatus.FAILED,
-  ],
+  [DeliveryStatus.ON_THE_WAY]: [DeliveryStatus.ARRIVED, DeliveryStatus.FAILED],
+  [DeliveryStatus.ARRIVED]: [DeliveryStatus.DELIVERED, DeliveryStatus.FAILED],
   [DeliveryStatus.DELIVERED]: [],
   [DeliveryStatus.FAILED]: [],
 };
@@ -213,6 +221,36 @@ export class RidersService {
     private auditService: AuditService,
     private notificationsService: NotificationsService,
   ) {}
+
+  async createProfile(data: { userId: number }): Promise<RiderProfile> {
+    const profile = this.profileRepo.create({
+      userId: data.userId,
+      verificationStatus: RiderVerificationStatus.PENDING,
+      vehicleType: 'bicycle', // Default, they can edit later
+      isAvailable: false,
+    });
+    return this.profileRepo.save(profile);
+  }
+
+  async verifyRider(riderId: number, adminUserId: number): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const profile = await manager.getRepository(RiderProfile).findOneOrFail({
+        where: { id: riderId },
+        relations: ['user'],
+      });
+
+      profile.verificationStatus = RiderVerificationStatus.VERIFIED;
+      profile.verificationReviewedBy = adminUserId;
+      profile.verificationReviewedAt = new Date();
+      await manager.getRepository(RiderProfile).save(profile);
+
+      if (profile.user) {
+        profile.user.isActive = true;
+        profile.user.accountHoldReason = null;
+        await manager.getRepository(User).save(profile.user);
+      }
+    });
+  }
 
   async assignOrderToRider(
     orderId: number,
@@ -390,6 +428,7 @@ export class RidersService {
       user_id: p.userId,
       full_name: p.user?.fullName ?? null,
       email: p.user?.email ?? null,
+      phone_number: p.user?.phoneNumber ?? null,
       vehicle_type: p.vehicleType,
       plate_number: p.plateNumber ?? null,
       license_number: p.licenseNumber ?? null,
@@ -426,6 +465,56 @@ export class RidersService {
     const profile = await this.getProfile(userId);
     Object.assign(profile, dto);
     return this.profileRepo.save(profile);
+  }
+
+  async updateRiderAdmin(riderId: number, dto: UpdateAdminRiderDto) {
+    const profile = await this.profileRepo.findOne({
+      where: { id: riderId },
+      relations: ['user'],
+    });
+    if (!profile) throw new NotFoundException('Rider profile not found');
+
+    if (dto.vehicleType !== undefined) profile.vehicleType = dto.vehicleType;
+    if (dto.plateNumber !== undefined) profile.plateNumber = dto.plateNumber;
+    if (dto.licenseNumber !== undefined)
+      profile.licenseNumber = dto.licenseNumber;
+
+    if (profile.user) {
+      if (dto.fullName !== undefined) profile.user.fullName = dto.fullName;
+      if (dto.phoneNumber !== undefined)
+        profile.user.phoneNumber = dto.phoneNumber;
+      if (dto.email !== undefined) profile.user.email = dto.email;
+      await this.dataSource.getRepository(User).save(profile.user);
+    }
+
+    await this.profileRepo.save(profile);
+
+    // Return updated response matching `getAllRidersWithUser`
+    const p = profile;
+    return {
+      id: p.id,
+      user_id: p.userId,
+      full_name: p.user?.fullName ?? null,
+      email: p.user?.email ?? null,
+      phone_number: p.user?.phoneNumber ?? null,
+      vehicle_type: p.vehicleType,
+      plate_number: p.plateNumber ?? null,
+      license_number: p.licenseNumber ?? null,
+      is_available: p.isAvailable,
+      verification_status:
+        p.verificationStatus ?? RiderVerificationStatus.PENDING,
+      assignment_eligible:
+        p.isAvailable &&
+        p.user?.isActive === true &&
+        p.user.role === UserRole.RIDER &&
+        (p.verificationStatus ?? RiderVerificationStatus.PENDING) ===
+          RiderVerificationStatus.VERIFIED,
+      last_latitude: p.lastLatitude ? Number(p.lastLatitude) : null,
+      last_longitude: p.lastLongitude ? Number(p.lastLongitude) : null,
+      last_location_update: p.lastLocationUpdate ?? null,
+      created_at: p.createdAt,
+      updated_at: p.updatedAt,
+    };
   }
 
   async setAvailability(
@@ -494,7 +583,7 @@ export class RidersService {
     const profile = await this.getProfile(userId);
     const assignments = await this.assignmentRepo.find({
       where: { riderId: profile.id },
-      relations: ['order'],
+      relations: ['order', 'order.destination', 'order.user'],
       order: { createdAt: 'DESC' },
     });
     return assignments.map((assignment) =>
@@ -759,11 +848,15 @@ export class RidersService {
           'pickup',
         );
         // Pickup requires photo; signature is optional extra on the photo path.
-        pickupProofMetadata = await this.validateProofOfDelivery(proof, userId, {
-          manager,
-          requirePhoto: true,
-          allowOptionalSignatureWithPhoto: true,
-        });
+        pickupProofMetadata = await this.validateProofOfDelivery(
+          proof,
+          userId,
+          {
+            manager,
+            requirePhoto: true,
+            allowOptionalSignatureWithPhoto: true,
+          },
+        );
       }
 
       if (newStatus === DeliveryStatus.DELIVERED) {
@@ -820,8 +913,7 @@ export class RidersService {
           assignment.pickedUpAt = now;
           assignment.pickupOtpVerifiedAt = now;
           assignment.pickupProofFileId = pickupProofMetadata!.proofFileId;
-          assignment.pickupProofObjectKey =
-            pickupProofMetadata!.proofObjectKey;
+          assignment.pickupProofObjectKey = pickupProofMetadata!.proofObjectKey;
           assignment.pickupProofSignatureData =
             pickupProofMetadata!.proofSignatureData;
           assignment.pickupProofCapturedAt = now;
@@ -921,7 +1013,7 @@ export class RidersService {
               ? `Failed delivery (return path): ${declineReason?.trim() || 'No reason provided'}. Redelivery requires new fee approval (ops).`
               : `Rider updated delivery to ${newStatus}`,
           newStatus === DeliveryStatus.DECLINED ||
-          newStatus === DeliveryStatus.FAILED
+            newStatus === DeliveryStatus.FAILED
             ? { assignedRiderId: null }
             : {},
         );

@@ -64,6 +64,7 @@ import 'package:printing_app/features/customer/chat/screens/conversation_screen.
 // ---------------------------------------------------------------------------
 // Rider screens
 // ---------------------------------------------------------------------------
+import 'package:printing_app/features/rider/chat/screens/rider_chat_list_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/deliveries_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/delivery_detail_screen.dart';
 import 'package:printing_app/features/rider/active_delivery/screens/active_delivery_screen.dart';
@@ -805,6 +806,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       // Rider stack routes
       // -----------------------------------------------------------------------
+      GoRoute(
+        path: '/rider/chat',
+        pageBuilder: (_, state) =>
+            slideTransition(const RiderChatListScreen(), state),
+      ),
       GoRoute(
         path: '/rider/deliveries/:id',
         pageBuilder: (_, state) => slideTransition(

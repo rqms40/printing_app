@@ -126,8 +126,7 @@ export class SuppliersController {
     @Query('metric') metric?: string,
     @Query('limit') limitRaw?: string,
   ) {
-    const by =
-      metric === 'orders' || metric === 'reviews' ? metric : 'reviews';
+    const by = metric === 'orders' || metric === 'reviews' ? metric : 'reviews';
     const limit = Math.min(
       100,
       Math.max(1, Number.parseInt(limitRaw ?? '20', 10) || 20),

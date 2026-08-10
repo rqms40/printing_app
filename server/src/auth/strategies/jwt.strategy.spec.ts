@@ -34,7 +34,11 @@ describe('JwtStrategy account status enforcement', () => {
 
     await expect(
       strategy.validate({ sub: 1, email: 'a@test.com', role: 'client' }),
-    ).resolves.toEqual({ sub: 1, email: 'current@test.com', role: 'ops_admin' });
+    ).resolves.toEqual({
+      sub: 1,
+      email: 'current@test.com',
+      role: 'ops_admin',
+    });
   });
 
   it('rejects inactive users with existing tokens', async () => {

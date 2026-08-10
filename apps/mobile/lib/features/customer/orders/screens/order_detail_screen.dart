@@ -186,6 +186,48 @@ class OrderDetailScreen extends ConsumerWidget {
                           color: colors.onSurfaceDim,
                         ),
                       ),
+                      if (order.deliveryOtp != null &&
+                          order.deliveryOtp!.trim().isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: colors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: colors.primary.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'DELIVERY OTP',
+                                style: AppTypography.overline.copyWith(
+                                  color: colors.primary,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                order.deliveryOtp!.trim(),
+                                style: AppTypography.h2.copyWith(
+                                  color: colors.onBackground,
+                                  letterSpacing: 4,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                'Show this code to the rider when your order arrives.',
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       if (order.assignedSupplier != null &&
                           order.assignedSupplier!.businessName
                               .trim()

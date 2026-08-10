@@ -123,10 +123,7 @@ export class CreditsService {
     this.assertIdempotencyKey(idempotencyKey);
 
     const run = async (manager: EntityManager) => {
-      const existing = await this.findByIdempotencyKey(
-        manager,
-        idempotencyKey,
-      );
+      const existing = await this.findByIdempotencyKey(manager, idempotencyKey);
       if (existing) {
         return this.idempotentReplay(
           existing,
@@ -174,10 +171,7 @@ export class CreditsService {
     this.assertIdempotencyKey(idempotencyKey);
 
     const run = async (manager: EntityManager) => {
-      const existing = await this.findByIdempotencyKey(
-        manager,
-        idempotencyKey,
-      );
+      const existing = await this.findByIdempotencyKey(manager, idempotencyKey);
       if (existing) {
         return this.idempotentReplay(
           existing,
@@ -256,10 +250,7 @@ export class CreditsService {
     }
 
     const run = async (manager: EntityManager) => {
-      const existing = await this.findByIdempotencyKey(
-        manager,
-        idempotencyKey,
-      );
+      const existing = await this.findByIdempotencyKey(manager, idempotencyKey);
       if (existing) {
         return this.idempotentReplay(
           existing,
@@ -498,9 +489,7 @@ export class CreditsService {
       existing.status !== CreditTransactionStatus.APPROVED ||
       Number(existing.amountCredits) !== amount
     ) {
-      throw new BadRequestException(
-        'Credit ledger idempotency key mismatch',
-      );
+      throw new BadRequestException('Credit ledger idempotency key mismatch');
     }
     const user = await manager.getRepository(User).findOne({
       where: { id: userId },

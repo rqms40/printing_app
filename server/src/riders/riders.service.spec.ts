@@ -6,10 +6,7 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import {
-  hashDeliveryOtp,
-  RidersService,
-} from './riders.service';
+import { hashDeliveryOtp, RidersService } from './riders.service';
 import { RiderProfile } from './entities/rider-profile.entity';
 import {
   DeliveryAssignment,
@@ -2378,7 +2375,6 @@ describe('RidersService', () => {
   });
 
   describe('getActiveAssignments', () => {
-
     it('orders active assignments by the persisted dispatch plan', async () => {
       profileRepo.findOne.mockResolvedValue({
         ...mockProfile,

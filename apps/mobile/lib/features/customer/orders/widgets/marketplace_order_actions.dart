@@ -212,8 +212,137 @@ class _MarketplaceOrderActionsState
           _concernCategory = null;
           _concernNotesController.clear();
         });
+        if (Navigator.canPop(context)) Navigator.pop(context);
       }
     }, 'Concern submitted — GRIDGO ops will review it');
+  }
+
+  void _showConcernModal() {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: AppSpacing.md,
+                right: AppSpacing.md,
+                top: AppSpacing.md,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.md,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Check your order',
+                        style: AppTypography.h3.copyWith(color: colors.onSurface),
+                      ),
+                      IconButton(
+                        icon: HugeIcon(
+                          icon: HugeIcons.strokeRoundedCancel01,
+                          size: 24,
+                          color: colors.onSurface,
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: BoxDecoration(
+                      color: colors.info.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      border: Border.all(
+                        color: colors.info.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        HugeIcon(
+                          icon: HugeIcons.strokeRoundedInformationCircle,
+                          size: 18,
+                          color: colors.info,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'You have 24 hours after collection or delivery to report '
+                            'a material print or delivery concern. Timely reports are '
+                            'reviewed by admin in Claims.',
+                            style: AppTypography.caption.copyWith(
+                              color: colors.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'What went wrong?',
+                    style: AppTypography.bodyBold.copyWith(color: colors.onSurface),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: [
+                      for (final cat in reportConcernCategories)
+                        FilterChip(
+                          selected: _concernCategory == cat.value,
+                          label: Text(cat.label),
+                          onSelected: (_) {
+                            setModalState(() => _concernCategory = cat.value);
+                          },
+                          selectedColor: colors.brand.withValues(alpha: 0.22),
+                          checkmarkColor: colors.brand,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: _concernNotesController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: 'Describe the issue (optional)',
+                      hintText: 'What should ops know? Photos can be added later by support.',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  AppButton(
+                    label: 'Report a Concern',
+                    isFullWidth: true,
+                    icon: HugeIcons.strokeRoundedAlert02,
+                    isLoading: _busy,
+                    onTap: () async {
+                      await _submitConcern();
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -298,75 +427,7 @@ class _MarketplaceOrderActionsState
             body,
             style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
           ),
-          if (showReportConcern) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: colors.info.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(
-                  color: colors.info.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  HugeIcon(
-                    icon: HugeIcons.strokeRoundedInformationCircle,
-                    size: 18,
-                    color: colors.info,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'You have 24 hours after collection or delivery to report '
-                      'a material print or delivery concern. Timely reports are '
-                      'reviewed by admin in Claims.',
-                      style: AppTypography.caption.copyWith(
-                        color: colors.onSurface,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'What went wrong?',
-              style: AppTypography.bodyBold.copyWith(color: colors.onSurface),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                for (final cat in reportConcernCategories)
-                  FilterChip(
-                    selected: _concernCategory == cat.value,
-                    label: Text(cat.label),
-                    onSelected: (_) {
-                      setState(() => _concernCategory = cat.value);
-                    },
-                    selectedColor: colors.brand.withValues(alpha: 0.22),
-                    checkmarkColor: colors.brand,
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: _concernNotesController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'Describe the issue (optional)',
-                hintText: 'What should ops know? Photos can be added later by support.',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-              ),
-            ),
-          ],
+          // Check your order logic moved to bottom sheet (Return/Refund)
           if (showPayWait) ...[
             const SizedBox(height: AppSpacing.sm),
             Container(
@@ -501,14 +562,25 @@ class _MarketplaceOrderActionsState
               isFullWidth: true,
               onTap: _promptRejectProof,
             ),
-          ] else if (showReportConcern)
+          ] else if (showReportConcern) ...[
             AppButton(
-              label: 'Report a Concern',
+              label: 'Order received',
+              isFullWidth: true,
+              icon: HugeIcons.strokeRoundedCheckmarkBadge01,
+              onTap: () => _run(
+                () => ref.read(ordersProvider.notifier).confirmReceipt(order.id),
+                'Order successfully completed',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            AppButton(
+              label: 'Return / Refund',
+              variant: AppButtonVariant.ghost,
               isFullWidth: true,
               icon: HugeIcons.strokeRoundedAlert02,
-              onTap: _submitConcern,
+              onTap: _showConcernModal,
             ),
-          // Payment authorization is ops/super only — no client action button.
+          ]
         ],
       ),
     );

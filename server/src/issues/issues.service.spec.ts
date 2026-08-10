@@ -1,9 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { IssuesService } from './issues.service';
-import {
-  IssuePayoutImpact,
-  IssueStatus,
-} from './entities/issue.entity';
+import { IssuePayoutImpact, IssueStatus } from './entities/issue.entity';
 import { OrderStatus } from '../orders/entities/order.entity';
 
 describe('IssuesService', () => {

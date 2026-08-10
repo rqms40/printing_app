@@ -68,7 +68,7 @@ const MILESTONES: Array<{
   {
     value: 'production_complete',
     label: 'Production complete',
-    description: 'Print finished — ready for self-QC evidence.',
+    description: 'Print finished — ready for proof of fulfillment.',
   },
 ];
 
@@ -147,7 +147,7 @@ export function SupplierJobShowPage() {
     useState<ProductionMilestone>('materials_setup');
   const [prodNotes, setProdNotes] = useState('');
 
-  // Self-QC
+  // Proof of Fulfillment
   const [selfQcNotes, setSelfQcNotes] = useState('');
   const [evidenceFile, setEvidenceFile] = useState<UploadFile | null>(null);
 
@@ -207,7 +207,7 @@ export function SupplierJobShowPage() {
       { key: 'supplier_accepted', label: 'Accepted' },
       { key: 'payment_authorized', label: 'Payment authorized' },
       { key: 'production', label: 'Production' },
-      { key: 'supplier_self_qc', label: 'Self-QC' },
+      { key: 'supplier_self_qc', label: 'Proof of Fulfillment' },
       { key: 'ready_for_dispatch', label: 'Ready for pickup' },
     ];
     const order = [
@@ -348,13 +348,13 @@ export function SupplierJobShowPage() {
   const handleSelfQc = () => {
     const file = evidenceFile?.originFileObj as File | undefined;
     if (!file) {
-      message.warning('Attach self-QC evidence (photo or PDF)');
+      message.warning('Attach proof of fulfillment (photo or PDF)');
       return;
     }
     modal.confirm({
-      title: 'Submit self-QC?',
-      content: 'Evidence will be recorded and the job moves to supplier self-QC.',
-      okText: 'Submit self-QC',
+      title: 'Submit proof of fulfillment?',
+      content: 'Evidence will be recorded and the job moves to supplier proof of fulfillment.',
+      okText: 'Submit proof',
       onOk: async () => {
         setSubmitting(true);
         try {
@@ -364,7 +364,7 @@ export function SupplierJobShowPage() {
             file,
           );
           message.success(
-            `Self-QC submitted → ${statusLabel(result.toStatus as OrderStatus)}`,
+            `Proof of fulfillment submitted → ${statusLabel(result.toStatus as OrderStatus)}`,
           );
           setEvidenceFile(null);
           setSelfQcNotes('');
@@ -751,7 +751,7 @@ export function SupplierJobShowPage() {
           )}
 
           {canSelfQc && (
-            <Card title="Self-QC evidence" size="small" style={{ marginBottom: 16 }}>
+            <Card title="Proof of Fulfillment" size="small" style={{ marginBottom: 16 }}>
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                 <Upload.Dragger
                   maxCount={1}
@@ -778,7 +778,7 @@ export function SupplierJobShowPage() {
                   rows={2}
                   value={selfQcNotes}
                   onChange={(e) => setSelfQcNotes(e.target.value)}
-                  placeholder="Optional self-QC notes"
+                  placeholder="Optional notes"
                   maxLength={2000}
                 />
                 <Button
@@ -787,7 +787,7 @@ export function SupplierJobShowPage() {
                   loading={submitting}
                   onClick={handleSelfQc}
                 >
-                  Submit self-QC
+                  Submit proof of fulfillment
                 </Button>
               </Space>
             </Card>
@@ -798,8 +798,8 @@ export function SupplierJobShowPage() {
               <Alert
                 type="success"
                 showIcon
-                message="Self-QC complete"
-                description="Mark the job ready so ops can assign a rider for pickup."
+                message="Proof of fulfillment complete"
+                description="This job is waiting for pickup handoff."
                 style={{ marginBottom: 12 }}
               />
               <Button

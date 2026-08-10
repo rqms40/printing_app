@@ -71,9 +71,7 @@ const REASON_MESSAGES: Record<CodIneligibilityReason, string> = {
 };
 
 /** Normalize payment method labels to detect COD rails. */
-export function isCodPaymentMethod(
-  paymentMethod?: string | null,
-): boolean {
+export function isCodPaymentMethod(paymentMethod?: string | null): boolean {
   if (!paymentMethod) return false;
   const normalized = paymentMethod.replace(/[_-]/g, '').toLowerCase();
   return (
@@ -130,9 +128,7 @@ export function evaluateCodEligibility(
   }
 
   const eligible = reasons.length === 0;
-  const message = eligible
-    ? 'COD eligible'
-    : REASON_MESSAGES[reasons[0]];
+  const message = eligible ? 'COD eligible' : REASON_MESSAGES[reasons[0]];
 
   return {
     eligible,

@@ -8,25 +8,16 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThanOrEqual, Repository } from 'typeorm';
-import {
-  Issue,
-  IssuePayoutImpact,
-  IssueStatus,
-} from './entities/issue.entity';
+import { Issue, IssuePayoutImpact, IssueStatus } from './entities/issue.entity';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OpenIssueDto } from './dto/open-issue.dto';
-import {
-  IssueResolvePath,
-  ResolveIssueDto,
-} from './dto/resolve-issue.dto';
+import { IssueResolvePath, ResolveIssueDto } from './dto/resolve-issue.dto';
 import { UserRole } from '../users/entities/user.entity';
-import {
-  assertOrderStatusTransition,
-} from '../orders/order-status-transition';
+import { assertOrderStatusTransition } from '../orders/order-status-transition';
 
 const OPEN_STATUSES = [IssueStatus.OPEN, IssueStatus.UNDER_REVIEW];
 
@@ -62,11 +53,13 @@ export class IssuesService {
     @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
-  async list(params: {
-    status?: IssueStatus;
-    orderId?: number;
-    limit?: number;
-  } = {}): Promise<Issue[]> {
+  async list(
+    params: {
+      status?: IssueStatus;
+      orderId?: number;
+      limit?: number;
+    } = {},
+  ): Promise<Issue[]> {
     const where: Record<string, unknown> = {};
     if (params.status) where.status = params.status;
     if (params.orderId != null) where.orderId = params.orderId;
@@ -300,7 +293,11 @@ export class IssuesService {
     });
 
     await this.notifyCustomerOfClaimResolution(
-      { ...saved, order: issue.order, category: issue.category ?? saved.category },
+      {
+        ...saved,
+        order: issue.order,
+        category: issue.category ?? saved.category,
+      },
       dto.path,
     );
 
@@ -392,10 +389,7 @@ export class IssuesService {
             where: { id: order.id },
             lock: { mode: 'pessimistic_write' },
           });
-          if (
-            !locked ||
-            locked.orderStatus !== OrderStatus.ISSUE_WINDOW_OPEN
-          ) {
+          if (!locked || locked.orderStatus !== OrderStatus.ISSUE_WINDOW_OPEN) {
             return;
           }
           assertOrderStatusTransition(

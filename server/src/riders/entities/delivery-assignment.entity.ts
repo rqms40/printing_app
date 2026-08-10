@@ -110,14 +110,24 @@ export class DeliveryAssignment {
   proofCapturedByRiderId: number | null;
 
   /** SHA-256 hex of pickup OTP. Never return to clients. */
-  @Column({ name: 'pickup_otp_hash', type: 'varchar', length: 64, nullable: true })
+  @Column({
+    name: 'pickup_otp_hash',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
   pickupOtpHash: string | null;
 
   /**
    * Plain pickup OTP for supplier/ops reveal only.
    * Stripped from rider API responses.
    */
-  @Column({ name: 'pickup_otp_code', type: 'varchar', length: 8, nullable: true })
+  @Column({
+    name: 'pickup_otp_code',
+    type: 'varchar',
+    length: 8,
+    nullable: true,
+  })
   pickupOtpCode: string | null;
 
   @Column({ name: 'pickup_otp_verified_at', type: 'timestamp', nullable: true })
@@ -160,7 +170,11 @@ export class DeliveryAssignment {
   @Column({ name: 'pickup_proof_signature_data', type: 'text', nullable: true })
   pickupProofSignatureData: string | null;
 
-  @Column({ name: 'pickup_proof_captured_at', type: 'timestamp', nullable: true })
+  @Column({
+    name: 'pickup_proof_captured_at',
+    type: 'timestamp',
+    nullable: true,
+  })
   pickupProofCapturedAt: Date | null;
 
   @Column({ name: 'decline_reason', nullable: true, type: 'text' })

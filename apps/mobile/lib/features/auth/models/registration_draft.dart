@@ -34,6 +34,7 @@ class RegistrationDraft {
   bool get hasCategory => profileCategory != null;
   bool get hasField => profileField != null;
   bool get isSupplierLane => profileCategory == 'supplier';
+  bool get isRiderLane => profileCategory == 'rider';
   bool get hasServiceFocus => serviceFocusRanks.isNotEmpty;
   bool get hasGender => gender != null && gender!.trim().isNotEmpty;
   bool get hasAgeRange => ageRange != null && ageRange!.trim().isNotEmpty;

@@ -3,6 +3,8 @@ export enum ProfileCategory {
   PROFESSIONAL = 'professional',
   /** Sign-up lane for print-shop owners (maps to auth role supplier). */
   SUPPLIER = 'supplier',
+  /** Sign-up lane for future riders (maps to auth role rider, requires verification). */
+  RIDER = 'rider',
 }
 
 /**
@@ -59,6 +61,9 @@ export function isProfileComplete({
   // Supplier lane uses service-focus ranks; print_shop is the synthetic field.
   if (profileCategory === ProfileCategory.SUPPLIER) {
     return profileField === ProfileField.PRINT_SHOP || Boolean(profileField);
+  }
+  if (profileCategory === ProfileCategory.RIDER) {
+    return true; // Riders don't need a profile field
   }
   return Boolean(profileField);
 }

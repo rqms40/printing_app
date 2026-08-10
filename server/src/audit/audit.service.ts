@@ -51,12 +51,13 @@ export class AuditService {
     input: AppendAuditEventInput,
     manager?: EntityManager,
   ): Promise<AuditEvent> {
-    const repo = manager
-      ? manager.getRepository(AuditEvent)
-      : this.auditRepo;
+    const repo = manager ? manager.getRepository(AuditEvent) : this.auditRepo;
 
+    // actor_id FKs to users — never persist 0 / invalid sentinel ids.
+    const actorId =
+      input.actorId != null && input.actorId > 0 ? input.actorId : null;
     const row = repo.create({
-      actorId: input.actorId ?? null,
+      actorId,
       actorRole: input.actorRole ?? null,
       action: input.action,
       entityType: input.entityType,

@@ -90,9 +90,7 @@ export function resolveMockupProductType(
 }
 
 export function getMockupTemplate(productType: string): MockupTemplateDef {
-  return (
-    MOCKUP_TEMPLATE_CATALOG[productType] ?? MOCKUP_TEMPLATE_CATALOG.other
-  );
+  return MOCKUP_TEMPLATE_CATALOG[productType] ?? MOCKUP_TEMPLATE_CATALOG.other;
 }
 
 /** Inline SVG composite — labeled non-production for client/webview display. */

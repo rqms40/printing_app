@@ -193,6 +193,16 @@ export class OrdersController {
     return { ok: true };
   }
 
+  @Patch(':id/confirm-receipt')
+  @UseGuards(RolesGuard)
+  @Roles('client', 'ops_admin', 'super_admin')
+  async confirmReceipt(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.ordersService.confirmReceipt(id, req.user.sub);
+  }
+
   @Patch(':id/status')
   @Roles('ops_admin', 'super_admin')
   @UseGuards(RolesGuard)

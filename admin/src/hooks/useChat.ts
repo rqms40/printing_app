@@ -103,11 +103,20 @@ export function useChatInbox() {
 
   const clearUnread = useCallback(() => setUnreadCount(0), []);
 
+  const startDirectConversation = useCallback(async (userId: number) => {
+    const res = await apiClient.post<Conversation>(
+      `/chat/admin/conversations/direct/${userId}`,
+    );
+    // Let the websocket or the next fetch update the list, just return the conversation.
+    return res.data;
+  }, []);
+
   return {
     conversations,
     unreadCount,
     assignConversation,
     closeConversation,
+    startDirectConversation,
     clearUnread,
   };
 }

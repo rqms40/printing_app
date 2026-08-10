@@ -564,6 +564,9 @@ Order _parseOrder(Map<String, dynamic> json) {
     deliveryLegDurationSeconds: legDuration,
     deliveryLegDistanceMeters: legDistance,
     deliveryRoutingDataStale: rawRoutingStale is bool ? rawRoutingStale : null,
+    deliveryOtp: _normalizeOptionalText(
+      _readJsonValue(json, 'deliveryOtp', 'delivery_otp'),
+    ),
     assignedRider: _parseAssignedRider(json),
     assignedSupplier: _parseAssignedSupplier(json),
     estimatedCompletionAt: _parseDateNullable(
@@ -1304,6 +1307,12 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       },
     );
+    await _fetchOrders();
+  }
+
+  /// Client: confirms receipt of order, moving it from issue_window_open to completed.
+  Future<void> confirmReceipt(String orderId) async {
+    await ApiClient.instance.patch('/orders/$orderId/confirm-receipt');
     await _fetchOrders();
   }
 }

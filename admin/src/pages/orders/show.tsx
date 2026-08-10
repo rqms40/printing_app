@@ -65,11 +65,26 @@ const DESTINATION_PIN_ICON = new DivIcon({
   iconAnchor: [12, 12],
 });
 
+function toCoordinate(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function hasCoordinates(destination?: OrderDestination | null) {
   return (
-    Number.isFinite(destination?.latitude) &&
-    Number.isFinite(destination?.longitude)
+    toCoordinate(destination?.latitude) != null &&
+    toCoordinate(destination?.longitude) != null
   );
+}
+
+function withPinnedCoordinates(
+  destination: OrderDestination,
+): OrderDestination | null {
+  const latitude = toCoordinate(destination.latitude);
+  const longitude = toCoordinate(destination.longitude);
+  if (latitude == null || longitude == null) return null;
+  return { ...destination, latitude, longitude };
 }
 
 function destinationTitle(destination: OrderDestination, index: number) {
@@ -85,20 +100,24 @@ function destinationAddress(destination: OrderDestination) {
   return destination.full_address || destination.address || "Pinned location";
 }
 
+/** Canonical delivery pins shared by Delivery Info and Pinned Delivery Map. */
 function getMappableDestinations(order: Order): OrderDestination[] {
   const seen = new Set<string>();
   const result: OrderDestination[] = [];
   const add = (destination?: OrderDestination | null) => {
-    if (!destination || !hasCoordinates(destination)) return;
+    if (!destination) return;
+    const pinned = withPinnedCoordinates(destination);
+    if (!pinned) return;
     const key =
-      destination.id != null
-        ? `id:${destination.id}`
-        : `${destination.latitude}:${destination.longitude}:${destinationAddress(destination)}`;
+      pinned.id != null
+        ? `id:${pinned.id}`
+        : `${pinned.latitude}:${pinned.longitude}:${destinationAddress(pinned)}`;
     if (seen.has(key)) return;
     seen.add(key);
-    result.push(destination);
+    result.push(pinned);
   };
 
+  // Prefer server-built destinations[], then order-level, then item drops.
   order.destinations?.forEach(add);
   add(order.delivery_address);
   order.items?.forEach((item) => add(item.delivery_address));
@@ -106,9 +125,20 @@ function getMappableDestinations(order: Order): OrderDestination[] {
   return result.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 }
 
+function destinationMapKey(destinations: OrderDestination[]): string {
+  return destinations
+    .map(
+      (d) =>
+        `${d.id ?? "x"}:${d.latitude}:${d.longitude}:${destinationAddress(d)}`,
+    )
+    .join("|");
+}
+
 function DestinationMapViewport({
+  positionsKey,
   positions,
 }: {
+  positionsKey: string;
   positions: LatLngExpression[];
 }) {
   const map = useMap();
@@ -120,7 +150,7 @@ function DestinationMapViewport({
       return;
     }
     map.fitBounds(new LatLngBounds(positions), { padding: [32, 32] });
-  }, [map, positions]);
+  }, [map, positions, positionsKey]);
 
   return null;
 }
@@ -137,11 +167,13 @@ function OrderDestinationMap({
         number,
       ],
   );
-  const center = positions[0] ?? ([7.0713113, 125.6123279] as [number, number]);
+  const center = positions[0] ?? ([7.064, 125.6079] as [number, number]);
+  const mapKey = destinationMapKey(destinations);
 
   return (
     <div style={{ height: 320, borderRadius: 8, overflow: "hidden" }}>
       <MapContainer
+        key={mapKey}
         center={center}
         zoom={15}
         style={{ height: "100%", width: "100%", zIndex: 1 }}
@@ -150,7 +182,7 @@ function OrderDestinationMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
         />
-        <DestinationMapViewport positions={positions} />
+        <DestinationMapViewport positionsKey={mapKey} positions={positions} />
         {destinations.map((destination, index) => (
           <Marker
             key={
@@ -525,6 +557,25 @@ export function OrderShow() {
     }
   };
 
+  const openSelfQcEvidence = async (fileId: number, index: number) => {
+    setPreviewingFileId(`selfqc:${fileId}`);
+    try {
+      const response = await apiClient.get<{ url: string }>(
+        `/files/${fileId}/presigned-url`,
+      );
+      setPreviewFile({
+        url: response.data.url,
+        name: `self-qc-evidence-${order.order_id}-${index + 1}.jpg`,
+        mimeType: "image/jpeg",
+        inspection: null,
+      });
+    } catch {
+      void message.error("Unable to open proof of fulfillment photo.");
+    } finally {
+      setPreviewingFileId(null);
+    }
+  };
+
   return (
     <ShowPage
       title={`Order ${order.order_id}`}
@@ -554,6 +605,16 @@ export function OrderShow() {
                 {assignedRiderName && (
                   <Tag color="green">Assigned rider: {assignedRiderName}</Tag>
                 )}
+                {order.assigned_rider_contact?.pickup_otp ? (
+                  <Tag color="volcano">
+                    Pickup OTP: {order.assigned_rider_contact.pickup_otp}
+                  </Tag>
+                ) : null}
+                {order.assigned_rider_contact?.delivery_otp ? (
+                  <Tag color="orange">
+                    Delivery OTP: {order.assigned_rider_contact.delivery_otp}
+                  </Tag>
+                ) : null}
               </Space>
             </Col>
             <Col>
@@ -862,6 +923,22 @@ export function OrderShow() {
             </Text>
           )}
         </Card>
+
+        {order.assigned_supplier_contact?.self_qc_evidence_file_ids && order.assigned_supplier_contact.self_qc_evidence_file_ids.length > 0 && (
+          <Card title="Proof of Fulfillment">
+            <Space size="middle" wrap>
+              {order.assigned_supplier_contact.self_qc_evidence_file_ids.map((fileId, idx) => (
+                <Button
+                  key={fileId}
+                  onClick={() => void openSelfQcEvidence(fileId, idx)}
+                  loading={previewingFileId === `selfqc:${fileId}`}
+                >
+                  View evidence photo {idx + 1}
+                </Button>
+              ))}
+            </Space>
+          </Card>
+        )}
 
         {/* Admin Notes */}
         <Card title="Admin Notes">

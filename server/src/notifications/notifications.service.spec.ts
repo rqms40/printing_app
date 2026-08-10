@@ -26,7 +26,11 @@ describe('NotificationsService', () => {
     createdAt: new Date(),
   } as Notification;
 
-  const mockAdmin = { id: 10, email: 'admin@gridgo.ph', role: 'ops_admin' } as User;
+  const mockAdmin = {
+    id: 10,
+    email: 'admin@gridgo.ph',
+    role: 'ops_admin',
+  } as User;
 
   beforeEach(async () => {
     repo = {

@@ -267,14 +267,14 @@ export class DispatchPlanService {
       lock: { mode: 'pessimistic_write' },
     });
     if (!plan) {
-      throw new BadRequestException('Dispatch plan is required');
+      return; // Gracefully allow if no dispatch plan exists (e.g. manual assignment)
     }
     const target = await manager.getRepository(DispatchPlanStop).findOne({
       where: { planId: plan.id, assignmentId },
       lock: { mode: 'pessimistic_write' },
     });
     if (!target) {
-      throw new BadRequestException('Assignment is not in the dispatch plan');
+      return; // Gracefully allow if assignment is not in the plan
     }
     if (target.status !== DispatchStopStatus.PENDING) {
       throw new BadRequestException('Dispatch stop is already closed');
@@ -314,16 +314,20 @@ export class DispatchPlanService {
           where: { planId: latest.id, assignmentId },
           lock: { mode: 'pessimistic_write' },
         });
+        // Idempotent retry after the plan already closed this stop.
         if (closedStop?.status === outcome) return;
       }
-      throw new BadRequestException('Dispatch plan is required');
+      // Manual / unplanned assignments may complete without a dispatch plan
+      // (assertCurrentStop already allows this path).
+      return;
     }
     const stop = await stopRepo.findOne({
       where: { planId: plan.id, assignmentId },
       lock: { mode: 'pessimistic_write' },
     });
     if (!stop) {
-      throw new BadRequestException('Assignment is not in the dispatch plan');
+      // Assignment was never planned — allow completion like assertCurrentStop.
+      return;
     }
     if (stop.status === outcome) return;
     if (stop.status !== DispatchStopStatus.PENDING) {

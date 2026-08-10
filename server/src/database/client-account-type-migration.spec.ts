@@ -2,11 +2,13 @@ import type { QueryRunner } from 'typeorm';
 import { ClientAccountType1784333100000 } from '../../migrations/1784333100000-client-account-type';
 
 describe('ClientAccountType1784333100000', () => {
-  function createQueryRunner(opts: {
-    hasTable?: boolean;
-    hasColumn?: boolean;
-    ownership?: string;
-  } = {}) {
+  function createQueryRunner(
+    opts: {
+      hasTable?: boolean;
+      hasColumn?: boolean;
+      ownership?: string;
+    } = {},
+  ) {
     const { hasTable = true, hasColumn = false, ownership = 'baseline' } = opts;
     const queries: string[] = [];
     const queryRunner = {

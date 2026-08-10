@@ -608,7 +608,7 @@ describe('DispatchPlanService', () => {
     expect(stopRepo.save!.mock.calls).toHaveLength(0);
   });
 
-  it('fails closed when delivery advancement has no active plan', async () => {
+  it('allows delivery advancement when the assignment was never planned', async () => {
     planRepo.findOne!.mockResolvedValue(null);
     await expect(
       service.advanceStop(
@@ -617,7 +617,7 @@ describe('DispatchPlanService', () => {
         ven.id,
         DispatchStopStatus.COMPLETED,
       ),
-    ).rejects.toThrow('Dispatch plan is required');
+    ).resolves.toBeUndefined();
   });
 
   it('treats retrying the final persisted advancement as idempotent', async () => {

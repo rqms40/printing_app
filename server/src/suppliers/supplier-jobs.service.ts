@@ -33,11 +33,10 @@ import {
   SupplierAssignment,
   SupplierAssignmentDecision,
 } from '../matching/entities/supplier-assignment.entity';
+import { DeliveryAssignment } from '../riders/entities/delivery-assignment.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SupplierProfile } from './entities/supplier-profile.entity';
-import {
-  SupplierVerificationStatus,
-} from './entities/supplier-verification.entity';
+import { SupplierVerificationStatus } from './entities/supplier-verification.entity';
 import { AcceptSupplierJobDto } from './dto/accept-supplier-job.dto';
 import { DeclineSupplierJobDto } from './dto/decline-supplier-job.dto';
 import {
@@ -180,6 +179,9 @@ export type SupplierJobDetail = {
       specs: SupplierJobSpecValue[];
     }>;
   };
+  /** Pickup OTP for rider handoff at the shop (null until a rider is assigned). */
+  pickupOtp: string | null;
+  deliveryAssignmentStatus: string | null;
   allowedActions: string[];
 };
 
@@ -227,8 +229,7 @@ function parseListFilter(raw?: string): SupplierJobListFilter {
   }
   throw new BadRequestException({
     code: 'invalid_job_filter',
-    message:
-      "filter must be one of: assigned, accepted, in_production, all",
+    message: 'filter must be one of: assigned, accepted, in_production, all',
   });
 }
 
@@ -353,6 +354,28 @@ export class SupplierJobsService {
       );
     }
 
+    // Supplier must show the pickup OTP to the rider at the shop handoff.
+    let pickupOtp: string | null = null;
+    let deliveryAssignmentStatus: string | null = null;
+    try {
+      const deliveryAssignment = await this.dataSource
+        .getRepository(DeliveryAssignment)
+        .findOne({
+          where: { orderId: order.id, isCurrent: true },
+          order: { id: 'DESC' },
+        });
+      if (
+        deliveryAssignment &&
+        !deliveryAssignment.pickupOtpVerifiedAt &&
+        deliveryAssignment.pickupOtpCode
+      ) {
+        pickupOtp = deliveryAssignment.pickupOtpCode;
+      }
+      deliveryAssignmentStatus = deliveryAssignment?.status ?? null;
+    } catch {
+      // non-fatal — older envs without delivery assignment still return job
+    }
+
     return {
       assignment: {
         id: assignment.id,
@@ -404,6 +427,9 @@ export class SupplierJobsService {
           specs: this.mapItemSpecValues(item.specValues),
         })),
       },
+      /** Ops/supplier handoff code the rider must enter at pickup. */
+      pickupOtp,
+      deliveryAssignmentStatus,
       allowedActions: this.computeAllowedActions(assignment, order),
     };
   }
@@ -1196,9 +1222,7 @@ export class SupplierJobsService {
         { orderStatus: toStatus },
       );
       if (updateResult.affected != null && updateResult.affected !== 1) {
-        throw new BadRequestException(
-          'Order changed during ready-for-pickup',
-        );
+        throw new BadRequestException('Order changed during ready-for-pickup');
       }
 
       await historyRepo.insert({
@@ -1276,7 +1300,9 @@ export class SupplierJobsService {
    * verified. pending / under_review / rejected / missing verification
    * cannot use the supplier interface.
    */
-  private async requireProfileForUser(userId: number): Promise<SupplierProfile> {
+  private async requireProfileForUser(
+    userId: number,
+  ): Promise<SupplierProfile> {
     const profile = await this.profileRepo.findOne({
       where: { userId },
       relations: { verification: true },

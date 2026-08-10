@@ -215,6 +215,8 @@ DeliveryAssignment parseAssignment(Map<String, dynamic> json) {
       json['proofPhotoUrl'] ?? json['proof_photo_url'],
     ),
     proof: _parseProof(json),
+    pickupOtp: _readString(json['pickupOtp'] ?? json['pickup_otp']),
+    deliveryOtp: _readString(json['deliveryOtp'] ?? json['delivery_otp']),
     createdAt: _parseDate(json['createdAt'] ?? json['created_at']),
     updatedAt: _parseDate(json['updatedAt'] ?? json['updated_at']),
   );

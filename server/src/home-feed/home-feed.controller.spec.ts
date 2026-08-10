@@ -26,7 +26,10 @@ describe('HomeFeedController', () => {
     'removePromoCard',
   ] as const)('restricts %s to admins', (method) => {
     const handler = handlerFor(method);
-    expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN]);
+    expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+      UserRole.OPS_ADMIN,
+      UserRole.SUPER_ADMIN,
+    ]);
     expect(Reflect.getMetadata('__guards__', handler)).toEqual([
       JwtAuthGuard,
       RolesGuard,

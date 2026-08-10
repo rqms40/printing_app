@@ -34,7 +34,12 @@ export class SupplierProfile {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ name: 'contact_phone', type: 'varchar', length: 40, nullable: true })
+  @Column({
+    name: 'contact_phone',
+    type: 'varchar',
+    length: 40,
+    nullable: true,
+  })
   contactPhone: string | null;
 
   @Column({

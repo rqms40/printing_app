@@ -107,6 +107,8 @@ describe('MarketplaceCoreEntities1784333000000', () => {
     expect(sql).toContain('DROP TABLE IF EXISTS "issues"');
     expect(sql).toContain('DROP TABLE IF EXISTS "supplier_assignments"');
     expect(sql).toContain('DROP TABLE IF EXISTS "quality_reviews"');
-    expect(sql).toContain('DROP TYPE IF EXISTS "public"."quality_reviews_decision_enum"');
+    expect(sql).toContain(
+      'DROP TYPE IF EXISTS "public"."quality_reviews_decision_enum"',
+    );
   });
 });

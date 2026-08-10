@@ -26,6 +26,6 @@ describe('UserRole marketplace values', () => {
     [null, false],
     [undefined, false],
   ])('isAdminRole(%p) → %p', (role, expected) => {
-    expect(isAdminRole(role as string | null | undefined)).toBe(expected);
+    expect(isAdminRole(role)).toBe(expected);
   });
 });

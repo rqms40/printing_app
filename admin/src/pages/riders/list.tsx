@@ -16,6 +16,9 @@ import {
   Statistic,
   App,
   Alert,
+  Modal,
+  Form,
+  Select,
 } from "antd";
 import {
   SearchOutlined,
@@ -27,6 +30,9 @@ import {
   CheckCircleOutlined,
   ExpandOutlined,
   CompressOutlined,
+  PhoneOutlined,
+  MessageOutlined,
+  EditOutlined,
 } from "@ant-design/icons";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L, { DivIcon } from "leaflet";
@@ -36,6 +42,8 @@ import { apiClient } from "@/providers/api-client";
 import { normalizeAdminRiders, normalizeOrders } from "@/utils/api-normalizers";
 import type { Order } from "@/types/order";
 import { DispatchPlanPanel } from "./dispatch-plan-panel";
+import { useNavigate } from "react-router-dom";
+import { useChatInbox } from "@/hooks/useChat";
 
 const { Text, Title } = Typography;
 const MUTED_TEXT = "#A0A0A0";
@@ -46,10 +54,13 @@ interface ApiRider {
   user_id: number;
   full_name: string | null;
   email: string | null;
+  phone_number: string | null;
   vehicle_type: string;
   plate_number: string | null;
+  license_number: string | null;
   is_available: boolean;
   assignment_eligible: boolean;
+  verification_status: string;
   last_latitude: number | null;
   last_longitude: number | null;
   last_location_update: string | null;
@@ -127,6 +138,8 @@ const S = {
 /* ─── Main Riders Page ──────────────────────────────────────────── */
 export function RiderList() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
+  const { startDirectConversation } = useChatInbox();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     "all" | "available" | "unavailable"
@@ -139,6 +152,56 @@ export function RiderList() {
   const [orderError, setOrderError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedRiderId, setSelectedRiderId] = useState<number | null>(null);
+
+  // Edit Rider state
+  const [editingRider, setEditingRider] = useState<ApiRider | null>(null);
+  const [form] = Form.useForm();
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleEditRider = (rider: ApiRider) => {
+    setEditingRider(rider);
+    form.setFieldsValue({
+      full_name: rider.full_name,
+      email: rider.email,
+      phone_number: rider.phone_number,
+      vehicle_type: rider.vehicle_type,
+      plate_number: rider.plate_number,
+      license_number: rider.license_number,
+    });
+  };
+
+  const handleSaveRider = async () => {
+    try {
+      setSubmitting(true);
+      const values = await form.validateFields();
+      await apiClient.patch(`/admin/riders/${editingRider!.id}`, {
+        fullName: values.full_name,
+        email: values.email,
+        phoneNumber: values.phone_number,
+        vehicleType: values.vehicle_type,
+        plateNumber: values.plate_number,
+        licenseNumber: values.license_number,
+      });
+      message.success("Rider info updated successfully");
+      setEditingRider(null);
+      setReloadKey(k => k + 1);
+    } catch (e: any) {
+      if (e.errorFields) return;
+      message.error(e.response?.data?.message || "Failed to update rider");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVerifyRider = async (riderId: number) => {
+    try {
+      await apiClient.patch(`/admin/riders/${riderId}/verify`);
+      message.success("Rider verified successfully");
+      setReloadKey(k => k + 1);
+    } catch (e: any) {
+      message.error(e.response?.data?.message || "Failed to verify rider");
+    }
+  };
 
   useEffect(() => {
     setLoadingRiders(true);
@@ -689,6 +752,41 @@ export function RiderList() {
           />
 
           <Table.Column
+            title="Contact"
+            width={100}
+            render={(_: unknown, record: ApiRider) => (
+              <Space size={4}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<PhoneOutlined style={{ color: record.phone_number ? "#42A5F5" : MUTED_TEXT }} />}
+                  disabled={!record.phone_number}
+                  onClick={() => {
+                    if (record.phone_number) {
+                      window.location.href = `tel:${record.phone_number}`;
+                    }
+                  }}
+                  title={record.phone_number ? "Call" : "No phone number"}
+                />
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<MessageOutlined style={{ color: "#66BB6A" }} />}
+                  onClick={async () => {
+                    try {
+                      const conv = await startDirectConversation(record.user_id);
+                      navigate(`/chat?convId=${conv.id}`);
+                    } catch (error) {
+                      message.error("Failed to start chat with rider.");
+                    }
+                  }}
+                  title="Message in app"
+                />
+              </Space>
+            )}
+          />
+
+          <Table.Column
             dataIndex="is_available"
             title="Status"
             width={110}
@@ -700,6 +798,24 @@ export function RiderList() {
                 {available ? "Available" : "Unavailable"}
               </Tag>
             )}
+          />
+
+          <Table.Column
+            dataIndex="verification_status"
+            title="Verification"
+            width={120}
+            render={(status: string) => {
+              let color = "default";
+              if (status === "verified") color = "success";
+              else if (status === "pending") color = "warning";
+              else if (status === "rejected") color = "error";
+              
+              return (
+                <Tag color={color} style={{ borderRadius: 10, textTransform: "capitalize" }}>
+                  {status}
+                </Tag>
+              );
+            }}
           />
 
           <Table.Column
@@ -739,16 +855,39 @@ export function RiderList() {
             }
           />
           <Table.Column
-            title="Route"
+            title="Actions"
             width={130}
             render={(_: unknown, record: ApiRider) => (
-              <Button
-                size="small"
-                aria-label={`Dispatch plan for ${record.full_name ?? record.email ?? record.id}`}
-                onClick={() => setSelectedRiderId(record.id)}
-              >
-                Dispatch plan
-              </Button>
+              <Space>
+                <Button
+                  size="small"
+                  aria-label={`Dispatch plan for ${record.full_name ?? record.email ?? record.id}`}
+                  onClick={() => setSelectedRiderId(record.id)}
+                >
+                  Plan
+                </Button>
+                <Button
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => handleEditRider(record)}
+                  title="Edit Rider"
+                />
+                {record.verification_status === "pending" && (
+                  <Button
+                    size="small"
+                    type="primary"
+                    onClick={() => {
+                      Modal.confirm({
+                        title: "Verify Rider",
+                        content: `Are you sure you want to verify ${record.full_name ?? record.email}?`,
+                        onOk: () => handleVerifyRider(record.id),
+                      });
+                    }}
+                  >
+                    Verify
+                  </Button>
+                )}
+              </Space>
             )}
           />
         </Table>
@@ -767,6 +906,42 @@ export function RiderList() {
           assignments={selectedAssignments}
         />
       ) : null}
+
+      <Modal
+        title="Edit Rider Profile"
+        open={!!editingRider}
+        onCancel={() => setEditingRider(null)}
+        onOk={handleSaveRider}
+        confirmLoading={submitting}
+        okText="Save Changes"
+        destroyOnClose
+      >
+        <Form form={form} layout="vertical" preserve={false}>
+          <Form.Item label="Full Name" name="full_name">
+            <Input placeholder="Enter rider name" />
+          </Form.Item>
+          <Form.Item label="Email" name="email">
+            <Input placeholder="Enter rider email" type="email" />
+          </Form.Item>
+          <Form.Item label="Phone Number" name="phone_number">
+            <Input placeholder="Enter phone number (e.g. +639123456789)" />
+          </Form.Item>
+          <Form.Item label="Vehicle Type" name="vehicle_type">
+            <Select placeholder="Select vehicle type">
+              <Select.Option value="motorcycle">Motorcycle</Select.Option>
+              <Select.Option value="car">Car</Select.Option>
+              <Select.Option value="bicycle">Bicycle</Select.Option>
+              <Select.Option value="van">Van</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item label="Plate Number" name="plate_number">
+            <Input placeholder="Enter plate number" />
+          </Form.Item>
+          <Form.Item label="License Number" name="license_number">
+            <Input placeholder="Enter license number" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

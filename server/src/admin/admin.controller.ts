@@ -45,6 +45,7 @@ import {
   SupplierAssignment,
   SupplierAssignmentDecision,
 } from '../matching/entities/supplier-assignment.entity';
+import { UpdateAdminRiderDto } from './dto/update-admin-rider.dto';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -498,6 +499,17 @@ export class AdminController {
     if (!assignment?.rider) return null;
     const rider = assignment.rider;
     const user = rider.user;
+    // Reveal pickup OTP to ops until verified so they can share it with the rider.
+    const pickupOtp =
+      !assignment.pickupOtpVerifiedAt && assignment.pickupOtpCode
+        ? assignment.pickupOtpCode
+        : null;
+    const deliveryOtp =
+      assignment.pickupOtpVerifiedAt &&
+      !assignment.deliveryOtpVerifiedAt &&
+      assignment.deliveryOtpCode
+        ? assignment.deliveryOtpCode
+        : null;
     return {
       user_id: rider.userId,
       rider_profile_id: rider.id,
@@ -509,6 +521,8 @@ export class AdminController {
       plate_number: rider.plateNumber ?? null,
       delivery_assignment_id: assignment.id,
       delivery_status: assignment.status,
+      pickup_otp: pickupOtp,
+      delivery_otp: deliveryOtp,
       proof: this.deliveryProofFromAssignment(assignment),
     };
   }
@@ -936,6 +950,23 @@ export class AdminController {
   @Get('riders')
   async getAllRiders() {
     return this.ridersService.getAllRidersWithUser();
+  }
+
+  @Patch('riders/:id')
+  async updateRider(
+    @Param('id', ParseIntPipe) riderId: number,
+    @Body() dto: UpdateAdminRiderDto,
+  ) {
+    return this.ridersService.updateRiderAdmin(riderId, dto);
+  }
+
+  @Patch('riders/:id/verify')
+  async verifyRider(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: RequestWithUser,
+  ) {
+    await this.ridersService.verifyRider(id, req.user.sub);
+    return { success: true };
   }
 
   @Post('riders/:id/dispatch-plan')

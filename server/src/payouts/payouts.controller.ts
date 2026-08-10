@@ -40,7 +40,7 @@ export class PayoutsController {
     @Query('supplierId') supplierId?: string,
   ) {
     return this.payoutsService.list({
-      settlementState: settlementState as PayoutSettlementState | undefined,
+      settlementState: settlementState,
       supplierId: supplierId ? Number(supplierId) : undefined,
     });
   }

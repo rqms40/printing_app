@@ -110,14 +110,8 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ops_admin', 'super_admin')
   listCodCollections(@Query('status') status?: string) {
-    const allowed = new Set([
-      'pending',
-      'collected',
-      'failed',
-      'reconciled',
-    ]);
-    const normalized =
-      status && allowed.has(status) ? status : 'collected';
+    const allowed = new Set(['pending', 'collected', 'failed', 'reconciled']);
+    const normalized = status && allowed.has(status) ? status : 'collected';
     return this.paymentsService.listCodCollections(normalized as any);
   }
 

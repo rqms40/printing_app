@@ -34,7 +34,7 @@ export class IssuesController {
     @Query('orderId') orderId?: string,
   ) {
     return this.issuesService.list({
-      status: status as IssueStatus | undefined,
+      status: status,
       orderId: orderId ? Number(orderId) : undefined,
     });
   }
@@ -47,11 +47,7 @@ export class IssuesController {
 
   /** Client or ops opens a material claim. */
   @Post()
-  @Roles(
-    UserRole.CLIENT,
-    UserRole.OPS_ADMIN,
-    UserRole.SUPER_ADMIN,
-  )
+  @Roles(UserRole.CLIENT, UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   open(@Body() dto: OpenIssueDto, @Request() req: RequestWithUser) {
     return this.issuesService.openIssue(dto, req.user.sub, req.user.role);
   }

@@ -5,7 +5,7 @@ export type SenderRole = "customer" | "admin" | "rider" | "bot";
 export interface Conversation {
   id: number;
   customerId: number;
-  customer?: { id: number; name: string; email: string };
+  customer?: { id: number; name?: string; fullName?: string; nickname?: string; email: string };
   type: ConversationType;
   orderId: number | null;
   assignedAdminId: number | null;

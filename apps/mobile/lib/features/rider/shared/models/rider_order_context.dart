@@ -165,6 +165,12 @@ class RiderAssignmentView {
   bool get isCurrentPlanStop =>
       planStop?.status == RiderDispatchStopStatus.pending && routePosition == 1;
 
+  /// Pin used on rider maps — same coordinates as the order destination shown
+  /// in delivery info. Prefer the live order snapshot over a stale plan stop
+  /// so the pin always matches the address text.
+  LatLng? get pinDestination =>
+      order.destination?.latLng ?? planStop?.destination;
+
   String get id => assignment.id;
   DeliveryStatus get status => assignment.status;
 

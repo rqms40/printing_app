@@ -59,10 +59,7 @@ export class GeoZonesController {
 
   @Patch(':id')
   @Roles(UserRole.SUPER_ADMIN)
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateGeoZoneDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGeoZoneDto) {
     return this.geoZonesService.updateZone(id, dto);
   }
 }

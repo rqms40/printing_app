@@ -2,16 +2,14 @@ import type { QueryRunner } from 'typeorm';
 import { OrderPaymentAuthorizationFields1784333300000 } from '../../migrations/1784333300000-order-payment-authorization-fields';
 
 describe('OrderPaymentAuthorizationFields1784333300000', () => {
-  function createQueryRunner(opts: {
-    hasTable?: boolean;
-    hasColumn?: boolean | ((name: string) => boolean);
-    ownership?: string;
-  } = {}) {
-    const {
-      hasTable = true,
-      hasColumn = false,
-      ownership = 'baseline',
-    } = opts;
+  function createQueryRunner(
+    opts: {
+      hasTable?: boolean;
+      hasColumn?: boolean | ((name: string) => boolean);
+      ownership?: string;
+    } = {},
+  ) {
+    const { hasTable = true, hasColumn = false, ownership = 'baseline' } = opts;
     const queries: string[] = [];
     const queryRunner = {
       hasTable: jest.fn(async () => hasTable),

@@ -2,16 +2,14 @@ import type { QueryRunner } from 'typeorm';
 import { PilotCreditsLedger1784333400000 } from '../../migrations/1784333400000-pilot-credits-ledger';
 
 describe('PilotCreditsLedger1784333400000', () => {
-  function createQueryRunner(opts: {
-    hasTable?: boolean;
-    hasColumn?: boolean | ((name: string) => boolean);
-    ownership?: string;
-  } = {}) {
-    const {
-      hasTable = true,
-      hasColumn = false,
-      ownership = 'baseline',
-    } = opts;
+  function createQueryRunner(
+    opts: {
+      hasTable?: boolean;
+      hasColumn?: boolean | ((name: string) => boolean);
+      ownership?: string;
+    } = {},
+  ) {
+    const { hasTable = true, hasColumn = false, ownership = 'baseline' } = opts;
     const queries: string[] = [];
     const queryRunner = {
       hasTable: jest.fn(async () => hasTable),

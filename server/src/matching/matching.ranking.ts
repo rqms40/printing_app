@@ -118,8 +118,7 @@ function findMatchingCapability(
   const target = normalizeToken(category);
   if (!target) return null;
   return (
-    capabilities.find((c) => normalizeToken(c.productFamily) === target) ??
-    null
+    capabilities.find((c) => normalizeToken(c.productFamily) === target) ?? null
   );
 }
 
@@ -147,13 +146,17 @@ function capacityFitScore(maxCapacity: number, openLoad: number): number {
   return Math.max(0, 1 - openLoad / maxCapacity);
 }
 
-function qualityScore(ratingAverage: number | string | null | undefined): number {
+function qualityScore(
+  ratingAverage: number | string | null | undefined,
+): number {
   const n = Number(ratingAverage ?? 0);
   if (!Number.isFinite(n) || n <= 0) return 0;
   return Math.min(1, Math.max(0, n / 5));
 }
 
-function acceptanceRateScore(stats: SupplierAcceptanceStats | undefined): number {
+function acceptanceRateScore(
+  stats: SupplierAcceptanceStats | undefined,
+): number {
   if (!stats) return 0.5;
   const total = stats.accepted + stats.declined + stats.expired;
   if (total <= 0) return 0.5;

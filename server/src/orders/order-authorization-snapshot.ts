@@ -62,9 +62,7 @@ export function normalizeMinor(
   return String(n);
 }
 
-function toIsoOrNull(
-  value: Date | string | null | undefined,
-): string | null {
+function toIsoOrNull(value: Date | string | null | undefined): string | null {
   if (value == null || value === '') return null;
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) {
@@ -83,13 +81,12 @@ function toIsoOrNull(
  * Resolve price/fee minor units from an order, preferring already-set minor
  * columns over legacy decimal majors.
  */
-export function resolveOrderMoneyMinor(order: Pick<
-  Order,
-  | 'totalPrice'
-  | 'deliveryFee'
-  | 'finalTotalMinor'
-  | 'deliveryFeeMinor'
->): {
+export function resolveOrderMoneyMinor(
+  order: Pick<
+    Order,
+    'totalPrice' | 'deliveryFee' | 'finalTotalMinor' | 'deliveryFeeMinor'
+  >,
+): {
   priceMinor: string;
   deliveryFeeMinor: string;
   finalTotalMinor: string;
@@ -192,8 +189,7 @@ export function buildAuthorizationSnapshot(
         ? input.paymentMethod
         : (order.paymentMethod ?? null),
     specs,
-    artworkVersion:
-      artworkVersion == null ? null : (artworkVersion as string | number),
+    artworkVersion: artworkVersion == null ? null : artworkVersion,
     promisedDate,
   };
 }

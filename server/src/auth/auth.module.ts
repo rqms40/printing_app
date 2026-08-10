@@ -9,11 +9,13 @@ import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { BetaModeModule } from '../beta-mode/beta-mode.module';
 import { SuppliersModule } from '../suppliers/suppliers.module';
+import { RidersModule } from '../riders/riders.module';
 
 @Module({
   imports: [
     UsersModule,
     SuppliersModule,
+    RidersModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],

@@ -218,9 +218,7 @@ export function assertTransition(
   if (!canTransition(from, to, actor)) {
     const actors = edgeActors(from, to);
     if (actors == null) {
-      throw new BadRequestException(
-        `Cannot transition from ${from} to ${to}`,
-      );
+      throw new BadRequestException(`Cannot transition from ${from} to ${to}`);
     }
     throw new BadRequestException(
       `Actor ${actor} cannot transition from ${from} to ${to}`,

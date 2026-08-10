@@ -6,7 +6,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
-import { QualityService, qualityDecisionToOrderStatus } from './quality.service';
+import {
+  QualityService,
+  qualityDecisionToOrderStatus,
+} from './quality.service';
 import {
   QualityReview,
   QualityReviewDecision,
@@ -381,9 +384,7 @@ describe('QualityService', () => {
         true,
         'localhost',
       );
-      expect(workspace.artwork.signedUrl).toBe(
-        'https://minio.example/signed',
-      );
+      expect(workspace.artwork.signedUrl).toBe('https://minio.example/signed');
       expect(workspace.allowedDecisions).toContain(
         QualityDecisionInput.APPROVED_FOR_MATCHING,
       );
@@ -407,10 +408,12 @@ describe('QualityService', () => {
 
   describe('getQueue', () => {
     it('returns submitted and needs_qa orders', async () => {
-      ordersRepo.find = jest.fn().mockResolvedValue([
-        baseOrder({ id: 1, orderStatus: OrderStatus.SUBMITTED }),
-        baseOrder({ id: 2, orderStatus: OrderStatus.NEEDS_QA }),
-      ]);
+      ordersRepo.find = jest
+        .fn()
+        .mockResolvedValue([
+          baseOrder({ id: 1, orderStatus: OrderStatus.SUBMITTED }),
+          baseOrder({ id: 2, orderStatus: OrderStatus.NEEDS_QA }),
+        ]);
       reviewRepo.find = jest.fn().mockResolvedValue([]);
 
       const queue = await service.getQueue();
@@ -513,16 +516,10 @@ describe('QualityService', () => {
           userId: 3,
         }),
       );
-      txFileRepo.findOne.mockResolvedValue(
-        ownedFile({ uploadedBy: 999 }),
-      );
+      txFileRepo.findOne.mockResolvedValue(ownedFile({ uploadedBy: 999 }));
 
       await expect(
-        service.resubmitCorrection(
-          42,
-          { fileMetadataId: 200 },
-          clientActor,
-        ),
+        service.resubmitCorrection(42, { fileMetadataId: 200 }, clientActor),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'file_not_owned' }),
       });
@@ -534,11 +531,7 @@ describe('QualityService', () => {
       );
 
       await expect(
-        service.resubmitCorrection(
-          42,
-          { fileMetadataId: 200 },
-          clientActor,
-        ),
+        service.resubmitCorrection(42, { fileMetadataId: 200 }, clientActor),
       ).rejects.toMatchObject({
         response: expect.objectContaining({
           code: 'not_awaiting_correction',
@@ -591,9 +584,11 @@ describe('QualityService', () => {
         }),
       );
 
-      await expect(service.approveProof(42, clientActor)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'not_awaiting_proof' }),
-      });
+      await expect(service.approveProof(42, clientActor)).rejects.toMatchObject(
+        {
+          response: expect.objectContaining({ code: 'not_awaiting_proof' }),
+        },
+      );
     });
   });
 

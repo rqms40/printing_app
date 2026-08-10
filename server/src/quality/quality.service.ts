@@ -154,9 +154,7 @@ const CLIENT_ARTWORK_PURPOSES = new Set<FilePurpose>([
   FilePurpose.PAPER,
 ]);
 
-function mapDecisionInput(
-  input: QualityDecisionInput,
-): QualityReviewDecision {
+function mapDecisionInput(input: QualityDecisionInput): QualityReviewDecision {
   switch (input) {
     case QualityDecisionInput.NEEDS_CORRECTION:
       return QualityReviewDecision.NEEDS_CORRECTION;
@@ -504,8 +502,7 @@ export class QualityService {
         orderStatus: targetStatus,
       };
       if (storedDecision === QualityReviewDecision.BLOCKED) {
-        orderUpdates.declineReason =
-          correctionText || 'Blocked by Ops QA';
+        orderUpdates.declineReason = correctionText || 'Blocked by Ops QA';
       }
       if (storedDecision === QualityReviewDecision.NEEDS_CORRECTION) {
         orderUpdates.adminNotes = correctionText || undefined;
@@ -657,8 +654,7 @@ export class QualityService {
       assertTransition(fromStatus, toStatus, actor.role);
 
       const notes =
-        dto.notes?.trim() ||
-        'Client resubmitted revised artwork for QA';
+        dto.notes?.trim() || 'Client resubmitted revised artwork for QA';
 
       const previousFileMetadataId = locked.fileMetadataId;
       const updateResult = await ordersRepo.update(
@@ -955,11 +951,7 @@ export class QualityService {
         return locked;
       }
 
-      assertTransition(
-        OrderStatus.SUBMITTED,
-        OrderStatus.NEEDS_QA,
-        actor.role,
-      );
+      assertTransition(OrderStatus.SUBMITTED, OrderStatus.NEEDS_QA, actor.role);
 
       const result = await ordersRepo.update(
         { id: locked.id, orderStatus: OrderStatus.SUBMITTED },

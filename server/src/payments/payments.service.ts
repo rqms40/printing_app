@@ -80,9 +80,7 @@ export class PaymentsService {
    * Default: false (sandbox / mock only during pilot).
    */
   isPayMongoLiveEnabled(): boolean {
-    const raw = (
-      this.config.get<string>('PAYMONGO_LIVE_ENABLED') ?? 'false'
-    )
+    const raw = (this.config.get<string>('PAYMONGO_LIVE_ENABLED') ?? 'false')
       .toString()
       .trim()
       .toLowerCase();

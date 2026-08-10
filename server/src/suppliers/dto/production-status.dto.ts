@@ -27,7 +27,8 @@ export class ProductionStatusDto {
   milestone?: ProductionMilestone;
 
   @ApiPropertyOptional({
-    description: "Alias: set to 'production' to start production from payment_authorized",
+    description:
+      "Alias: set to 'production' to start production from payment_authorized",
     example: 'production',
   })
   @IsOptional()

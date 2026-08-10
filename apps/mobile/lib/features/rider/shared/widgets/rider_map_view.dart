@@ -62,9 +62,11 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
 
   LatLng get _shop => widget.planOrigin ?? MapHelpers.shopPoint;
 
+  /// Prefer the order destination pin (matches Delivery Info address text)
+  /// over plan-stop coordinates, which can be stale after address fixes.
   LatLng get _destination =>
-      widget.planStop?.destination ??
       widget.destination ??
+      widget.planStop?.destination ??
       MapHelpers.davaoCenter;
 
   List<LatLng> get _routePoints => widget.showRoute

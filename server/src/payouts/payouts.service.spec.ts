@@ -117,9 +117,9 @@ describe('PayoutsService', () => {
       holdReason: null,
     });
     await service.approveRelease(2, 1, 'ops_admin');
-    expect(paymentsService.assertCodReconciledBeforePayout).toHaveBeenCalledWith(
-      11,
-    );
+    expect(
+      paymentsService.assertCodReconciledBeforePayout,
+    ).toHaveBeenCalledWith(11);
   });
 
   it('opens issue window payout as held on delivery', async () => {
@@ -171,7 +171,12 @@ describe('PayoutsService', () => {
         settlementState: PayoutSettlementState.PENDING,
         holdReason: null,
       });
-    const out = await service.releaseIssueHold(9, 1, 'ops_admin', 'issue_release');
+    const out = await service.releaseIssueHold(
+      9,
+      1,
+      'ops_admin',
+      'issue_release',
+    );
     expect(out?.settlementState).toBe(PayoutSettlementState.PENDING);
     expect(paymentsService.applyCodPayoutHold).toHaveBeenCalledWith(9);
   });

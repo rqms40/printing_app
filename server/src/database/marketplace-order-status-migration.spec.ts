@@ -2,10 +2,12 @@ import type { QueryRunner } from 'typeorm';
 import { MarketplaceOrderStatus1784333200000 } from '../../migrations/1784333200000-marketplace-order-status';
 
 describe('MarketplaceOrderStatus1784333200000', () => {
-  function createQueryRunner(opts: {
-    hasTable?: boolean | ((name: string) => boolean);
-    ownership?: string;
-  } = {}) {
+  function createQueryRunner(
+    opts: {
+      hasTable?: boolean | ((name: string) => boolean);
+      ownership?: string;
+    } = {},
+  ) {
     const { hasTable = true, ownership = 'baseline' } = opts;
     const queries: string[] = [];
     const queryRunner = {
@@ -31,7 +33,9 @@ describe('MarketplaceOrderStatus1784333200000', () => {
 
     const sql = queries.join('\n');
     expect(sql).toContain('ALTER COLUMN "order_status" TYPE text');
-    expect(sql).toContain('DROP TYPE IF EXISTS "public"."orders_order_status_enum"');
+    expect(sql).toContain(
+      'DROP TYPE IF EXISTS "public"."orders_order_status_enum"',
+    );
     expect(sql).toContain('CREATE TYPE "public"."orders_order_status_enum"');
     expect(sql).toContain("'submitted'");
     expect(sql).toContain("'approved_for_matching'");

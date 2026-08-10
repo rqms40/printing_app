@@ -322,6 +322,7 @@ class Order {
     this.deliveryLegDurationSeconds,
     this.deliveryLegDistanceMeters,
     this.deliveryRoutingDataStale,
+    this.deliveryOtp,
     this.assignedRider,
     this.assignedSupplier,
     this.estimatedCompletionAt,
@@ -376,6 +377,9 @@ class Order {
   final int? deliveryLegDurationSeconds;
   final int? deliveryLegDistanceMeters;
   final bool? deliveryRoutingDataStale;
+
+  /// Customer handoff OTP while out for delivery (null after delivery).
+  final String? deliveryOtp;
   final AssignedRiderContact? assignedRider;
   final AssignedSupplierContact? assignedSupplier;
   final DateTime? estimatedCompletionAt;
@@ -482,6 +486,7 @@ class Order {
     int? deliveryLegDurationSeconds,
     int? deliveryLegDistanceMeters,
     bool? deliveryRoutingDataStale,
+    String? deliveryOtp,
     AssignedRiderContact? assignedRider,
     AssignedSupplierContact? assignedSupplier,
     DateTime? estimatedCompletionAt,
@@ -542,6 +547,7 @@ class Order {
           deliveryLegDistanceMeters ?? this.deliveryLegDistanceMeters,
       deliveryRoutingDataStale:
           deliveryRoutingDataStale ?? this.deliveryRoutingDataStale,
+      deliveryOtp: deliveryOtp ?? this.deliveryOtp,
       assignedRider: assignedRider ?? this.assignedRider,
       assignedSupplier: assignedSupplier ?? this.assignedSupplier,
       estimatedCompletionAt:

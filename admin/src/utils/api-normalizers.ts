@@ -709,14 +709,18 @@ function normalizeOrderDestination(value: unknown): Order["delivery_address"] {
     toOptionalString(record, "address");
   const latitudeValue = read(record, "latitude");
   const longitudeValue = read(record, "longitude");
-  const latitude = latitudeValue == null ? null : Number(latitudeValue);
-  const longitude = longitudeValue == null ? null : Number(longitudeValue);
+  const latitudeRaw =
+    latitudeValue == null || latitudeValue === ""
+      ? null
+      : Number(latitudeValue);
+  const longitudeRaw =
+    longitudeValue == null || longitudeValue === ""
+      ? null
+      : Number(longitudeValue);
+  const latitude = Number.isFinite(latitudeRaw) ? latitudeRaw : null;
+  const longitude = Number.isFinite(longitudeRaw) ? longitudeRaw : null;
 
-  if (
-    !fullAddress &&
-    !Number.isFinite(latitude) &&
-    !Number.isFinite(longitude)
-  ) {
+  if (!fullAddress && latitude == null && longitude == null) {
     return undefined;
   }
 
@@ -737,8 +741,9 @@ function normalizeOrderDestination(value: unknown): Order["delivery_address"] {
     province: toOptionalString(record, "province") ?? null,
     zip_code: toOptionalString(record, "zip_code", "zipCode") ?? null,
     landmark: toOptionalString(record, "landmark") ?? null,
-    latitude: Number.isFinite(latitude) ? latitude : null,
-    longitude: Number.isFinite(longitude) ? longitude : null,
+    // Keep lat/lng always as finite numbers or null so map pins match Delivery Info.
+    latitude,
+    longitude,
     sort_order:
       read(record, "sort_order", "sortOrder") === undefined
         ? undefined
@@ -787,6 +792,8 @@ function normalizeAssignedRiderContact(
       "delivery_status",
       "deliveryStatus",
     ),
+    pickup_otp: toOptionalString(record, "pickup_otp", "pickupOtp"),
+    delivery_otp: toOptionalString(record, "delivery_otp", "deliveryOtp"),
   };
 }
 

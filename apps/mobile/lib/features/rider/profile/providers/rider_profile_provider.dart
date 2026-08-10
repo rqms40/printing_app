@@ -125,6 +125,28 @@ class RiderProfileNotifier extends StateNotifier<RiderProfileState> {
     }
   }
 
+  Future<bool> updatePersonalInfo({
+    required String fullName,
+    required String phoneNumber,
+  }) async {
+    if (!mounted) return false;
+    try {
+      await ApiClient.instance.put(
+        '/users/profile',
+        data: {'fullName': fullName, 'phoneNumber': phoneNumber},
+      );
+      if (!mounted) return false;
+      state = state.copyWith(
+        fullName: fullName,
+        phoneNumber: phoneNumber,
+      );
+      return true;
+    } catch (_) {
+      if (!mounted) return false;
+      return false;
+    }
+  }
+
   Future<void> refresh() => _load();
 }
 

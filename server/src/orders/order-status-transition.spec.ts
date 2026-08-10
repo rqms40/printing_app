@@ -27,13 +27,25 @@ describe('order status transitions (marketplace)', () => {
       [OrderStatus.NEEDS_QA, OrderStatus.PROOF_APPROVAL, 'ops_admin'],
       [OrderStatus.PROOF_APPROVAL, OrderStatus.APPROVED_FOR_MATCHING, 'client'],
       [OrderStatus.NEEDS_QA, OrderStatus.APPROVED_FOR_MATCHING, 'ops_admin'],
-      [OrderStatus.APPROVED_FOR_MATCHING, OrderStatus.SUPPLIER_ASSIGNED, 'system'],
-      [OrderStatus.SUPPLIER_ASSIGNED, OrderStatus.SUPPLIER_ACCEPTED, 'supplier'],
+      [
+        OrderStatus.APPROVED_FOR_MATCHING,
+        OrderStatus.SUPPLIER_ASSIGNED,
+        'system',
+      ],
+      [
+        OrderStatus.SUPPLIER_ASSIGNED,
+        OrderStatus.SUPPLIER_ACCEPTED,
+        'supplier',
+      ],
       [OrderStatus.SUPPLIER_ACCEPTED, OrderStatus.AWAITING_PAYMENT, 'system'],
       [OrderStatus.AWAITING_PAYMENT, OrderStatus.PAYMENT_AUTHORIZED, 'system'],
       [OrderStatus.PAYMENT_AUTHORIZED, OrderStatus.PRODUCTION, 'supplier'],
       [OrderStatus.PRODUCTION, OrderStatus.SUPPLIER_SELF_QC, 'supplier'],
-      [OrderStatus.SUPPLIER_SELF_QC, OrderStatus.READY_FOR_DISPATCH, 'supplier'],
+      [
+        OrderStatus.SUPPLIER_SELF_QC,
+        OrderStatus.READY_FOR_DISPATCH,
+        'supplier',
+      ],
       [OrderStatus.READY_FOR_DISPATCH, OrderStatus.RIDER_ASSIGNED, 'ops_admin'],
       [OrderStatus.RIDER_ASSIGNED, OrderStatus.PICKED_UP, 'rider'],
       [OrderStatus.PICKED_UP, OrderStatus.OUT_FOR_DELIVERY, 'rider'],
@@ -51,9 +63,7 @@ describe('order status transitions (marketplace)', () => {
         'system',
       ],
     ])('allows %s → %s for %s', (from, to, actor) => {
-      expect(() =>
-        assertTransition(from, to, actor as never),
-      ).not.toThrow();
+      expect(() => assertTransition(from, to, actor as never)).not.toThrow();
     });
   });
 
@@ -147,11 +157,7 @@ describe('order status transitions (marketplace)', () => {
         ),
       ).toThrow(BadRequestException);
       expect(
-        canTransition(
-          OrderStatus.SUBMITTED,
-          OrderStatus.PRODUCTION,
-          'client',
-        ),
+        canTransition(OrderStatus.SUBMITTED, OrderStatus.PRODUCTION, 'client'),
       ).toBe(false);
     });
 
@@ -340,10 +346,7 @@ describe('order status transitions (marketplace)', () => {
 
     it('allows pickup completion only for pickup orders', () => {
       expect(
-        adminAllowedNextOrderStatuses(
-          OrderStatus.READY_FOR_DISPATCH,
-          'pickup',
-        ),
+        adminAllowedNextOrderStatuses(OrderStatus.READY_FOR_DISPATCH, 'pickup'),
       ).toContain(OrderStatus.COLLECTED_BY_CUSTOMER);
       expect(
         adminAllowedNextOrderStatuses(
@@ -361,10 +364,7 @@ describe('order status transitions (marketplace)', () => {
         adminAllowedNextOrderStatuses(OrderStatus.PICKED_UP, 'delivery'),
       ).toEqual([]);
       expect(
-        adminAllowedNextOrderStatuses(
-          OrderStatus.OUT_FOR_DELIVERY,
-          'delivery',
-        ),
+        adminAllowedNextOrderStatuses(OrderStatus.OUT_FOR_DELIVERY, 'delivery'),
       ).toEqual([]);
     });
 
@@ -379,10 +379,7 @@ describe('order status transitions (marketplace)', () => {
         adminAllowedNextOrderStatuses(OrderStatus.PRODUCTION, 'delivery'),
       ).toEqual([OrderStatus.SUPPLIER_SELF_QC]);
       expect(
-        adminAllowedNextOrderStatuses(
-          OrderStatus.SUPPLIER_SELF_QC,
-          'delivery',
-        ),
+        adminAllowedNextOrderStatuses(OrderStatus.SUPPLIER_SELF_QC, 'delivery'),
       ).toContain(OrderStatus.READY_FOR_DISPATCH);
     });
   });

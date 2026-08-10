@@ -59,10 +59,7 @@ export class SupplierJobsController {
     enum: ['assigned', 'accepted', 'in_production', 'all'],
     description: 'Job list filter (default: all active)',
   })
-  listJobs(
-    @Request() req: RequestWithUser,
-    @Query('filter') filter?: string,
-  ) {
+  listJobs(@Request() req: RequestWithUser, @Query('filter') filter?: string) {
     return this.supplierJobsService.listJobs(
       {
         userId: req.user.sub,

@@ -198,7 +198,9 @@ describe('SupplierJobsService', () => {
   });
 
   describe('acceptJob', () => {
-    const futureDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const futureDate = new Date(
+      Date.now() + 3 * 24 * 60 * 60 * 1000,
+    ).toISOString();
 
     it('accepts pending assignment: ACCEPTED + supplier_accepted + freezes price/promised', async () => {
       const assignment = baseAssignment();
@@ -485,11 +487,7 @@ describe('SupplierJobsService', () => {
       );
 
       await expect(
-        service.updateProductionStatus(
-          7,
-          { status: 'production' },
-          actor,
-        ),
+        service.updateProductionStatus(7, { status: 'production' }, actor),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'payment_not_authorized' }),
       });
@@ -556,11 +554,7 @@ describe('SupplierJobsService', () => {
       );
 
       await expect(
-        service.updateProductionStatus(
-          7,
-          { status: 'production' },
-          actor,
-        ),
+        service.updateProductionStatus(7, { status: 'production' }, actor),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'assignment_not_accepted' }),
       });
@@ -630,9 +624,7 @@ describe('SupplierJobsService', () => {
     });
 
     it('rejects self-qc without evidence', async () => {
-      await expect(
-        service.submitSelfQc(7, {}, actor),
-      ).rejects.toMatchObject({
+      await expect(service.submitSelfQc(7, {}, actor)).rejects.toMatchObject({
         response: expect.objectContaining({
           code: 'self_qc_evidence_required',
         }),
@@ -649,9 +641,7 @@ describe('SupplierJobsService', () => {
           paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
         }),
       );
-      txFileRepo.findOne.mockResolvedValue(
-        ownedEvidence({ uploadedBy: 999 }),
-      );
+      txFileRepo.findOne.mockResolvedValue(ownedEvidence({ uploadedBy: 999 }));
 
       await expect(
         service.submitSelfQc(7, { evidenceFileIds: [200] }, actor),
@@ -713,7 +703,7 @@ describe('SupplierJobsService', () => {
     });
 
     it('accepts multipart-uploaded evidence via storeMetadata', async () => {
-      filesService.storeMetadata!.mockResolvedValue({
+      filesService.storeMetadata.mockResolvedValue({
         id: 301,
         originalName: 'shot.jpg',
         objectKey: 'uploads/general/shot.jpg',
@@ -788,10 +778,8 @@ describe('SupplierJobsService', () => {
   describe('getJob artwork gate', () => {
     it('returns signed artwork for own assigned job after QA', async () => {
       const order = baseOrder();
-      assignmentRepo.findOne!.mockResolvedValue(
-        baseAssignment({ order }),
-      );
-      filesService.findById!.mockResolvedValue({
+      assignmentRepo.findOne!.mockResolvedValue(baseAssignment({ order }));
+      filesService.findById.mockResolvedValue({
         id: 99,
         objectKey: 'uploads/paper/flyer.pdf',
       } as FileMetadata);
@@ -840,7 +828,7 @@ describe('SupplierJobsService', () => {
         adminNotes: 'OPS INTERNAL: escalate pricing to finance',
       });
       assignmentRepo.findOne!.mockResolvedValue(baseAssignment({ order }));
-      filesService.findById!.mockResolvedValue({
+      filesService.findById.mockResolvedValue({
         id: 99,
         objectKey: 'uploads/paper/flyer.pdf',
       } as FileMetadata);
@@ -886,8 +874,9 @@ describe('SupplierJobsService', () => {
           ],
         },
       ]);
-      (ordersRepo.manager as { getRepository: jest.Mock }).getRepository =
-        jest.fn().mockReturnValue({ find: itemFind });
+      (ordersRepo.manager as { getRepository: jest.Mock }).getRepository = jest
+        .fn()
+        .mockReturnValue({ find: itemFind });
 
       const detail = await service.getJob(7, actor);
 

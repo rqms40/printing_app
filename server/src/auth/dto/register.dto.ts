@@ -54,7 +54,11 @@ export class RegisterDto {
    * print_shop when omitted.
    */
   @ApiPropertyOptional({ enum: ProfileField })
-  @ValidateIf((o: RegisterDto) => o.profileCategory !== ProfileCategory.SUPPLIER)
+  @ValidateIf(
+    (o: RegisterDto) =>
+      o.profileCategory !== ProfileCategory.SUPPLIER &&
+      o.profileCategory !== ProfileCategory.RIDER,
+  )
   @IsEnum(ProfileField)
   profileField?: ProfileField;
 
@@ -115,7 +119,9 @@ export class RegisterDto {
     example: ['signages', 'document_printing', 'apparel'],
     type: [String],
   })
-  @ValidateIf((o: RegisterDto) => o.profileCategory === ProfileCategory.SUPPLIER)
+  @ValidateIf(
+    (o: RegisterDto) => o.profileCategory === ProfileCategory.SUPPLIER,
+  )
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(SUPPLIER_SERVICE_FOCUS_KEYS.length)

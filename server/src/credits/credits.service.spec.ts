@@ -177,10 +177,7 @@ describe('CreditsService', () => {
 
     it('requires a grant reason', async () => {
       await expect(
-        service.grantPilotCredits(
-          { userId: 1, amount: 50, reason: '   ' },
-          99,
-        ),
+        service.grantPilotCredits({ userId: 1, amount: 50, reason: '   ' }, 99),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -975,4 +972,3 @@ describe('CreditsService', () => {
     });
   });
 });
-

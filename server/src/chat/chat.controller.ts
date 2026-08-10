@@ -140,4 +140,19 @@ export class ChatController {
     this.chatGateway.notifyConversationClosed([conversation.id]);
     return conversation;
   }
+
+  @Post('admin/conversations/direct/:userId')
+  @UseGuards(RolesGuard)
+  @Roles('ops_admin', 'super_admin')
+  async startDirectConversation(
+    @Param('userId') userId: string,
+  ): Promise<Conversation> {
+    const conv = await this.chatService.getOrCreateDirectConversation(+userId);
+    const user = await this.usersService.findById(+userId);
+    this.chatGateway.notifyNewConversation(
+      conv,
+      user?.fullName ?? user?.nickname ?? 'Customer',
+    );
+    return conv;
+  }
 }

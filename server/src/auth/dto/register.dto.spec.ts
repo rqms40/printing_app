@@ -138,8 +138,8 @@ describe('RegisterDto', () => {
 
     const errors = validateSync(dto);
 
-    expect(
-      errors.some((error) => error.property === 'clientAccountType'),
-    ).toBe(true);
+    expect(errors.some((error) => error.property === 'clientAccountType')).toBe(
+      true,
+    );
   });
 });

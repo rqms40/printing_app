@@ -305,7 +305,7 @@ describe('PaymentsService', () => {
         andWhere: jest.fn().mockReturnThis(),
         getCount: jest.fn().mockResolvedValue(count),
       };
-      ordersRepo.createQueryBuilder!.mockReturnValue(qb as any);
+      ordersRepo.createQueryBuilder.mockReturnValue(qb as any);
       return qb;
     }
 

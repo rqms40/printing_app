@@ -169,7 +169,9 @@ export class GeoZonesService {
     if (!Number.isFinite(gross) || gross < 0) {
       throw new BadRequestException('Invalid gross amount for commission');
     }
-    const commission = Math.round((gross * settings.defaultCommissionBps) / 10_000);
+    const commission = Math.round(
+      (gross * settings.defaultCommissionBps) / 10_000,
+    );
     return String(commission);
   }
 

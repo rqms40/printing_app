@@ -2,11 +2,13 @@ import type { QueryRunner } from 'typeorm';
 import { UserPilotCodEligibility1784333600000 } from '../../migrations/1784333600000-user-pilot-cod-eligibility';
 
 describe('UserPilotCodEligibility1784333600000', () => {
-  function createQueryRunner(opts: {
-    hasTable?: boolean;
-    existingColumns?: string[];
-    ownership?: string;
-  } = {}) {
+  function createQueryRunner(
+    opts: {
+      hasTable?: boolean;
+      existingColumns?: string[];
+      ownership?: string;
+    } = {},
+  ) {
     const {
       hasTable = true,
       existingColumns = [],
@@ -35,7 +37,9 @@ describe('UserPilotCodEligibility1784333600000', () => {
     await new UserPilotCodEligibility1784333600000().up(queryRunner);
 
     const sql = queries.join('\n');
-    expect(sql).toContain('"pilot_cod_eligible" boolean NOT NULL DEFAULT false');
+    expect(sql).toContain(
+      '"pilot_cod_eligible" boolean NOT NULL DEFAULT false',
+    );
     expect(sql).toContain(
       '"cod_ops_risk_blocked" boolean NOT NULL DEFAULT false',
     );

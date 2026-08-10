@@ -640,8 +640,7 @@ export class OrdersService {
         .filter(Boolean)
         .filter(
           (p) =>
-            !/^(philippines|ph|filipinas)$/i.test(p) &&
-            !/^\d{4,5}$/.test(p),
+            !/^(philippines|ph|filipinas)$/i.test(p) && !/^\d{4,5}$/.test(p),
         );
       if (parts.length === 1) return parts[0];
       if (parts.length >= 2) {
@@ -652,7 +651,10 @@ export class OrdersService {
         const words = area.split(/\s+/).filter(Boolean);
         if (words.length > 3) {
           area = words.slice(0, 2).join(' ');
-        } else if (words.length === 3 && /street|st\.?|ave|road|rd\.?/i.test(words[2])) {
+        } else if (
+          words.length === 3 &&
+          /street|st\.?|ave|road|rd\.?/i.test(words[2])
+        ) {
           area = words.slice(0, 2).join(' ');
         }
         return `${area}, ${city}`;
@@ -674,7 +676,10 @@ export class OrdersService {
     try {
       const file = await this.filesService.findById(fileId);
       if (!file?.objectKey) return file?.url ?? null;
-      return await this.filesService.getPresignedUrlForKey(file.objectKey, 3600);
+      return await this.filesService.getPresignedUrlForKey(
+        file.objectKey,
+        3600,
+      );
     } catch {
       return null;
     }
@@ -1361,7 +1366,7 @@ export class OrdersService {
           batchOrderId: savedBatch.id,
           destinationId: firstDestId,
           codEligible: codEligibleForBatch,
-        }) as Partial<Order>,
+        }),
       );
       const savedOrder = await txOrdersRepo.save(aggregateOrder);
 
@@ -1601,14 +1606,10 @@ export class OrdersService {
     orderId: number,
     context: OrderStatusChangeContext,
   ): Promise<Order> {
-    if (
-      !Number.isInteger(context?.actorUserId) ||
-      context.actorUserId <= 0
-    ) {
+    if (!Number.isInteger(context?.actorUserId) || context.actorUserId <= 0) {
       throw new BadRequestException('Status change actor is required');
     }
-    const reason =
-      context.reason?.trim() || 'Ops payment authorization';
+    const reason = context.reason?.trim() || 'Ops payment authorization';
 
     const precheck = await this.ordersRepo.findOne({ where: { id: orderId } });
     if (!precheck) {
@@ -1744,7 +1745,10 @@ export class OrdersService {
         manager,
       );
 
-      return { previous: { ...locked, orderStatus: fromStatus } as Order, order: saved };
+      return {
+        previous: { ...locked, orderStatus: fromStatus } as Order,
+        order: saved,
+      };
     });
 
     this.creditsService.publishCreditMutation?.(creditMutation);
@@ -2202,6 +2206,21 @@ export class OrdersService {
     address: Address,
     labelOverride?: string,
   ): NormalizedDeliveryDestination {
+    const latitude = Number(address.latitude);
+    const longitude = Number(address.longitude);
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180 ||
+      (latitude === 0 && longitude === 0)
+    ) {
+      throw new BadRequestException(
+        'Saved delivery address is missing a valid map pin',
+      );
+    }
     return {
       addressId: address.id,
       label:
@@ -2214,8 +2233,8 @@ export class OrdersService {
       province: address.province ?? null,
       zipCode: address.zipCode ?? null,
       landmark: address.landmark ?? null,
-      latitude: Number(address.latitude),
-      longitude: Number(address.longitude),
+      latitude,
+      longitude,
     };
   }
 
@@ -2678,6 +2697,69 @@ export class OrdersService {
     });
   }
 
+  async confirmReceipt(id: number, userId: number): Promise<Order> {
+    await this.dataSource.transaction(async (manager) => {
+      const transactionOrdersRepo = manager.getRepository(Order);
+      const order = await transactionOrdersRepo.findOneOrFail({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (order.userId !== userId) {
+        throw new ForbiddenException(
+          'You can only confirm receipt for your own orders',
+        );
+      }
+
+      if (
+        order.orderStatus !== OrderStatus.ISSUE_WINDOW_OPEN &&
+        order.orderStatus !== OrderStatus.DELIVERED &&
+        order.orderStatus !== OrderStatus.COLLECTED_BY_CUSTOMER
+      ) {
+        throw new BadRequestException(
+          'Order cannot be confirmed at this stage',
+        );
+      }
+
+      await transactionOrdersRepo.update(
+        { id: order.id, orderStatus: order.orderStatus },
+        { orderStatus: OrderStatus.COMPLETED },
+      );
+
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: order.id,
+        fromStatus: order.orderStatus,
+        toStatus: OrderStatus.COMPLETED,
+        changedByUserId: userId,
+        notes: 'Customer confirmed receipt',
+      });
+
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: order.id,
+          fromStatus: order.orderStatus,
+          toStatus: OrderStatus.COMPLETED,
+          actorUserId: userId,
+          actorRole: 'client',
+          reason: 'Customer confirmed receipt',
+        },
+        manager,
+      );
+
+      if (this.payoutsService) {
+        await this.payoutsService.closeIssueWindowHold(order.id, manager);
+      }
+    });
+
+    const completed = await this.findById(id);
+    if (!completed) throw new NotFoundException('Order not found');
+    return this.publishStatusUpdate(
+      completed,
+      id,
+      'Customer confirmed receipt',
+    );
+  }
+
   async updateStatus(
     id: number,
     status: string,
@@ -2950,11 +3032,17 @@ export class OrdersService {
         ...(issueWindowEndsAt ? { issueWindowEndsAt } : {}),
       },
     );
+    // Prefer a real user actor when present (e.g. rider who completed
+    // delivery). Never write actor id 0 — audit_events.actor_id FKs to users.
+    const historyActorId =
+      actorUserId != null && actorUserId > 0 ? actorUserId : null;
     await manager.getRepository(OrderStatusHistory).insert({
       orderId,
       fromStatus,
       toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
-      changedByUserId: 0,
+      // history column is NOT NULL without an FK; use 0 only as a last-resort
+      // system sentinel when no actor is available.
+      changedByUserId: historyActorId ?? 0,
       notes: historyNotes,
     });
     await this.auditService.recordOrderStatusTransition(
@@ -2962,11 +3050,12 @@ export class OrdersService {
         orderId,
         fromStatus,
         toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
-        actorUserId: 0,
+        actorUserId: historyActorId,
         actorRole: 'system',
         reason: 'issue_window_open',
         metadata: {
           issueWindowEndsAt: issueWindowEndsAt?.toISOString() ?? null,
+          systemAction: true,
         },
       },
       manager,

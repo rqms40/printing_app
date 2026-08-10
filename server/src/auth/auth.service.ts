@@ -9,6 +9,7 @@ import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BetaModeService } from '../beta-mode/beta-mode.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
+import { RidersService } from '../riders/riders.service';
 import { User, UserRole } from '../users/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
@@ -43,6 +44,7 @@ export class AuthService {
     private notificationsService: NotificationsService,
     private betaModeService: BetaModeService,
     private suppliersService: SuppliersService,
+    private ridersService: RidersService,
   ) {}
 
   async register(
@@ -50,8 +52,8 @@ export class AuthService {
     password: string,
     profile: RegisterProfileInput,
   ) {
-    const isSupplierLane =
-      profile.profileCategory === ProfileCategory.SUPPLIER;
+    const isSupplierLane = profile.profileCategory === ProfileCategory.SUPPLIER;
+    const isRiderLane = profile.profileCategory === ProfileCategory.RIDER;
 
     if (isSupplierLane) {
       if (!profile.serviceFocusRanks?.length) {
@@ -61,14 +63,19 @@ export class AuthService {
             'Supplier sign-up requires at least one ranked service focus.',
         });
       }
-    } else if (!profile.profileField) {
+    } else if (!isRiderLane && !profile.profileField) {
       throw new BadRequestException({
         code: 'profile_field_required',
         message: 'profileField is required for student and professional lanes.',
       });
     }
 
-    const role = isSupplierLane ? UserRole.SUPPLIER : UserRole.CLIENT;
+    const role = isSupplierLane
+      ? UserRole.SUPPLIER
+      : isRiderLane
+        ? UserRole.RIDER
+        : UserRole.CLIENT;
+
     // serviceFocusRanks lives on supplier_profiles, not users.
     const { serviceFocusRanks: _ranks, ...userProfile } = profile;
     const normalizedProfile = {
@@ -84,6 +91,17 @@ export class AuthService {
       normalizedProfile,
       role,
     );
+
+    if (isRiderLane) {
+      user.isActive = false;
+      user.accountHoldReason = 'pending_verification';
+      await this.usersService.updateUserStatus(
+        user.id,
+        false,
+        'pending_verification',
+      );
+      await this.ridersService.createProfile({ userId: user.id });
+    }
 
     if (isSupplierLane) {
       const shopName =
@@ -105,8 +123,12 @@ export class AuthService {
       await this.notificationsService.createForAllAdmins({
         title: isSupplierLane
           ? 'New Supplier Registered'
-          : 'New User Registered',
-        message: `${email} just signed up${isSupplierLane ? ' as a supplier' : ''}.`,
+          : isRiderLane
+            ? 'New Rider Registered'
+            : 'New User Registered',
+        message: `${email} just signed up${
+          isSupplierLane ? ' as a supplier' : isRiderLane ? ' as a rider' : ''
+        }.`,
         type: 'new_user',
         metadata: {
           userId: user.id,
@@ -133,6 +155,12 @@ export class AuthService {
     if (!isValid) throw new UnauthorizedException('Invalid credentials');
 
     if (user.isActive === false) {
+      if (user.accountHoldReason === 'pending_verification') {
+        throw new ForbiddenException({
+          code: 'account_held',
+          message: 'Your account is pending verification by the admin.',
+        });
+      }
       if (
         user.role === UserRole.CLIENT &&
         user.isBetaUser &&

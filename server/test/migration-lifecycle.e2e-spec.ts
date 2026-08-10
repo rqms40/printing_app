@@ -965,7 +965,11 @@ describe('production migration lifecycle (e2e)', () => {
           'picked_up',
           users[1].id,
         ),
-        exact: await insertOrder('STATE-EXACT', 'out_for_delivery', users[3].id),
+        exact: await insertOrder(
+          'STATE-EXACT',
+          'out_for_delivery',
+          users[3].id,
+        ),
       };
 
       await insertAssignment(

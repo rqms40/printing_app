@@ -77,9 +77,9 @@ describe('FilesController', () => {
     const file = makeFile({ uploadedBy: 42 });
     jest.mocked(filesService.findById).mockResolvedValue(file);
 
-    await expect(controller.getFile(1, makeRequest(1, 'ops_admin'))).resolves.toBe(
-      file,
-    );
+    await expect(
+      controller.getFile(1, makeRequest(1, 'ops_admin')),
+    ).resolves.toBe(file);
   });
 
   it('rejects file metadata reads by non-owners', async () => {

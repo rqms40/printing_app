@@ -196,7 +196,8 @@ export class SuperService {
         payoutDetailsRef: null,
         reviewedBy: null,
         reviewedAt: null,
-        notes: 'Auto-created when user role set to supplier — pending Super review',
+        notes:
+          'Auto-created when user role set to supplier — pending Super review',
       });
       verification = await this.supplierVerificationRepo.save(verification);
       createdVerification = true;

@@ -42,11 +42,13 @@ export class PayoutsService {
     private readonly suppliersService: SuppliersService,
   ) {}
 
-  async list(params: {
-    settlementState?: PayoutSettlementState;
-    supplierId?: number;
-    limit?: number;
-  } = {}): Promise<Payout[]> {
+  async list(
+    params: {
+      settlementState?: PayoutSettlementState;
+      supplierId?: number;
+      limit?: number;
+    } = {},
+  ): Promise<Payout[]> {
     const where: Record<string, unknown> = {};
     if (params.settlementState) {
       where.settlementState = params.settlementState;
@@ -87,9 +89,7 @@ export class PayoutsService {
     actorUserId: number | null,
     manager?: EntityManager,
   ): Promise<{ payout: Payout; issueWindowEndsAt: Date }> {
-    const orderRepo = manager
-      ? manager.getRepository(Order)
-      : this.ordersRepo;
+    const orderRepo = manager ? manager.getRepository(Order) : this.ordersRepo;
     const payoutRepo = manager
       ? manager.getRepository(Payout)
       : this.payoutRepo;
@@ -468,9 +468,7 @@ export class PayoutsService {
     netMinor: string;
   }> {
     let grossMinor =
-      assignment.finalPriceMinor ??
-      order.finalTotalMinor ??
-      null;
+      assignment.finalPriceMinor ?? order.finalTotalMinor ?? null;
     if (grossMinor == null) {
       // Legacy major pesos → minor
       const major = Number(order.totalPrice ?? 0);

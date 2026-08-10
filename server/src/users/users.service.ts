@@ -87,6 +87,17 @@ export class UsersService {
     return this.usersRepo.save(user);
   }
 
+  async updateUserStatus(
+    userId: number,
+    isActive: boolean,
+    accountHoldReason: string | null,
+  ): Promise<void> {
+    await this.usersRepo.update(
+      { id: userId },
+      { isActive, accountHoldReason },
+    );
+  }
+
   async updateFcmToken(userId: number, token: string): Promise<void> {
     const normalizedToken = this.normalizeFcmToken(token);
     await this.dataSource.transaction(async (manager) => {

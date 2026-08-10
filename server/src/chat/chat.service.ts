@@ -122,6 +122,30 @@ export class ChatService {
     });
   }
 
+  async getOrCreateDirectConversation(userId: number): Promise<Conversation> {
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(Conversation);
+      const existing = await repo.findOne({
+        where: {
+          customerId: userId,
+          type: ConversationType.ADMIN,
+          status: Not(ConversationStatus.CLOSED),
+        },
+        order: { updatedAt: 'DESC' },
+      });
+      if (existing) return existing;
+
+      const conv = repo.create({
+        customerId: userId,
+        type: ConversationType.ADMIN,
+        orderId: null,
+        assignedRiderId: null,
+        status: ConversationStatus.OPEN,
+      });
+      return repo.save(conv);
+    });
+  }
+
   private async lockOrder(
     manager: EntityManager,
     orderId: number,

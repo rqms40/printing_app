@@ -51,6 +51,7 @@ export class ProofOfDeliveryDto {
 
   @ApiPropertyOptional({ example: 55 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   fileId?: number;

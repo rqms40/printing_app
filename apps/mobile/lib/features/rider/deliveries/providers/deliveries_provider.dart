@@ -382,25 +382,45 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     }
   }
 
-  Future<void> completePickupWithProof(
+  /// Returns true when pickup status was accepted by the server.
+  Future<bool> completePickupWithProof(
     String assignmentId,
     Map<String, dynamic> proofPayload,
   ) async {
     final current = state.viewById(assignmentId)?.assignment;
-    if (current == null || current.status != DeliveryStatus.accepted) return;
+    if (current == null || current.status != DeliveryStatus.accepted) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Accept the assignment before submitting pickup proof',
+      );
+      return false;
+    }
 
     final proofType = proofPayload['type']?.toString();
     final otp = proofPayload['otp']?.toString().trim();
+    final fileId = proofPayload['fileId'];
     if (proofType != 'photo' || otp == null || otp.isEmpty) {
       state = state.copyWith(
         errorMessage: () =>
             'Pickup OTP and photo proof are required before pickup',
       );
-      return;
+      return false;
+    }
+    if (fileId == null) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Photo upload failed — retake the photo and try again',
+      );
+      return false;
     }
 
     final proof = Map<String, dynamic>.from(proofPayload)..remove('otp');
-    await _patchStatus(
+    // Ensure numeric fileId for class-validator @IsInt on the server.
+    final rawId = proof['fileId'];
+    if (rawId is String) {
+      proof['fileId'] = int.tryParse(rawId) ?? rawId;
+    }
+    return _patchStatus(
       assignmentId,
       DeliveryStatus.pickedUp,
       proof: proof,
@@ -408,12 +428,19 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     );
   }
 
-  Future<void> completeDeliveryWithProof(
+  /// Returns true when delivery status was accepted by the server.
+  Future<bool> completeDeliveryWithProof(
     String assignmentId,
     Map<String, dynamic> proofPayload,
   ) async {
     final current = state.viewById(assignmentId)?.assignment;
-    if (current == null || current.status != DeliveryStatus.arrived) return;
+    if (current == null || current.status != DeliveryStatus.arrived) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Mark arrived before submitting proof of delivery',
+      );
+      return false;
+    }
 
     final proofType = proofPayload['type']?.toString();
     final otp = proofPayload['otp']?.toString().trim();
@@ -422,11 +449,15 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         errorMessage: () =>
             'Delivery OTP and proof are required before completing this stop',
       );
-      return;
+      return false;
     }
 
     final proof = Map<String, dynamic>.from(proofPayload)..remove('otp');
-    await _patchStatus(
+    final rawId = proof['fileId'];
+    if (rawId is String) {
+      proof['fileId'] = int.tryParse(rawId) ?? rawId;
+    }
+    return _patchStatus(
       assignmentId,
       DeliveryStatus.delivered,
       proof: proof,
@@ -528,7 +559,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     }
   }
 
-  Future<void> _patchStatus(
+  Future<bool> _patchStatus(
     String assignmentId,
     DeliveryStatus nextStatus, {
     Map<String, dynamic>? proof,
@@ -549,27 +580,34 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         data: data,
       );
     } on DioException catch (e) {
-      if (!mounted) return;
-      final msg = e.response?.data?['message'] ?? 'Unable to update delivery status';
+      if (!mounted) return false;
+      final raw = e.response?.data;
+      Object? msg;
+      if (raw is Map) {
+        msg = raw['message'] ?? raw['error'];
+      }
+      msg ??= 'Unable to update delivery status';
       state = state.copyWith(
         errorMessage: () => msg is List ? msg.join(', ') : msg.toString(),
       );
-      return;
+      return false;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       state = state.copyWith(
         errorMessage: () => 'Unable to update delivery status',
       );
-      return;
+      return false;
     }
 
-    if (!mounted) return;
+    if (!mounted) return false;
+    state = state.copyWith(errorMessage: () => null);
 
     if (realFlow &&
         (nextStatus == DeliveryStatus.delivered ||
-            nextStatus == DeliveryStatus.failed)) {
+            nextStatus == DeliveryStatus.failed ||
+            nextStatus == DeliveryStatus.pickedUp)) {
       await refreshAssignments();
-      return;
+      return true;
     }
 
     _updateAssignment(assignmentId, (a) {
@@ -644,6 +682,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
           return a;
       }
     });
+    return true;
   }
 
   Future<void> reset() => refreshAssignments();

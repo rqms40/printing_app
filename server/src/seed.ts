@@ -331,8 +331,9 @@ async function seed() {
       province: 'Davao del Sur',
       zip_code: '8000',
       landmark: 'Near SM City Davao',
-      latitude: 7.0731,
-      longitude: 125.6128,
+      // SM City Davao / Quimpo Blvd Ecoland (not the map-picker default)
+      latitude: 7.0497,
+      longitude: 125.588,
       is_default: true,
     },
     {

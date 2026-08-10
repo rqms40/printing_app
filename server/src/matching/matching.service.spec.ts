@@ -23,9 +23,7 @@ describe('MatchingService', () => {
   let auditService: jest.Mocked<
     Pick<AuditService, 'recordOrderStatusTransition' | 'append'>
   >;
-  let notificationsService: jest.Mocked<
-    Pick<NotificationsService, 'create'>
-  >;
+  let notificationsService: jest.Mocked<Pick<NotificationsService, 'create'>>;
 
   let txOrdersRepo: {
     findOne: jest.Mock;
@@ -120,9 +118,15 @@ describe('MatchingService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         MatchingService,
-        { provide: getRepositoryToken(SupplierAssignment), useValue: assignmentRepo },
+        {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: assignmentRepo,
+        },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
-        { provide: getRepositoryToken(SupplierProfile), useValue: supplierRepo },
+        {
+          provide: getRepositoryToken(SupplierProfile),
+          useValue: supplierRepo,
+        },
         {
           provide: DataSource,
           useValue: {

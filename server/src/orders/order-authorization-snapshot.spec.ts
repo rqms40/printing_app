@@ -46,7 +46,7 @@ describe('pesosToMinor / normalizeMinor', () => {
     ['49.50', '4950'],
     [1500, '150000'],
   ])('converts %s pesos to %s centavos', (pesos, expected) => {
-    expect(pesosToMinor(pesos as number | string)).toBe(expected);
+    expect(pesosToMinor(pesos)).toBe(expected);
   });
 
   it('rejects negative or non-finite major amounts', () => {

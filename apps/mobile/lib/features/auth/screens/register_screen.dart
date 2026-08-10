@@ -128,6 +128,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           });
           return;
         }
+        if (_draft.isRiderLane) {
+          setState(() => _step = _RegisterStep.profile);
+          return;
+        }
         if (!_draft.hasField) {
           setState(() => _stepError = 'Choose a field to continue');
           return;
@@ -822,7 +826,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   },
                 ),
               ],
-            ] else if (_draft.hasCategory) ...[
+            ] else if (_draft.hasCategory && !_draft.isRiderLane) ...[
               const SizedBox(height: AppSpacing.lg),
               Text(
                 'YOUR FIELD',

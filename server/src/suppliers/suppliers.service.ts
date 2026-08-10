@@ -217,7 +217,9 @@ export class SuppliersService {
   }
 
   /** Ranked service-focus list (1-based) from onboarding ranks. */
-  rankedServicesFromKeys(ranks: string[] | null | undefined): RankedServiceFocus[] {
+  rankedServicesFromKeys(
+    ranks: string[] | null | undefined,
+  ): RankedServiceFocus[] {
     const keys = Array.isArray(ranks) ? ranks : [];
     const seen = new Set<string>();
     const out: RankedServiceFocus[] = [];
@@ -242,9 +244,7 @@ export class SuppliersService {
 
   private async loadAssignmentStats(
     supplierIds: number[],
-  ): Promise<
-    Map<number, { ordersReceived: number; ordersAccepted: number }>
-  > {
+  ): Promise<Map<number, { ordersReceived: number; ordersAccepted: number }>> {
     const map = new Map<
       number,
       { ordersReceived: number; ordersAccepted: number }
@@ -574,7 +574,9 @@ export class SuppliersService {
     for (const [k, v] of Object.entries(raw ?? {})) {
       const key = String(k).trim().slice(0, 80);
       if (!key) continue;
-      out[key] = String(v ?? '').trim().slice(0, 500);
+      out[key] = String(v ?? '')
+        .trim()
+        .slice(0, 500);
     }
     return out;
   }

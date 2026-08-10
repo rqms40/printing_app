@@ -114,6 +114,7 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
   Future<Map<String, dynamic>?> _openProofSheet(
     String orderRef, {
     required ProofSheetKind kind,
+    String? initialOtp,
   }) {
     return showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -122,7 +123,11 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
       ),
-      builder: (_) => ProofOfDeliverySheet(orderRef: orderRef, kind: kind),
+      builder: (_) => ProofOfDeliverySheet(
+        orderRef: orderRef,
+        kind: kind,
+        initialOtp: initialOtp,
+      ),
     );
   }
 
@@ -132,22 +137,47 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
       final proof = await _openProofSheet(
         current!.order.orderRef,
         kind: ProofSheetKind.pickup,
+        initialOtp: current.assignment.pickupOtp,
       );
       if (proof == null) return;
       setState(() => _isAdvancing = true);
-      await ref
+      final ok = await ref
           .read(deliveriesProvider.notifier)
           .completePickupWithProof(widget.assignmentId, proof);
+      if (!mounted) return;
+      setState(() => _isAdvancing = false);
+      if (!ok) {
+        final err = ref.read(deliveriesProvider).errorMessage;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              err ??
+                  'Pickup failed. Ask ops/supplier for the pickup OTP (shown on admin order).',
+            ),
+          ),
+        );
+      }
+      return;
     } else if (current?.status == DeliveryStatus.arrived) {
       final proof = await _openProofSheet(
         current!.order.orderRef,
         kind: ProofSheetKind.delivery,
+        initialOtp: current.assignment.deliveryOtp,
       );
       if (proof == null) return;
       setState(() => _isAdvancing = true);
-      await ref
+      final ok = await ref
           .read(deliveriesProvider.notifier)
           .completeDeliveryWithProof(widget.assignmentId, proof);
+      if (!mounted) return;
+      setState(() => _isAdvancing = false);
+      if (!ok) {
+        final err = ref.read(deliveriesProvider).errorMessage;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err ?? 'Delivery proof failed')),
+        );
+      }
+      return;
     } else {
       setState(() => _isAdvancing = true);
       await ref
@@ -156,6 +186,12 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
     }
     if (!mounted) return;
     setState(() => _isAdvancing = false);
+    final err = ref.read(deliveriesProvider).errorMessage;
+    if (err != null && err.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(err)),
+      );
+    }
 
     final view = ref.read(deliveriesProvider).viewById(widget.assignmentId);
     if (view?.isInProgress ?? false) {
@@ -254,7 +290,7 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
     final visual = riderDeliveryVisual(view.status, colors);
     final order = view.order;
     final destination = order.destination;
-    final destLatLng = destination?.latLng;
+    final destLatLng = view.pinDestination;
 
     return Scaffold(
       backgroundColor: colors.background,

@@ -1,8 +1,5 @@
 import { getMetadataArgsStorage } from 'typeorm';
-import {
-  Order,
-  PaymentAuthorizationStatus,
-} from './order.entity';
+import { Order, PaymentAuthorizationStatus } from './order.entity';
 
 function columnType(
   target: Function,
