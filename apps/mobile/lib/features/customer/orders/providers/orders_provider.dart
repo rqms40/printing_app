@@ -372,6 +372,26 @@ Map<String, String> _parseSpecDisplayValues(dynamic raw) {
   return display;
 }
 
+Map<String, String> _parseSpecLabels(dynamic raw) {
+  if (raw is! List) return const {};
+  final labels = <String, String>{};
+  for (final entry in raw.whereType<Map>()) {
+    final row = Map<String, dynamic>.from(entry);
+    final key = _readJsonValue(row, 'specKey', 'spec_key', 'key')?.toString();
+    final label = _readJsonValue(
+      row,
+      'specLabel',
+      'spec_label',
+      'label',
+    )?.toString();
+    if (key == null || key.isEmpty || label == null || label.trim().isEmpty) {
+      continue;
+    }
+    labels[key] = label;
+  }
+  return labels;
+}
+
 DateTime _parseDate(dynamic value) {
   if (value is String) return DateTime.parse(value);
   return DateTime.now();
@@ -416,6 +436,7 @@ Order _parseOrder(Map<String, dynamic> json) {
     'specs',
   );
   final specs = _parseSpecValues(specValuesRaw);
+  final specLabels = _parseSpecLabels(specValuesRaw);
   final specDisplayValues = _parseSpecDisplayValues(specValuesRaw);
   final category = _readJsonValue(json, 'category')?.toString() ?? '';
   final itemsJson = _readJsonValue(json, 'items');
@@ -511,25 +532,30 @@ Order _parseOrder(Map<String, dynamic> json) {
             0,
           ),
     specs: specs,
+    specLabels: specLabels,
     specDisplayValues: specDisplayValues,
-    paperSpecs: _parsePaperSpecs(
-      _readJsonValue(json, 'paperSpecs', 'paper_specs') is Map
-          ? Map<String, dynamic>.from(
-              _readJsonValue(json, 'paperSpecs', 'paper_specs') as Map,
-            )
-          : category == 'paper' && specs.isNotEmpty
-          ? specs
-          : null,
-    ),
-    threeDSpecs: _parseThreeDSpecs(
-      _readJsonValue(json, 'threeDSpecs', 'three_d_specs') is Map
-          ? Map<String, dynamic>.from(
-              _readJsonValue(json, 'threeDSpecs', 'three_d_specs') as Map,
-            )
-          : category == '3d' && specs.isNotEmpty
-          ? specs
-          : null,
-    ),
+    paperSpecs: category == 'paper'
+        ? _parsePaperSpecs(
+            _readJsonValue(json, 'paperSpecs', 'paper_specs') is Map
+                ? Map<String, dynamic>.from(
+                    _readJsonValue(json, 'paperSpecs', 'paper_specs') as Map,
+                  )
+                : specs.isNotEmpty
+                ? specs
+                : null,
+          )
+        : null,
+    threeDSpecs: category == '3d'
+        ? _parseThreeDSpecs(
+            _readJsonValue(json, 'threeDSpecs', 'three_d_specs') is Map
+                ? Map<String, dynamic>.from(
+                    _readJsonValue(json, 'threeDSpecs', 'three_d_specs') as Map,
+                  )
+                : specs.isNotEmpty
+                ? specs
+                : null,
+          )
+        : null,
     quantity:
         int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
     totalPrice:
@@ -738,6 +764,7 @@ OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
     'specs',
   );
   final specs = _parseSpecValues(specValuesRaw);
+  final specLabels = _parseSpecLabels(specValuesRaw);
   final specDisplayValues = _parseSpecDisplayValues(specValuesRaw);
   final category =
       _readJsonValue(
@@ -786,21 +813,26 @@ OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
             0,
           ),
     specs: specs,
+    specLabels: specLabels,
     specDisplayValues: specDisplayValues,
-    paperSpecs: _parsePaperSpecs(
-      paperSpecJson is Map
-          ? Map<String, dynamic>.from(paperSpecJson)
-          : category == 'paper' && specs.isNotEmpty
-          ? specs
-          : null,
-    ),
-    threeDSpecs: _parseThreeDSpecs(
-      threeDSpecJson is Map
-          ? Map<String, dynamic>.from(threeDSpecJson)
-          : category == '3d' && specs.isNotEmpty
-          ? specs
-          : null,
-    ),
+    paperSpecs: category == 'paper'
+        ? _parsePaperSpecs(
+            paperSpecJson is Map
+                ? Map<String, dynamic>.from(paperSpecJson)
+                : specs.isNotEmpty
+                ? specs
+                : null,
+          )
+        : null,
+    threeDSpecs: category == '3d'
+        ? _parseThreeDSpecs(
+            threeDSpecJson is Map
+                ? Map<String, dynamic>.from(threeDSpecJson)
+                : specs.isNotEmpty
+                ? specs
+                : null,
+          )
+        : null,
     quantity:
         int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
     totalPrice:
@@ -830,6 +862,7 @@ OrderLineItem _lineItemFromOrder(Order order) {
     fileName: order.fileName,
     fileMetadataId: order.fileMetadataId,
     specs: order.specs,
+    specLabels: order.specLabels,
     specDisplayValues: order.specDisplayValues,
     paperSpecs: order.paperSpecs,
     threeDSpecs: order.threeDSpecs,

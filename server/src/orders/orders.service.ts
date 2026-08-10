@@ -692,8 +692,25 @@ export class OrdersService {
           supplierAssignment?.decision === SupplierAssignmentDecision.ACCEPTED
             ? supplierAssignment.id
             : null;
+        let customerCodEligible = customerSafeOrder.codEligible ?? false;
+        if (
+          order.pricingStatus === PricingStatus.QUOTED &&
+          order.quotedTotalMinor != null &&
+          acceptedQuoteAssignmentId != null
+        ) {
+          const advisory =
+            await this.paymentsService.evaluateCodEligibilityForUser({
+              userId: order.userId,
+              finalTotalMinor: order.quotedTotalMinor,
+              excludeOrderId: order.id,
+            });
+          customerCodEligible = advisory.eligible;
+        }
         return {
           ...customerSafeOrder,
+          // Advisory only. acceptQuote re-evaluates the same policy while the
+          // customer and order rows are locked, closing the TOCTOU window.
+          codEligible: customerCodEligible,
           deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
           deliveryQueuePosition: queuePosition,
           deliveryQueueSize:

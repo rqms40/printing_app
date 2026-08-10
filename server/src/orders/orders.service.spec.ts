@@ -234,6 +234,7 @@ describe('OrdersService', () => {
   let creditsService: Partial<CreditsService>;
   let paymentsService: {
     assertCodEligibleForCheckout: jest.Mock;
+    evaluateCodEligibilityForUser: jest.Mock;
     ensurePendingCodCollection: jest.Mock;
   };
   let notificationsService: Partial<NotificationsService>;
@@ -416,6 +417,9 @@ describe('OrdersService', () => {
     };
     paymentsService = {
       assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
+      evaluateCodEligibilityForUser: jest
+        .fn()
+        .mockResolvedValue({ eligible: false }),
       ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
     };
     notificationsService = {
@@ -2448,6 +2452,77 @@ describe('OrdersService', () => {
       expect(JSON.stringify(result)).not.toContain('acceptanceDeadline');
       expect(JSON.stringify(result)).not.toContain('rankPosition');
       expect(JSON.stringify(result)).not.toContain('finalPriceMinor');
+    });
+
+    it('advises COD for a newly quoted RFQ that currently passes policy', async () => {
+      repo.find.mockResolvedValue([
+        {
+          ...mockOrder,
+          id: 41,
+          userId: 1,
+          pricingStatus: PricingStatus.QUOTED,
+          quotedTotalMinor: '12500',
+          codEligible: false,
+        },
+      ] as Order[]);
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 901,
+          orderId: 41,
+          decision: SupplierAssignmentDecision.ACCEPTED,
+        } as SupplierAssignment,
+      ]);
+      paymentsService.evaluateCodEligibilityForUser.mockResolvedValueOnce({
+        eligible: true,
+      });
+
+      const [result] = await service.findByUser(1);
+
+      expect(
+        paymentsService.evaluateCodEligibilityForUser,
+      ).toHaveBeenCalledWith({
+        userId: 1,
+        finalTotalMinor: '12500',
+        excludeOrderId: 41,
+      });
+      expect(result).toMatchObject({
+        pricingStatus: PricingStatus.QUOTED,
+        quoteAssignmentId: 901,
+        codEligible: true,
+      });
+    });
+
+    it('withholds COD when a newly quoted RFQ currently fails policy', async () => {
+      repo.find.mockResolvedValue([
+        {
+          ...mockOrder,
+          id: 42,
+          userId: 1,
+          pricingStatus: PricingStatus.QUOTED,
+          quotedTotalMinor: '150100',
+          codEligible: true,
+        },
+      ] as Order[]);
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 902,
+          orderId: 42,
+          decision: SupplierAssignmentDecision.ACCEPTED,
+        } as SupplierAssignment,
+      ]);
+      paymentsService.evaluateCodEligibilityForUser.mockResolvedValueOnce({
+        eligible: false,
+      });
+
+      const [result] = await service.findByUser(1);
+
+      expect(result).toMatchObject({
+        pricingStatus: PricingStatus.QUOTED,
+        quoteAssignmentId: 902,
+        codEligible: false,
+      });
     });
 
     it('limits customer supplier contact to public presentation fields', async () => {

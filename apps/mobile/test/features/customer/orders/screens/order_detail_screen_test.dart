@@ -95,4 +95,85 @@ void main() {
     expect(find.text('Wrong address'), findsNothing);
     expect(find.text('Landmark: Test'), findsOneWidget);
   });
+
+  testWidgets('renders the API-owned spec snapshot label verbatim', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final base = _order(
+      id: '42',
+      orderId: 'ORD-10042',
+      paymentMethod: PaymentMethod.gridCredits,
+      deliveryAddress: const OrderDeliveryAddress(
+        fullAddress: 'Davao City',
+        city: 'Davao City',
+        latitude: 7.0,
+        longitude: 125.0,
+      ),
+    );
+    final order = base.copyWith(
+      category: 'future-fabrication',
+      items: const [
+        OrderLineItem(
+          id: '420',
+          orderId: 'ORD-10042',
+          category: 'future-fabrication',
+          categoryName: 'Future Fabrication',
+          specs: {'finish': 'matte'},
+          specLabels: {'finish': 'UV-DTF / CMYK+W'},
+          specDisplayValues: {'finish': 'Matte finish'},
+          quantity: 1,
+          totalPrice: 2,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _wrap(const OrderDetailScreen(orderId: '42'), orders: [order]),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('UV-DTF / CMYK+W'), findsOneWidget);
+    expect(find.text('Finish'), findsNothing);
+    expect(find.text('Matte finish'), findsOneWidget);
+  });
+
+  testWidgets('legacy accepted assignment keeps historical commerce cards', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 3600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final base = _order(
+      id: '77',
+      orderId: 'ORD-LEGACY',
+      paymentMethod: PaymentMethod.cod,
+      deliveryAddress: const OrderDeliveryAddress(
+        fullAddress: 'Davao City',
+        city: 'Davao City',
+        latitude: 7.0,
+        longitude: 125.0,
+      ),
+    );
+    final legacy = base.copyWith(
+      quoteAssignmentId: 901,
+      estimatedCompletionAt: DateTime(2026, 8, 20),
+    );
+
+    await tester.pumpWidget(
+      _wrap(const OrderDetailScreen(orderId: '77'), orders: [legacy]),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('Price Breakdown'), findsOneWidget);
+    expect(find.text('Payment'), findsOneWidget);
+    expect(find.textContaining('Estimated ready by'), findsOneWidget);
+    expect(find.text('Quote accepted'), findsNothing);
+  });
 }

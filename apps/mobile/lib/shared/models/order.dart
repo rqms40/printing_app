@@ -192,6 +192,7 @@ class OrderLineItem {
     this.fileName,
     this.fileMetadataId,
     this.specs = const {},
+    this.specLabels = const {},
     this.specDisplayValues = const {},
     this.paperSpecs,
     this.threeDSpecs,
@@ -213,6 +214,7 @@ class OrderLineItem {
   final String? fileName;
   final int? fileMetadataId;
   final Map<String, dynamic> specs;
+  final Map<String, String> specLabels;
   final Map<String, String> specDisplayValues;
   final PaperSpecs? paperSpecs;
   final ThreeDSpecs? threeDSpecs;
@@ -315,6 +317,7 @@ class Order {
     this.fileName,
     this.fileMetadataId,
     this.specs = const {},
+    this.specLabels = const {},
     this.specDisplayValues = const {},
     this.paperSpecs,
     this.threeDSpecs,
@@ -383,6 +386,7 @@ class Order {
   final String? fileName;
   final int? fileMetadataId;
   final Map<String, dynamic> specs;
+  final Map<String, String> specLabels;
   final Map<String, String> specDisplayValues;
   final PaperSpecs? paperSpecs;
   final ThreeDSpecs? threeDSpecs;
@@ -462,6 +466,7 @@ class Order {
         fileName: fileName,
         fileMetadataId: fileMetadataId,
         specs: specs,
+        specLabels: specLabels,
         specDisplayValues: specDisplayValues,
         paperSpecs: paperSpecs,
         threeDSpecs: threeDSpecs,
@@ -512,8 +517,7 @@ class Order {
       quotedTotalMinor != null ||
       quotedAt != null ||
       quoteAcceptedAt != null ||
-      promisedCompletionAt != null ||
-      quoteAssignmentId != null;
+      lineItems.any((item) => item.pricingModel == 'quote_required');
 
   String get itemSummary {
     final names = lineItems
@@ -542,6 +546,7 @@ class Order {
     String? fileName,
     int? fileMetadataId,
     Map<String, dynamic>? specs,
+    Map<String, String>? specLabels,
     Map<String, String>? specDisplayValues,
     PaperSpecs? paperSpecs,
     ThreeDSpecs? threeDSpecs,
@@ -610,6 +615,7 @@ class Order {
       fileName: fileName ?? this.fileName,
       fileMetadataId: fileMetadataId ?? this.fileMetadataId,
       specs: specs ?? this.specs,
+      specLabels: specLabels ?? this.specLabels,
       specDisplayValues: specDisplayValues ?? this.specDisplayValues,
       paperSpecs: paperSpecs ?? this.paperSpecs,
       threeDSpecs: threeDSpecs ?? this.threeDSpecs,

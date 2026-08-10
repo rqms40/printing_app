@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +6,7 @@ import 'package:printing_app/config/theme/app_theme.dart';
 import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/screens/product_screen.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 
 void main() {
   testWidgets(
@@ -30,11 +29,12 @@ void main() {
   testWidgets(
     'product card is accessible and navigates to generic requirements',
     (tester) async {
-      final router = await _pumpProducts(tester);
+      final result = await _pumpProducts(tester);
+      final router = result.router;
       final card = find.byKey(const ValueKey('catalog-product-flyers'));
 
       final semantics = tester.getSemantics(card);
-      expect(semantics.hasFlag(SemanticsFlag.isButton), isTrue);
+      expect(semantics.flagsCollection.isButton, isTrue);
       expect(tester.getSize(card).height, greaterThanOrEqualTo(44));
       await tester.tap(
         find.descendant(of: card, matching: find.byType(InkWell)),
@@ -45,6 +45,31 @@ void main() {
       expect(router.canPop(), isTrue);
     },
   );
+
+  testWidgets('live product selection advances the catalog tutorial', (
+    tester,
+  ) async {
+    final result = await _pumpProducts(tester);
+    final container = result.container;
+    final tutorial = container.read(pipelineTutorialProvider.notifier);
+    tutorial.start();
+    tutorial.advance();
+    tutorial.advance();
+    expect(
+      container.read(pipelineTutorialProvider).step,
+      PipelineStep.catalogProduct,
+    );
+
+    final card = find.byKey(const ValueKey('catalog-product-flyers'));
+    await tester.tap(find.descendant(of: card, matching: find.byType(InkWell)));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(pipelineTutorialProvider).step,
+      PipelineStep.catalogRequirements,
+    );
+    expect(find.text('Requirements: flyers'), findsOneWidget);
+  });
 
   testWidgets('product browsing renders in light and dark themes', (
     tester,
@@ -82,7 +107,7 @@ void main() {
   });
 }
 
-Future<GoRouter> _pumpProducts(
+Future<({GoRouter router, ProviderContainer container})> _pumpProducts(
   WidgetTester tester, {
   String groupSlug = 'marketing-promo',
   ThemeData? theme,
@@ -127,7 +152,7 @@ Future<GoRouter> _pumpProducts(
     ),
   );
   await tester.pumpAndSettle();
-  return router;
+  return (router: router, container: container);
 }
 
 Map<String, dynamic> _snapshotWire() {

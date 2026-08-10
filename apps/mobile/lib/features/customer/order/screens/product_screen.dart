@@ -8,6 +8,7 @@ import 'package:printing_app/features/customer/order/models/product_catalog.dart
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/catalog_product_card.dart';
 import 'package:printing_app/features/customer/order/widgets/catalog_authority_banner.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 
 class ProductScreen extends ConsumerWidget {
   const ProductScreen({super.key, required this.groupSlug});
@@ -65,7 +66,7 @@ class ProductScreen extends ConsumerWidget {
                     CatalogProductCard(
                       key: ValueKey('catalog-product-${product.slug}'),
                       product: product,
-                      onTap: () => _selectProduct(context, product),
+                      onTap: () => _selectProduct(context, ref, product),
                     ),
                     const SizedBox(height: AppSpacing.md),
                   ],
@@ -75,7 +76,15 @@ class ProductScreen extends ConsumerWidget {
     );
   }
 
-  void _selectProduct(BuildContext context, ProductCategory product) {
+  void _selectProduct(
+    BuildContext context,
+    WidgetRef ref,
+    ProductCategory product,
+  ) {
+    final tutorial = ref.read(pipelineTutorialProvider);
+    if (tutorial.active && tutorial.step == PipelineStep.catalogProduct) {
+      ref.read(pipelineTutorialProvider.notifier).advance();
+    }
     context.push(
       '/customer/order/products/${Uri.encodeComponent(product.slug)}/requirements',
     );

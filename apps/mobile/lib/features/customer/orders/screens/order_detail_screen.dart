@@ -643,8 +643,11 @@ class OrderDetailScreen extends ConsumerWidget {
       return item.specDisplayValues.entries
           .where((entry) => entry.value.trim().isNotEmpty)
           .map(
-            (entry) =>
-                _specRow(_humanizeSpecKey(entry.key), entry.value, colors),
+            (entry) => _specRow(
+              item.specLabels[entry.key] ?? _humanizeSpecKey(entry.key),
+              entry.value,
+              colors,
+            ),
           )
           .toList();
     }

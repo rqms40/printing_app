@@ -6,6 +6,7 @@ import 'package:printing_app/features/customer/order/providers/order_provider.da
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/catalog_authority_banner.dart';
 import 'package:printing_app/features/customer/order/widgets/dynamic_spec_field.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 
 DateTime? parseStrictRequiredDate(String raw) {
   final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(raw.trim());
@@ -164,6 +165,10 @@ class _CatalogRequirementsScreenState
           displayValues: product.displayValues(_values),
           notes: _notesController.text,
         );
+    final tutorial = ref.read(pipelineTutorialProvider);
+    if (tutorial.active && tutorial.step == PipelineStep.catalogRequirements) {
+      ref.read(pipelineTutorialProvider.notifier).advance();
+    }
     context.go('/customer/order/upload');
   }
 }

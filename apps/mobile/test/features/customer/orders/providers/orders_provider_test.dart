@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,7 @@ import 'package:printing_app/features/customer/address/providers/address_provide
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/features/customer/orders/widgets/quote_card.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
@@ -1058,6 +1060,39 @@ void main() {
   });
 
   group('OrdersNotifier catalog quote lifecycle', () {
+    testWidgets('server-projected COD advisory reaches the quoted rail UI', (
+      tester,
+    ) async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      WebSocketService.instance.disconnect();
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      ordersGetResponse = [_quotedCatalogOrderJson()];
+      final notifier = OrdersNotifier(skipBootstrap: true);
+      await tester.runAsync(notifier.refreshOrders);
+      final projectedOrder = notifier.state.single;
+      notifier.dispose();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: QuoteCard(
+                order: projectedOrder,
+                isOwner: true,
+                onAccept: (_, _, _) async {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(projectedOrder.codEligible, isTrue);
+      expect(find.text('Cash on Delivery'), findsOneWidget);
+    });
+
     test('keeps RFQ batch lines independently reviewable', () async {
       WebSocketService.disableOrdersSocketForTests = true;
       WebSocketService.instance.disconnect();
@@ -1128,6 +1163,7 @@ void main() {
         expect(item.groupName, 'Future Services');
         expect(item.examples, ['Custom future parts']);
         expect(item.specs, {'finish': 'matte'});
+        expect(item.specLabels, {'finish': 'UV-DTF / CMYK+W'});
         expect(item.specDisplayValues, {'finish': 'Matte finish'});
         expect(item.paperSpecs, isNull);
         expect(item.threeDSpecs, isNull);
@@ -1176,11 +1212,7 @@ void main() {
         addTearDown(notifier.dispose);
 
         final first = notifier.acceptQuote('42', 77, PaymentMethod.gridCredits);
-        final replay = notifier.acceptQuote(
-          '42',
-          77,
-          PaymentMethod.cod,
-        );
+        final replay = notifier.acceptQuote('42', 77, PaymentMethod.cod);
         await Future<void>.delayed(const Duration(milliseconds: 20));
         expect(acceptQuoteCalls, 1);
         acceptQuoteGate!.complete();
@@ -1488,10 +1520,25 @@ Map<String, dynamic> _quotedCatalogOrderJson() {
         'pricingModel': 'quote_required',
         'quantity': 2,
         'totalPrice': null,
+        'paperSpecs': {
+          'paperSize': 'a4',
+          'colorMode': 'full_color',
+          'mediaType': 'standard',
+          'printSides': 'front_only',
+          'binding': 'none',
+        },
+        'threeDSpecs': {
+          'fileFormat': 'stl',
+          'material': 'pla',
+          'color': 'white',
+          'infillPercentage': 20,
+          'layerHeight': 0.2,
+          'supports': false,
+        },
         'specs': [
           {
             'key': 'finish',
-            'label': 'Finish',
+            'label': 'UV-DTF / CMYK+W',
             'value': 'matte',
             'displayValue': 'Matte finish',
           },

@@ -187,6 +187,63 @@ void main() {
       expect(order.quotedGoodsMinor.toString(), '90071992547409930000');
     });
 
+    test(
+      'legacy accepted assignment token does not imply an RFQ lifecycle',
+      () {
+        final legacy = Order(
+          id: 'legacy-paper',
+          orderId: 'ORD-LEGACY',
+          userId: '1',
+          category: 'paper',
+          quantity: 1,
+          totalPrice: 250,
+          deliveryFee: 25,
+          pricingStatus: PricingStatus.accepted,
+          quoteAssignmentId: 901,
+          paymentMethod: PaymentMethod.cod,
+          paymentStatus: PaymentStatus.pending,
+          orderStatus: OrderStatus.production,
+          deliveryOption: 'delivery',
+          estimatedCompletionAt: now.add(const Duration(days: 2)),
+          createdAt: now,
+          updatedAt: now,
+        );
+
+        expect(legacy.hasQuoteLifecycle, isFalse);
+      },
+    );
+
+    test('quote-required accepted catalog order retains RFQ lifecycle', () {
+      final rfq = Order(
+        id: 'accepted-rfq',
+        orderId: 'ORD-RFQ',
+        userId: '1',
+        category: 'custom-signage',
+        quantity: 1,
+        totalPrice: 0,
+        deliveryFee: 0,
+        pricingStatus: PricingStatus.accepted,
+        paymentMethod: PaymentMethod.gridCredits,
+        paymentStatus: PaymentStatus.pending,
+        orderStatus: OrderStatus.awaitingPayment,
+        deliveryOption: 'delivery',
+        createdAt: now,
+        updatedAt: now,
+        items: const [
+          OrderLineItem(
+            id: 'accepted-rfq-line',
+            orderId: 'ORD-RFQ',
+            category: 'custom-signage',
+            pricingModel: 'quote_required',
+            quantity: 1,
+            totalPrice: 0,
+          ),
+        ],
+      );
+
+      expect(rfq.hasQuoteLifecycle, isTrue);
+    });
+
     test('copyWith updates specified fields only', () {
       const rider = AssignedRiderContact(
         userId: '70',

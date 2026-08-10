@@ -9,6 +9,7 @@ import 'package:printing_app/features/customer/order/models/product_catalog.dart
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/catalog_group_card.dart';
 import 'package:printing_app/features/customer/order/widgets/catalog_authority_banner.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 
 /// Customer entry point for the grouped v1.10 product catalog.
 class CategoryScreen extends ConsumerWidget {
@@ -71,9 +72,7 @@ class CategoryScreen extends ConsumerWidget {
                 key: ValueKey('catalog-group-${group.slug}'),
                 group: group,
                 icon: _groupIcon(group),
-                onTap: () => context.push(
-                  '/customer/order/groups/${Uri.encodeComponent(group.slug)}',
-                ),
+                onTap: () => _selectGroup(context, ref, group),
               ),
               const SizedBox(height: AppSpacing.md),
             ],
@@ -90,4 +89,12 @@ class CategoryScreen extends ConsumerWidget {
     'specialized-prototyping' => HugeIcons.strokeRoundedCube,
     _ => HugeIcons.strokeRoundedPrinter,
   };
+
+  void _selectGroup(BuildContext context, WidgetRef ref, ProductGroup group) {
+    final tutorial = ref.read(pipelineTutorialProvider);
+    if (tutorial.active && tutorial.step == PipelineStep.catalogGroup) {
+      ref.read(pipelineTutorialProvider.notifier).advance();
+    }
+    context.push('/customer/order/groups/${Uri.encodeComponent(group.slug)}');
+  }
 }

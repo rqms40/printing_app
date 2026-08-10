@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +8,7 @@ import 'package:printing_app/config/theme/app_theme.dart';
 import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/screens/category_screen.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 
 void main() {
   testWidgets('shows four group cards with exact copy and product counts', (
@@ -38,9 +38,32 @@ void main() {
     final card = find.byKey(const ValueKey('catalog-group-marketing-promo'));
     expect(card, findsOneWidget);
     final semantics = tester.getSemantics(card);
-    expect(semantics.hasFlag(SemanticsFlag.isButton), isTrue);
+    expect(semantics.flagsCollection.isButton, isTrue);
     expect(tester.getSize(card).height, greaterThanOrEqualTo(44));
     expect(tester.getSize(card).width, greaterThanOrEqualTo(44));
+  });
+
+  testWidgets('live group selection advances the catalog tutorial', (
+    tester,
+  ) async {
+    final container = await _pumpCategory(tester);
+    final tutorial = container.read(pipelineTutorialProvider.notifier);
+    tutorial.start();
+    tutorial.advance();
+    expect(
+      container.read(pipelineTutorialProvider).step,
+      PipelineStep.catalogGroup,
+    );
+
+    final card = find.byKey(const ValueKey('catalog-group-marketing-promo'));
+    await tester.tap(find.descendant(of: card, matching: find.byType(InkWell)));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(pipelineTutorialProvider).step,
+      PipelineStep.catalogProduct,
+    );
+    expect(find.text('marketing-promo'), findsOneWidget);
   });
 
   testWidgets('failed catalog shows browse warning and retry recovers', (
@@ -132,7 +155,7 @@ void main() {
   });
 }
 
-Future<void> _pumpCategory(
+Future<ProviderContainer> _pumpCategory(
   WidgetTester tester, {
   ThemeData? theme,
   bool addMode = false,
@@ -174,6 +197,7 @@ Future<void> _pumpCategory(
     ),
   );
   await tester.pumpAndSettle();
+  return container;
 }
 
 Map<String, dynamic> _snapshotWire() {

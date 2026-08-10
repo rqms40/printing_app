@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/screens/catalog_requirements_screen.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 
 void main() {
   test('strict required dates reject normalized impossible calendar dates', () {
@@ -26,6 +27,15 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
+    final tutorial = container.read(pipelineTutorialProvider.notifier);
+    tutorial.start();
+    tutorial.advance();
+    tutorial.advance();
+    tutorial.advance();
+    expect(
+      container.read(pipelineTutorialProvider).step,
+      PipelineStep.catalogRequirements,
+    );
     final router = GoRouter(
       initialLocation: '/requirements',
       routes: [
@@ -80,6 +90,10 @@ void main() {
     expect(flow.requiredDate, DateTime(2099, 12, 31));
     expect(flow.quantity, 25);
     expect(flow.specs, {'stock': 'matte'});
+    expect(
+      container.read(pipelineTutorialProvider).step,
+      PipelineStep.uploadCard,
+    );
   });
 }
 
