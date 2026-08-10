@@ -10,6 +10,7 @@ import {
 export enum PendingUploadState {
   PLANNED = 'planned',
   CLEANUP_PENDING = 'cleanup_pending',
+  DELETING = 'deleting',
 }
 
 @Entity('pending_file_uploads')
@@ -20,6 +21,22 @@ export class PendingFileUpload {
 
   @Column({ type: 'varchar', length: 32 })
   state: PendingUploadState;
+
+  @Column({ name: 'upload_token', type: 'uuid' })
+  uploadToken: string;
+
+  @Column({ name: 'upload_lease_expires_at', type: 'timestamptz' })
+  uploadLeaseExpiresAt: Date;
+
+  @Column({ name: 'claim_token', type: 'uuid', nullable: true })
+  claimToken: string | null;
+
+  @Column({
+    name: 'claim_lease_expires_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  claimLeaseExpiresAt: Date | null;
 
   @Column({ name: 'attempt_count', type: 'int', default: 0 })
   attemptCount: number;

@@ -106,13 +106,17 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
       CREATE TABLE IF NOT EXISTS "pending_file_uploads" (
         "object_key" varchar(512) PRIMARY KEY,
         "state" varchar(32) NOT NULL,
+        "upload_token" uuid NOT NULL,
+        "upload_lease_expires_at" TIMESTAMPTZ NOT NULL,
+        "claim_token" uuid,
+        "claim_lease_expires_at" TIMESTAMPTZ,
         "attempt_count" integer NOT NULL DEFAULT 0,
         "last_error" text,
         "next_attempt_at" TIMESTAMPTZ NOT NULL,
         "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
         "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
         CONSTRAINT "chk_pending_file_uploads_state"
-          CHECK ("state" IN ('planned', 'cleanup_pending'))
+          CHECK ("state" IN ('planned', 'cleanup_pending', 'deleting'))
       )
     `);
     await queryRunner.query(`
@@ -323,9 +327,23 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-      DROP TABLE IF EXISTS "pending_file_uploads"
-    `);
+    if (await queryRunner.hasTable('pending_file_uploads')) {
+      await queryRunner.query(`
+        LOCK TABLE "pending_file_uploads" IN ACCESS EXCLUSIVE MODE
+      `);
+      const pendingRows = (await queryRunner.query(`
+        SELECT COUNT(*)::text AS pending_upload_count
+        FROM "pending_file_uploads"
+      `)) as Array<{ pending_upload_count: string }>;
+      if (Number(pendingRows[0]?.pending_upload_count ?? 0) > 0) {
+        throw new Error(
+          'Cannot roll back catalog RFQ v1.10 while pending file upload cleanup rows remain. Wait for cleanup or resolve pending_file_uploads explicitly, then retry.',
+        );
+      }
+      await queryRunner.query(`
+        DROP TABLE IF EXISTS "pending_file_uploads"
+      `);
+    }
 
     if (await queryRunner.hasTable('supplier_capabilities')) {
       await queryRunner.query(`

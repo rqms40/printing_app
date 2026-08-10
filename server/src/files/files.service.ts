@@ -37,6 +37,7 @@ import { removeUploadedTempFile } from './upload-temp-file';
 import { ProductCategory } from '../products/entities/product-category.entity';
 import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
 import { PendingUploadCleanupService } from './pending-upload-cleanup.service';
+import type { PendingUploadHandle } from './pending-upload-cleanup.service';
 
 @Injectable()
 export class FilesService {
@@ -60,7 +61,7 @@ export class FilesService {
     purpose = 'general',
     productSlug?: string,
   ): Promise<FileMetadata> {
-    const createdObjectKeys: string[] = [];
+    const pendingHandles: PendingUploadHandle[] = [];
     try {
       const normalizedPurpose = this.normalizeUploadPurpose(purpose);
       const fileExt = extname(file.originalname).toLowerCase();
@@ -139,29 +140,31 @@ export class FilesService {
       const now = new Date();
       const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
       const objectKey = `uploads/${normalizedPurpose}/${datePath}/${randomUUID()}${fileExt}`;
-      createdObjectKeys.push(objectKey);
-      await this.pendingUploadCleanup.plan(objectKey);
+      const originalHandle = await this.pendingUploadCleanup.plan(objectKey);
+      pendingHandles.push(originalHandle);
 
       // Run the original-file upload concurrently with content analysis.
       // Disk-backed uploads stream to object storage so large files do not sit
       // in Multer's heap buffer before the service can process them.
-      const uploadPromise = (
-        this.hasMemoryBuffer(file)
-          ? this.storageService.upload(
-              this.storageSource(file),
-              objectKey,
-              file.mimetype,
-            )
-          : this.storageService.upload(
-              this.storageSource(file),
-              objectKey,
-              file.mimetype,
-              file.size,
-            )
-      ).catch((err: unknown) => {
-        this.logger.error('MinIO upload failed', err);
-        throw new InternalServerErrorException('File upload failed');
-      });
+      const uploadPromise = this.pendingUploadCleanup
+        .withUploadLeaseHeartbeat(originalHandle, () =>
+          this.hasMemoryBuffer(file)
+            ? this.storageService.upload(
+                this.storageSource(file),
+                objectKey,
+                file.mimetype,
+              )
+            : this.storageService.upload(
+                this.storageSource(file),
+                objectKey,
+                file.mimetype,
+                file.size,
+              ),
+        )
+        .catch((err: unknown) => {
+          this.logger.error('MinIO upload failed', err);
+          throw new InternalServerErrorException('File upload failed');
+        });
 
       const analysisPromise =
         // Synchronous 3D analysis can fully materialize/decompress archives.
@@ -196,13 +199,17 @@ export class FilesService {
       let previewGlbObjectKey: string | null = null;
       if (analysis?.glbBuffer && analysis.glbBuffer.length > 0) {
         const previewKey = `${objectKey}.preview.glb`;
-        createdObjectKeys.push(previewKey);
-        await this.pendingUploadCleanup.plan(previewKey);
+        const previewHandle = await this.pendingUploadCleanup.plan(previewKey);
+        pendingHandles.push(previewHandle);
         try {
-          await this.storageService.upload(
-            analysis.glbBuffer,
-            previewKey,
-            'model/gltf-binary',
+          await this.pendingUploadCleanup.withUploadLeaseHeartbeat(
+            previewHandle,
+            () =>
+              this.storageService.upload(
+                analysis.glbBuffer!,
+                previewKey,
+                'model/gltf-binary',
+              ),
           );
           previewGlbObjectKey = previewKey;
         } catch (err) {
@@ -210,10 +217,10 @@ export class FilesService {
             `Preview GLB upload failed for ${objectKey}: ${err}`,
           );
           await this.pendingUploadCleanup.queueCleanupAndReconcile(
-            [previewKey],
+            [previewHandle],
             err,
           );
-          createdObjectKeys.splice(createdObjectKeys.indexOf(previewKey), 1);
+          pendingHandles.splice(pendingHandles.indexOf(previewHandle), 1);
         }
       }
 
@@ -240,9 +247,10 @@ export class FilesService {
         previewGlbObjectKey,
       });
       try {
-        const saved = await this.fileRepo.save(meta);
-        await this.pendingUploadCleanup.complete(createdObjectKeys);
-        createdObjectKeys.length = 0;
+        const saved = await this.pendingUploadCleanup.finalizeUpload(meta, [
+          ...pendingHandles,
+        ]);
+        pendingHandles.length = 0;
         return saved;
       } catch (saveError) {
         try {
@@ -250,8 +258,7 @@ export class FilesService {
             where: { objectKey },
           });
           if (committed) {
-            await this.pendingUploadCleanup.complete(createdObjectKeys);
-            createdObjectKeys.length = 0;
+            pendingHandles.length = 0;
             return committed;
           }
         } catch (lookupError) {
@@ -263,7 +270,7 @@ export class FilesService {
       }
     } catch (error) {
       await this.pendingUploadCleanup.queueCleanupAndReconcile(
-        createdObjectKeys,
+        pendingHandles,
         error,
       );
       throw error;

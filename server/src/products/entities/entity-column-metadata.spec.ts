@@ -130,6 +130,28 @@ describe('product entity column metadata', () => {
       name: 'next_attempt_at',
       type: 'timestamptz',
     });
+    expect(columnOptions(PendingFileUpload, 'uploadToken')).toMatchObject({
+      name: 'upload_token',
+      type: 'uuid',
+    });
+    expect(
+      columnOptions(PendingFileUpload, 'uploadLeaseExpiresAt'),
+    ).toMatchObject({
+      name: 'upload_lease_expires_at',
+      type: 'timestamptz',
+    });
+    expect(columnOptions(PendingFileUpload, 'claimToken')).toMatchObject({
+      name: 'claim_token',
+      type: 'uuid',
+      nullable: true,
+    });
+    expect(
+      columnOptions(PendingFileUpload, 'claimLeaseExpiresAt'),
+    ).toMatchObject({
+      name: 'claim_lease_expires_at',
+      type: 'timestamptz',
+      nullable: true,
+    });
   });
 
   it('enforces one capability record per supplier/product pair', () => {

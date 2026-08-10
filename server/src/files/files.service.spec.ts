@@ -51,7 +51,8 @@ const mockCategoryRepo = {
 
 const mockPendingUploadCleanup = {
   plan: jest.fn(),
-  complete: jest.fn(),
+  withUploadLeaseHeartbeat: jest.fn(),
+  finalizeUpload: jest.fn(),
   queueCleanupAndReconcile: jest.fn(),
 };
 
@@ -105,8 +106,19 @@ describe('FilesService', () => {
     mockAnalysisService.analyze.mockResolvedValue(null);
     mockStorageService.objectExists.mockResolvedValue(true);
     mockCategoryRepo.findOne.mockResolvedValue(null);
-    mockPendingUploadCleanup.plan.mockResolvedValue(undefined);
-    mockPendingUploadCleanup.complete.mockResolvedValue(undefined);
+    mockPendingUploadCleanup.plan.mockImplementation(
+      async (objectKey: string) => ({
+        objectKey,
+        uploadToken: '11111111-1111-4111-8111-111111111111',
+      }),
+    );
+    mockPendingUploadCleanup.withUploadLeaseHeartbeat.mockImplementation(
+      async (_handle: unknown, operation: () => Promise<unknown>) =>
+        operation(),
+    );
+    mockPendingUploadCleanup.finalizeUpload.mockImplementation(
+      async (metadata: FileMetadata) => metadata,
+    );
     mockPendingUploadCleanup.queueCleanupAndReconcile.mockResolvedValue(
       undefined,
     );
@@ -206,6 +218,24 @@ describe('FilesService', () => {
         file.buffer,
         file.mimetype,
         file.originalname,
+      );
+      expect(
+        mockPendingUploadCleanup.withUploadLeaseHeartbeat,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          objectKey: expect.stringMatching(/\.jpg$/),
+          uploadToken: expect.any(String),
+        }),
+        expect.any(Function),
+      );
+      expect(mockPendingUploadCleanup.finalizeUpload).toHaveBeenCalledWith(
+        savedMeta,
+        [
+          expect.objectContaining({
+            objectKey: expect.stringMatching(/\.jpg$/),
+            uploadToken: expect.any(String),
+          }),
+        ],
       );
     });
 
@@ -658,7 +688,9 @@ describe('FilesService', () => {
       mockFileRepo.create.mockImplementation(
         (value: Partial<FileMetadata>) => value as FileMetadata,
       );
-      mockFileRepo.save.mockRejectedValue(new Error('database unavailable'));
+      mockPendingUploadCleanup.finalizeUpload.mockRejectedValue(
+        new Error('database unavailable'),
+      );
       mockFileRepo.findOne.mockResolvedValue(null);
 
       await expect(service.storeMetadata(file, 42)).rejects.toThrow(
@@ -668,7 +700,10 @@ describe('FilesService', () => {
       const originalKey = mockFileRepo.create.mock.calls[0][0].objectKey;
       expect(
         mockPendingUploadCleanup.queueCleanupAndReconcile,
-      ).toHaveBeenCalledWith([originalKey], expect.any(Error));
+      ).toHaveBeenCalledWith(
+        [expect.objectContaining({ objectKey: originalKey })],
+        expect.any(Error),
+      );
     });
 
     it('keeps objects when an ambiguous save actually committed metadata', async () => {
@@ -677,12 +712,16 @@ describe('FilesService', () => {
       mockFileRepo.create.mockImplementation(
         (value: Partial<FileMetadata>) => value as FileMetadata,
       );
-      mockFileRepo.save.mockRejectedValue(new Error('connection lost'));
+      mockPendingUploadCleanup.finalizeUpload.mockRejectedValue(
+        new Error('connection lost'),
+      );
       mockFileRepo.findOne.mockResolvedValue(saved);
 
       await expect(service.storeMetadata(makeFile(), 42)).resolves.toBe(saved);
       expect(mockStorageService.delete).not.toHaveBeenCalled();
-      expect(mockPendingUploadCleanup.complete).toHaveBeenCalled();
+      expect(
+        mockPendingUploadCleanup.queueCleanupAndReconcile,
+      ).not.toHaveBeenCalled();
     });
 
     it('does not delete an ambiguously saved object when reconciliation is unavailable', async () => {
@@ -690,7 +729,9 @@ describe('FilesService', () => {
       mockFileRepo.create.mockImplementation(
         (value: Partial<FileMetadata>) => value as FileMetadata,
       );
-      mockFileRepo.save.mockRejectedValue(new Error('connection lost'));
+      mockPendingUploadCleanup.finalizeUpload.mockRejectedValue(
+        new Error('connection lost'),
+      );
       mockFileRepo.findOne.mockRejectedValue(new Error('database unavailable'));
 
       await expect(service.storeMetadata(makeFile(), 42)).rejects.toThrow(
@@ -707,7 +748,9 @@ describe('FilesService', () => {
       mockFileRepo.create.mockImplementation(
         (value: Partial<FileMetadata>) => value as FileMetadata,
       );
-      mockFileRepo.save.mockRejectedValue(new Error('primary save failure'));
+      mockPendingUploadCleanup.finalizeUpload.mockRejectedValue(
+        new Error('primary save failure'),
+      );
       mockFileRepo.findOne.mockResolvedValue(null);
       mockPendingUploadCleanup.queueCleanupAndReconcile.mockResolvedValue(
         undefined,

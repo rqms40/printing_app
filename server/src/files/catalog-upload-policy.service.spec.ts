@@ -101,12 +101,14 @@ async function make3mf(
     modelXml?: string;
     contentTypesXml?: string;
     relationshipsXml?: string;
-    extras?: Record<string, string>;
+    modelName?: string;
+    extras?: Record<string, string | Buffer>;
     compression?: 'STORE' | 'DEFLATE';
     comment?: string;
   } = {},
 ): Promise<Buffer> {
   const zip = new JSZip();
+  const modelName = options.modelName ?? '3D/3dmodel.model';
   zip.file(
     '[Content_Types].xml',
     options.contentTypesXml ??
@@ -115,9 +117,9 @@ async function make3mf(
   zip.file(
     '_rels/.rels',
     options.relationshipsXml ??
-      '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>',
+      `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/${modelName}" TargetMode="Internal" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>`,
   );
-  zip.file('3D/3dmodel.model', options.modelXml ?? VALID_MODEL_XML);
+  zip.file(modelName, options.modelXml ?? VALID_MODEL_XML);
   for (const [name, value] of Object.entries(options.extras ?? {})) {
     zip.file(name, value);
   }
@@ -277,6 +279,72 @@ describe('CatalogUploadPolicyService', () => {
     expect(() => policy.validate(category, upload)).not.toThrow();
   });
 
+  it('accepts ASCII STL whose only geometry is beyond the first MiB', () => {
+    const content = Buffer.from(
+      `solid delayed\n${'# harmless padding\n'.repeat(70_000)}facet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\n${'# trailing padding\n'.repeat(70_000)}endsolid delayed\n`,
+    );
+
+    expect(() =>
+      policy.validate(model, makeUpload('delayed.stl', 'model/stl', content)),
+    ).not.toThrow();
+  });
+
+  it.each([
+    [
+      'ASCII STL corruption hidden in the middle',
+      model,
+      makeUpload(
+        'middle.stl',
+        'model/stl',
+        Buffer.from(
+          `solid corrupt\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\n${'# padding\n'.repeat(120_000)}vertex NaN 0 0\n${'# padding\n'.repeat(120_000)}endsolid corrupt\n`,
+        ),
+      ),
+    ],
+    [
+      'OBJ out-of-range vertex reference',
+      model,
+      makeUpload(
+        'bad-ref.obj',
+        'model/obj',
+        Buffer.from('v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 99\n'),
+      ),
+    ],
+    [
+      'OBJ non-finite vertex',
+      model,
+      makeUpload(
+        'bad-number.obj',
+        'model/obj',
+        Buffer.from('v 0 0 0\nv 1 0 0\nv 0 1 0\nv NaN 2 3\nf 1 2 3\n'),
+      ),
+    ],
+    [
+      'DXF malformed middle group code',
+      cad,
+      makeUpload(
+        'bad-middle.dxf',
+        'image/vnd.dxf',
+        Buffer.from(
+          `0\nSECTION\n2\nENTITIES\n${'999\npadding\n'.repeat(100_000)}NOT_A_CODE\ncorrupt\n${'999\npadding\n'.repeat(100_000)}0\nENDSEC\n0\nEOF\n`,
+        ),
+      ),
+    ],
+  ])('rejects %s during complete text parsing', (_case, category, upload) => {
+    expect(() => policy.validate(category, upload)).toThrow(
+      'File content does not match its type',
+    );
+  });
+
+  it('accepts valid positive and negative OBJ vertex references', () => {
+    const content = Buffer.from(
+      'v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\nf -3 -2 -1\n',
+    );
+    expect(() =>
+      policy.validate(model, makeUpload('refs.obj', 'model/obj', content)),
+    ).not.toThrow();
+  });
+
   it.each([
     [
       'model tags hidden in comments',
@@ -325,12 +393,53 @@ describe('CatalogUploadPolicyService', () => {
         modelXml: VALID_MODEL_XML.replace('objectid="1"', 'objectid="999"'),
       },
     ],
+    [
+      'a non-finite vertex coordinate',
+      {
+        modelXml: VALID_MODEL_XML.replace('x="0"', 'x="NaN"'),
+      },
+    ],
+    [
+      'an out-of-range triangle vertex',
+      {
+        modelXml: VALID_MODEL_XML.replace('v3="2"', 'v3="99"'),
+      },
+    ],
+    [
+      'duplicate numeric object IDs',
+      {
+        modelXml: VALID_MODEL_XML.replace(
+          '</resources>',
+          '<object id="1" type="model"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/></vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object></resources>',
+        ),
+      },
+    ],
+    [
+      'an external model relationship',
+      {
+        relationshipsXml:
+          '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" TargetMode="External" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>',
+      },
+    ],
   ])('rejects 3MF XML with %s', async (_case, options) => {
     const archive = await make3mf(options);
     expect(() =>
       policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
     ).toThrow('File content does not match its type');
   });
+
+  it.each(['3D//bad.model', 'http:evil.model'])(
+    'rejects non-normalized OPC model URI %s',
+    async (modelName) => {
+      const archive = await make3mf({ modelName });
+      expect(() =>
+        policy.validate(
+          model,
+          makeUpload('bad.3mf', 'application/zip', archive),
+        ),
+      ).toThrow('File content does not match its type');
+    },
+  );
 
   it('accepts a valid ZIP comment containing an EOCD signature', async () => {
     const archive = await make3mf({
@@ -436,6 +545,83 @@ describe('CatalogUploadPolicyService', () => {
     expect(() =>
       policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
     ).toThrow('File content does not match its type');
+  });
+
+  it.each([
+    ['embedded JAR', 'Payload/evil.jar', Buffer.from('PK\u0003\u0004jar')],
+    ['embedded APK/Dex', 'Payload/classes.dex', Buffer.from('dex\n035\u0000')],
+    ['embedded native executable', 'Payload/tool.exe', Buffer.from('MZevil')],
+  ])('rejects a valid 3MF with %s content', async (_case, name, content) => {
+    const archive = await make3mf({ extras: { [name]: content } });
+    expect(() =>
+      policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
+    ).toThrow('File content does not match its type');
+  });
+
+  it('rejects a corrupt unreferenced ZIP entry CRC', async () => {
+    const entryName = 'Metadata/info.xml';
+    const archive = await make3mf({
+      compression: 'STORE',
+      contentTypesXml:
+        '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/><Default Extension="xml" ContentType="application/xml"/></Types>',
+      extras: { [entryName]: '<metadata/>' },
+    });
+    const local = findZipRecord(archive, 0x04034b50, entryName);
+    const central = findZipRecord(archive, 0x02014b50, entryName);
+    const wrongCrc = (archive.readUInt32LE(local + 14) ^ 0xffffffff) >>> 0;
+    archive.writeUInt32LE(wrongCrc, local + 14);
+    archive.writeUInt32LE(wrongCrc, central + 16);
+
+    expect(() =>
+      policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
+    ).toThrow('File content does not match its type');
+  });
+
+  it('accepts legal DEFLATE compression-option flag bits', async () => {
+    const archive = await make3mf();
+    for (const entryName of [
+      '[Content_Types].xml',
+      '_rels/.rels',
+      '3D/3dmodel.model',
+    ]) {
+      const local = findZipRecord(archive, 0x04034b50, entryName);
+      const central = findZipRecord(archive, 0x02014b50, entryName);
+      archive.writeUInt16LE(
+        archive.readUInt16LE(local + 6) | 0x0002,
+        local + 6,
+      );
+      archive.writeUInt16LE(
+        archive.readUInt16LE(central + 8) | 0x0002,
+        central + 8,
+      );
+    }
+
+    expect(() =>
+      policy.validate(
+        model,
+        makeUpload('deflate.3mf', 'application/zip', archive),
+      ),
+    ).not.toThrow();
+  });
+
+  it('accepts a declared safe PNG thumbnail part', async () => {
+    const contentTypesXml =
+      '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/><Default Extension="png" ContentType="image/png"/></Types>';
+    const archive = await make3mf({
+      contentTypesXml,
+      extras: {
+        'Metadata/thumbnail.png': Buffer.from([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        ]),
+      },
+    });
+
+    expect(() =>
+      policy.validate(
+        model,
+        makeUpload('thumbnail.3mf', 'application/zip', archive),
+      ),
+    ).not.toThrow();
   });
 
   it.each([

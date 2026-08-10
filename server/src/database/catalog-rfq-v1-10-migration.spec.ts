@@ -16,9 +16,14 @@ describe('CatalogRfqV1101784334500000', () => {
     options: {
       hasColumn?: boolean;
       duplicateCapabilities?: DuplicateCapabilityRow[];
+      pendingUploadCount?: number;
     } = {},
   ) {
-    const { hasColumn = false, duplicateCapabilities = [] } = options;
+    const {
+      hasColumn = false,
+      duplicateCapabilities = [],
+      pendingUploadCount = 0,
+    } = options;
     const queries: Array<{ sql: string; parameters?: unknown[] }> = [];
     const queryRunner = {
       hasTable: jest.fn(async () => true),
@@ -27,6 +32,9 @@ describe('CatalogRfqV1101784334500000', () => {
         queries.push({ sql, parameters });
         if (sql.includes('payload_signature')) {
           return duplicateCapabilities;
+        }
+        if (sql.includes('pending_upload_count')) {
+          return [{ pending_upload_count: String(pendingUploadCount) }];
         }
         return [];
       }),
@@ -247,5 +255,23 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(
       indexOf('DROP INDEX IF EXISTS "uq_file_metadata_object_key"'),
     ).toBeLessThan(indexOf('DROP COLUMN "catalog_product_slug"'));
+  });
+
+  it('refuses rollback while durable upload cleanup rows remain', async () => {
+    const { queryRunner, queries } = createQueryRunner({
+      pendingUploadCount: 1,
+    });
+
+    await expect(
+      new CatalogRfqV1101784334500000().down(queryRunner),
+    ).rejects.toThrow('pending file upload cleanup');
+    expect(queries[0]?.sql).toContain(
+      'LOCK TABLE "pending_file_uploads" IN ACCESS EXCLUSIVE MODE',
+    );
+    expect(
+      queries.some((query) =>
+        query.sql.includes('DROP TABLE IF EXISTS "pending_file_uploads"'),
+      ),
+    ).toBe(false);
   });
 });

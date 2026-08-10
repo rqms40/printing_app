@@ -14,7 +14,6 @@ import { FileMetadata } from './entities/file-metadata.entity';
 
 const MB = 1024 * 1024;
 const CONTENT_INSPECTION_BYTES = MB;
-const MAX_ARCHIVE_BYTES_EXAMINED = 8 * MB;
 const MAX_CENTRAL_DIRECTORY_BYTES = MB;
 const MAX_ENTRY_COUNT = 64;
 const MAX_ENTRY_UNCOMPRESSED_BYTES = 16 * MB;
@@ -22,7 +21,11 @@ const MAX_TOTAL_UNCOMPRESSED_BYTES = 64 * MB;
 const MAX_MODEL_XML_BYTES = 2 * MB;
 const MAX_XML_BYTES = 256 * 1024;
 const MAX_COMPRESSION_RATIO = 100;
-const MAX_INSPECTION_MS = 500;
+const MAX_INSPECTION_MS = 5_000;
+const MAX_TEXT_INSPECTION_MS = 5_000;
+const TEXT_SCAN_CHUNK_BYTES = 64 * 1024;
+const MAX_TEXT_LINE_BYTES = 16 * 1024;
+const MAX_TEXT_LINES = 5_000_000;
 const ZIP_EOCD_SIGNATURE = 0x06054b50;
 const ZIP_CENTRAL_SIGNATURE = 0x02014b50;
 const ZIP_LOCAL_SIGNATURE = 0x04034b50;
@@ -73,11 +76,14 @@ type ZipEntry = {
 };
 
 type XmlRecord = Record<string, unknown>;
+type OpcContentTypes = {
+  defaults: Map<string, string>;
+  overrides: Map<string, string>;
+};
 
 class BoundedReader {
   readonly size: number;
   private descriptor: number | null = null;
-  private examined = 0;
 
   constructor(private readonly file: Express.Multer.File) {
     if (Buffer.isBuffer(file.buffer)) {
@@ -96,12 +102,10 @@ class BoundedReader {
       !Number.isSafeInteger(length) ||
       offset < 0 ||
       length < 0 ||
-      offset + length > this.size ||
-      this.examined + length > MAX_ARCHIVE_BYTES_EXAMINED
+      offset + length > this.size
     ) {
       throw new BadRequestException('File content does not match its type');
     }
-    this.examined += length;
     if (Buffer.isBuffer(this.file.buffer)) {
       return this.file.buffer.subarray(offset, offset + length);
     }
@@ -111,6 +115,50 @@ class BoundedReader {
       throw new BadRequestException('Uploaded file is missing content');
     }
     return result;
+  }
+
+  scanLines(visitor: (line: string) => boolean): boolean {
+    const started = Date.now();
+    let carry = '';
+    let offset = 0;
+    let lineCount = 0;
+    while (offset < this.size) {
+      if (Date.now() - started > MAX_TEXT_INSPECTION_MS) return false;
+      const length = Math.min(TEXT_SCAN_CHUNK_BYTES, this.size - offset);
+      let chunk: Buffer;
+      if (Buffer.isBuffer(this.file.buffer)) {
+        chunk = this.file.buffer.subarray(offset, offset + length);
+      } else {
+        chunk = Buffer.allocUnsafe(length);
+        if (readSync(this.descriptor!, chunk, 0, length, offset) !== length) {
+          return false;
+        }
+      }
+      offset += length;
+      const text = carry + chunk.toString('latin1');
+      const lines = text.split('\n');
+      carry = lines.pop() ?? '';
+      if (carry.length > MAX_TEXT_LINE_BYTES) return false;
+      for (const rawLine of lines) {
+        if (
+          ++lineCount > MAX_TEXT_LINES ||
+          rawLine.length > MAX_TEXT_LINE_BYTES
+        ) {
+          return false;
+        }
+        const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+        if (!visitor(line)) return false;
+      }
+    }
+    if (carry.length > 0) {
+      if (++lineCount > MAX_TEXT_LINES || carry.length > MAX_TEXT_LINE_BYTES) {
+        return false;
+      }
+      if (!visitor(carry.endsWith('\r') ? carry.slice(0, -1) : carry)) {
+        return false;
+      }
+    }
+    return Date.now() - started <= MAX_TEXT_INSPECTION_MS;
   }
 
   readHeadAndTail(windowBytes = CONTENT_INSPECTION_BYTES): {
@@ -248,8 +296,13 @@ export class CatalogUploadPolicyService {
   private signatureMatches(extension: string, reader: BoundedReader): boolean {
     if (reader.size === 0) return false;
     if (extension === '.3mf') return this.isValid3mf(reader);
+    if (extension === '.stl') return this.isValidStl(reader);
+    if (extension === '.obj') return this.isValidObj(reader);
 
-    const { head: content, tail } = reader.readHeadAndTail();
+    const content = reader.read(
+      0,
+      Math.min(reader.size, CONTENT_INSPECTION_BYTES),
+    );
     const ascii = content.toString('latin1');
     switch (extension) {
       case '.pdf':
@@ -278,14 +331,10 @@ export class CatalogUploadPolicyService {
         return ascii.startsWith('%!PS-Adobe') || ascii.startsWith('%PDF-');
       case '.psd':
         return this.isValidPsd(content);
-      case '.stl':
-        return this.isValidStl(content, tail, reader.size);
-      case '.obj':
-        return this.isValidObj(`${ascii}\n${tail.toString('latin1')}`);
       case '.dwg':
         return /^AC10\d{2}/.test(ascii);
       case '.dxf':
-        return this.isValidDxf(content, tail);
+        return this.isValidDxf(reader, content);
       default:
         return false;
     }
@@ -309,78 +358,271 @@ export class CatalogUploadPolicyService {
     );
   }
 
-  private isValidStl(content: Buffer, tail: Buffer, size: number): boolean {
-    if (size >= 84 && content.length >= 84) {
-      const triangles = content.readUInt32LE(80);
-      if (triangles > 0 && 84 + triangles * 50 === size) return true;
+  private isValidStl(reader: BoundedReader): boolean {
+    if (reader.size >= 84) {
+      const header = reader.read(0, 84);
+      const triangles = header.readUInt32LE(80);
+      if (triangles > 0 && 84 + triangles * 50 === reader.size) return true;
     }
-    const ascii =
-      tail.length > 0
-        ? `${content.toString('latin1')}\n${tail.toString('latin1')}`
-        : content.toString('latin1');
-    if (/^\s*solid\b/i.test(ascii)) {
-      const facets = ascii.match(/^\s*facet\s+normal\s+/gim)?.length ?? 0;
-      const vertices = ascii.match(/^\s*vertex\s+/gim)?.length ?? 0;
-      return (
-        facets > 0 &&
-        vertices >= facets * 3 &&
-        /^\s*endfacet\s*$/im.test(ascii) &&
-        /^\s*endsolid\b/im.test(ascii)
-      );
-    }
-    return false;
-  }
-
-  private isValidObj(ascii: string): boolean {
-    const vertices = ascii.match(
-      /^\s*v\s+[-+.\deE]+\s+[-+.\deE]+\s+[-+.\deE]+/gm,
-    );
-    const face = ascii.match(/^\s*f\s+([^\r\n]+)/gm)?.some((line) => {
-      const indices = line.trim().split(/\s+/).slice(1);
-      return (
-        indices.length >= 3 &&
-        indices.every((part) => /^-?\d+(?:\/[^\s]*)?$/.test(part))
-      );
+    let state:
+      | 'start'
+      | 'solid'
+      | 'outer_loop'
+      | 'vertices'
+      | 'endloop'
+      | 'endfacet'
+      | 'ended' = 'start';
+    let vertexCount = 0;
+    let facetCount = 0;
+    let ended = false;
+    const valid = reader.scanLines((rawLine) => {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) return true;
+      const tokens = line.split(/\s+/);
+      const keyword = tokens[0].toLowerCase();
+      if (state === 'start') {
+        if (keyword !== 'solid') return false;
+        state = 'solid';
+        return true;
+      }
+      if (state === 'ended') return false;
+      if (state === 'solid') {
+        if (keyword === 'endsolid') {
+          if (facetCount < 1) return false;
+          state = 'ended';
+          ended = true;
+          return true;
+        }
+        if (
+          tokens.length !== 5 ||
+          keyword !== 'facet' ||
+          tokens[1].toLowerCase() !== 'normal' ||
+          !tokens.slice(2).every((value) => this.isFiniteNumber(value))
+        ) {
+          return false;
+        }
+        state = 'outer_loop';
+        return true;
+      }
+      if (state === 'outer_loop') {
+        if (tokens.length !== 2 || line.toLowerCase() !== 'outer loop') {
+          return false;
+        }
+        vertexCount = 0;
+        state = 'vertices';
+        return true;
+      }
+      if (state === 'vertices') {
+        if (
+          tokens.length !== 4 ||
+          keyword !== 'vertex' ||
+          !tokens.slice(1).every((value) => this.isFiniteNumber(value))
+        ) {
+          return false;
+        }
+        vertexCount += 1;
+        if (vertexCount === 3) state = 'endloop';
+        return true;
+      }
+      if (state === 'endloop') {
+        if (tokens.length !== 1 || keyword !== 'endloop') return false;
+        state = 'endfacet';
+        return true;
+      }
+      if (tokens.length !== 1 || keyword !== 'endfacet') return false;
+      facetCount += 1;
+      state = 'solid';
+      return true;
     });
-    return (vertices?.length ?? 0) >= 3 && face === true;
+    return valid && ended && facetCount > 0;
   }
 
-  private isValidDxf(content: Buffer, tail: Buffer): boolean {
+  private isValidObj(reader: BoundedReader): boolean {
+    let vertices = 0;
+    let textureVertices = 0;
+    let normals = 0;
+    let faces = 0;
+    const maxPositive = { vertex: 0, texture: 0, normal: 0 };
+    const inertKeywords = new Set([
+      'o',
+      'g',
+      's',
+      'usemtl',
+      'mtllib',
+      'l',
+      'p',
+      'vp',
+      'cstype',
+      'deg',
+      'bmat',
+      'step',
+      'curv',
+      'curv2',
+      'surf',
+      'parm',
+      'trim',
+      'hole',
+      'scrv',
+      'sp',
+      'end',
+      'con',
+      'bevel',
+      'c_interp',
+      'd_interp',
+      'lod',
+      'shadow_obj',
+      'trace_obj',
+      'ctech',
+      'stech',
+    ]);
+    const valid = reader.scanLines((rawLine) => {
+      const line = rawLine.split('#', 1)[0].trim();
+      if (!line) return true;
+      const tokens = line.split(/\s+/);
+      const keyword = tokens.shift()!.toLowerCase();
+      if (keyword === 'v') {
+        if (
+          ![3, 4].includes(tokens.length) ||
+          !tokens.every((value) => this.isFiniteNumber(value))
+        ) {
+          return false;
+        }
+        vertices += 1;
+        return vertices <= MAX_TEXT_LINES;
+      }
+      if (keyword === 'vt') {
+        if (
+          tokens.length < 1 ||
+          tokens.length > 3 ||
+          !tokens.every((value) => this.isFiniteNumber(value))
+        ) {
+          return false;
+        }
+        textureVertices += 1;
+        return true;
+      }
+      if (keyword === 'vn') {
+        if (
+          tokens.length !== 3 ||
+          !tokens.every((value) => this.isFiniteNumber(value))
+        ) {
+          return false;
+        }
+        normals += 1;
+        return true;
+      }
+      if (keyword === 'f') {
+        if (tokens.length < 3) return false;
+        for (const token of tokens) {
+          const parts = token.split('/');
+          if (parts.length > 3 || !parts[0]) return false;
+          if (
+            !this.validateObjIndex(parts[0], vertices, maxPositive, 'vertex') ||
+            (parts[1] !== undefined &&
+              parts[1] !== '' &&
+              !this.validateObjIndex(
+                parts[1],
+                textureVertices,
+                maxPositive,
+                'texture',
+              )) ||
+            (parts[2] !== undefined &&
+              parts[2] !== '' &&
+              !this.validateObjIndex(parts[2], normals, maxPositive, 'normal'))
+          ) {
+            return false;
+          }
+        }
+        faces += 1;
+        return true;
+      }
+      return inertKeywords.has(keyword);
+    });
+    return (
+      valid &&
+      vertices >= 3 &&
+      faces > 0 &&
+      maxPositive.vertex <= vertices &&
+      maxPositive.texture <= textureVertices &&
+      maxPositive.normal <= normals
+    );
+  }
+
+  private validateObjIndex(
+    value: string,
+    definedCount: number,
+    maxima: { vertex: number; texture: number; normal: number },
+    kind: 'vertex' | 'texture' | 'normal',
+  ): boolean {
+    if (!/^[+-]?\d+$/.test(value)) return false;
+    const index = Number(value);
+    if (!Number.isSafeInteger(index) || index === 0) return false;
+    if (index < 0) return definedCount + index + 1 >= 1;
+    maxima[kind] = Math.max(maxima[kind], index);
+    return true;
+  }
+
+  private isValidDxf(reader: BoundedReader, content: Buffer): boolean {
     if (content.subarray(0, BINARY_DXF_MAGIC.length).equals(BINARY_DXF_MAGIC)) {
       return true;
     }
-    const ascii =
-      tail.length > 0
-        ? `${content.toString('latin1')}\n${tail.toString('latin1')}`
-        : content.toString('latin1');
-    if (tail.length > 0) {
-      return (
-        /(?:^|\r?\n)\s*0\s*\r?\n\s*SECTION\s*(?:\r?\n|$)/i.test(
-          content.toString('latin1'),
-        ) &&
-        /(?:^|\r?\n)\s*0\s*\r?\n\s*ENDSEC\s*(?:\r?\n|$)/i.test(
-          tail.toString('latin1'),
-        ) &&
-        /(?:^|\r?\n)\s*0\s*\r?\n\s*EOF\s*$/i.test(tail.toString('latin1'))
-      );
-    }
-    const lines = ascii
-      .replace(/\r/g, '')
-      .split('\n')
-      .map((line) => line.trim());
-    const pairs: Array<[string, string]> = [];
-    for (let index = 0; index + 1 < lines.length; index += 2) {
-      if (!/^-?\d+$/.test(lines[index])) return false;
-      pairs.push([lines[index], lines[index + 1]]);
-    }
+    let pendingCode: number | null = null;
+    let inSection = false;
+    let sawSection = false;
+    let sawEndSection = false;
+    let sawEof = false;
+    const valid = reader.scanLines((rawLine) => {
+      const line = rawLine.trim();
+      if (pendingCode === null) {
+        if (sawEof || !/^\d{1,4}$/.test(line)) return false;
+        const code = Number(line);
+        if (!Number.isInteger(code) || code < 0 || code > 1071) return false;
+        pendingCode = code;
+        return true;
+      }
+      const code = pendingCode;
+      pendingCode = null;
+      if (this.isDxfNumericCode(code) && !this.isFiniteNumber(line)) {
+        return false;
+      }
+      if (code !== 0) return true;
+      const marker = line.toUpperCase();
+      if (marker === 'SECTION') {
+        if (inSection || sawEof) return false;
+        inSection = true;
+        sawSection = true;
+      } else if (marker === 'ENDSEC') {
+        if (!inSection) return false;
+        inSection = false;
+        sawEndSection = true;
+      } else if (marker === 'EOF') {
+        if (inSection || !sawSection || !sawEndSection) return false;
+        sawEof = true;
+      }
+      return true;
+    });
+    return valid && pendingCode === null && !inSection && sawEof;
+  }
+
+  private isDxfNumericCode(code: number): boolean {
     return (
-      pairs[0]?.[0] === '0' &&
-      pairs[0]?.[1].toUpperCase() === 'SECTION' &&
-      pairs.some(
-        ([code, value]) => code === '0' && value.toUpperCase() === 'ENDSEC',
-      ) &&
-      pairs.at(-1)?.[0] === '0' &&
-      pairs.at(-1)?.[1].toUpperCase() === 'EOF'
+      (code >= 10 && code <= 59) ||
+      (code >= 60 && code <= 99) ||
+      (code >= 110 && code <= 149) ||
+      (code >= 160 && code <= 179) ||
+      (code >= 210 && code <= 239) ||
+      (code >= 270 && code <= 289) ||
+      (code >= 370 && code <= 389) ||
+      (code >= 400 && code <= 409) ||
+      (code >= 420 && code <= 469) ||
+      (code >= 1010 && code <= 1071)
+    );
+  }
+
+  private isFiniteNumber(value: string): boolean {
+    return (
+      /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) &&
+      Number.isFinite(Number(value))
     );
   }
 
@@ -388,26 +630,22 @@ export class CatalogUploadPolicyService {
     try {
       const started = Date.now();
       const entries = this.readZipDirectory(reader);
-      const contentTypes = this.readZipEntry(
+      const contentTypesXml = this.readZipEntry(
         reader,
         entries.get('[Content_Types].xml'),
         MAX_XML_BYTES,
       ).toString('utf8');
-      const relationships = this.readZipEntry(
+      const relationshipsXml = this.readZipEntry(
         reader,
         entries.get('_rels/.rels'),
         MAX_XML_BYTES,
       ).toString('utf8');
-      const contentTypeRoot = this.xmlRoot(contentTypes, 'Types');
-      if (
-        contentTypeRoot['@_xmlns'] !==
-        'http://schemas.openxmlformats.org/package/2006/content-types'
-      ) {
-        return false;
-      }
+      const contentTypeRoot = this.xmlRoot(contentTypesXml, 'Types');
+      const contentTypes = this.opcContentTypes(contentTypeRoot);
+      if (!contentTypes) return false;
       const modelContentType =
         'application/vnd.ms-package.3dmanufacturing-3dmodel+xml';
-      const relationshipRoot = this.xmlRoot(relationships, 'Relationships');
+      const relationshipRoot = this.xmlRoot(relationshipsXml, 'Relationships');
       if (
         relationshipRoot['@_xmlns'] !==
         'http://schemas.openxmlformats.org/package/2006/relationships'
@@ -420,6 +658,8 @@ export class CatalogUploadPolicyService {
           return (
             typeof record?.['@_Id'] === 'string' &&
             record['@_Id'].trim().length > 0 &&
+            (record['@_TargetMode'] === undefined ||
+              record['@_TargetMode'] === 'Internal') &&
             record?.['@_Type'] ===
               'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel'
           );
@@ -427,33 +667,33 @@ export class CatalogUploadPolicyService {
       );
       const target = this.xmlRecord(relationship)?.['@_Target'];
       if (typeof target !== 'string') return false;
-      const modelName = target.replace(/^\//, '');
-      if (!this.isSafeZipName(modelName)) return false;
-      const modelExtension = extname(modelName).slice(1).toLowerCase();
-      const declaresModel =
-        this.xmlArray(contentTypeRoot.Default).some((entry) => {
-          const record = this.xmlRecord(entry);
-          return (
-            record?.['@_ContentType'] === modelContentType &&
-            typeof record['@_Extension'] === 'string' &&
-            record['@_Extension'].toLowerCase() === modelExtension
-          );
-        }) ||
-        this.xmlArray(contentTypeRoot.Override).some((entry) => {
-          const record = this.xmlRecord(entry);
-          return (
-            record?.['@_ContentType'] === modelContentType &&
-            record['@_PartName'] === `/${modelName}`
-          );
-        });
-      if (!declaresModel) return false;
-      const model = this.readZipEntry(
-        reader,
-        entries.get(modelName),
-        MAX_MODEL_XML_BYTES,
-      ).toString('utf8');
+      const modelName = this.normalizeOpcPartUri(target, true);
+      if (
+        !modelName ||
+        this.contentTypeForPart(contentTypes, modelName) !== modelContentType
+      ) {
+        return false;
+      }
+      let modelXml: string | null = null;
+      for (const entry of entries.values()) {
+        if (Date.now() - started > MAX_INSPECTION_MS) return false;
+        const limit =
+          entry.name === modelName
+            ? MAX_MODEL_XML_BYTES
+            : entry.name === '[Content_Types].xml' ||
+                entry.name.endsWith('.rels') ||
+                entry.name.endsWith('.xml')
+              ? MAX_XML_BYTES
+              : MAX_ENTRY_UNCOMPRESSED_BYTES;
+        const content = this.readZipEntry(reader, entry, limit);
+        if (!this.isAllowed3mfPart(entry, content, contentTypes, modelName)) {
+          return false;
+        }
+        if (entry.name === modelName) modelXml = content.toString('utf8');
+      }
+      if (modelXml === null) return false;
       if (Date.now() - started > MAX_INSPECTION_MS) return false;
-      const modelRoot = this.xmlRoot(model, 'model');
+      const modelRoot = this.xmlRoot(modelXml, 'model');
       if (
         modelRoot['@_xmlns'] !==
         'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
@@ -465,29 +705,249 @@ export class CatalogUploadPolicyService {
       if (!resources || !build || this.xmlArray(build.item).length < 1) {
         return false;
       }
-      const meshObjectIds = new Set<string>();
+      const objectIds = new Set<number>();
+      const meshObjectIds = new Set<number>();
       for (const object of this.xmlArray(resources.object)) {
         const objectRecord = this.xmlRecord(object);
-        const objectId = objectRecord?.['@_id'];
+        const objectId = this.strictNonNegativeInteger(objectRecord?.['@_id']);
+        if (objectId === null || objectId < 1 || objectIds.has(objectId)) {
+          return false;
+        }
+        objectIds.add(objectId);
         const mesh = this.xmlRecord(this.xmlRecord(object)?.mesh);
         const vertices = this.xmlRecord(mesh?.vertices);
         const triangles = this.xmlRecord(mesh?.triangles);
+        if (!mesh) continue;
+        const vertexRecords = this.xmlArray(vertices?.vertex);
+        const triangleRecords = this.xmlArray(triangles?.triangle);
+        if (vertexRecords.length < 3 || triangleRecords.length < 1)
+          return false;
         if (
-          typeof objectId === 'string' &&
-          objectId.trim().length > 0 &&
-          this.xmlArray(vertices?.vertex).length >= 3 &&
-          this.xmlArray(triangles?.triangle).length >= 1
+          !vertexRecords.every((vertex) => {
+            const record = this.xmlRecord(vertex);
+            return ['@_x', '@_y', '@_z'].every(
+              (attribute) =>
+                typeof record?.[attribute] === 'string' &&
+                this.isFiniteNumber(record[attribute]),
+            );
+          }) ||
+          !triangleRecords.every((triangle) => {
+            const record = this.xmlRecord(triangle);
+            return ['@_v1', '@_v2', '@_v3'].every((attribute) => {
+              const index = this.strictNonNegativeInteger(record?.[attribute]);
+              return index !== null && index < vertexRecords.length;
+            });
+          })
         ) {
-          meshObjectIds.add(objectId);
+          return false;
         }
+        meshObjectIds.add(objectId);
       }
-      return this.xmlArray(build.item).some((item) => {
-        const objectId = this.xmlRecord(item)?.['@_objectid'];
-        return typeof objectId === 'string' && meshObjectIds.has(objectId);
+      const buildItems = this.xmlArray(build.item);
+      return (
+        buildItems.length > 0 &&
+        buildItems.every((item) => {
+          const objectId = this.strictNonNegativeInteger(
+            this.xmlRecord(item)?.['@_objectid'],
+          );
+          return objectId !== null && meshObjectIds.has(objectId);
+        })
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private opcContentTypes(root: XmlRecord): OpcContentTypes | null {
+    if (
+      root['@_xmlns'] !==
+      'http://schemas.openxmlformats.org/package/2006/content-types'
+    ) {
+      return null;
+    }
+    const defaults = new Map<string, string>();
+    const overrides = new Map<string, string>();
+    for (const entry of this.xmlArray(root.Default)) {
+      const record = this.xmlRecord(entry);
+      const extension = record?.['@_Extension'];
+      const contentType = record?.['@_ContentType'];
+      if (
+        typeof extension !== 'string' ||
+        !/^[A-Za-z0-9]+$/.test(extension) ||
+        typeof contentType !== 'string' ||
+        defaults.has(extension.toLowerCase())
+      ) {
+        return null;
+      }
+      defaults.set(extension.toLowerCase(), contentType);
+    }
+    for (const entry of this.xmlArray(root.Override)) {
+      const record = this.xmlRecord(entry);
+      const partName = record?.['@_PartName'];
+      const contentType = record?.['@_ContentType'];
+      if (typeof partName !== 'string' || typeof contentType !== 'string') {
+        return null;
+      }
+      const normalized = this.normalizeOpcPartUri(partName, true);
+      if (
+        !normalized ||
+        partName !== `/${normalized}` ||
+        overrides.has(normalized)
+      ) {
+        return null;
+      }
+      overrides.set(normalized, contentType);
+    }
+    return { defaults, overrides };
+  }
+
+  private contentTypeForPart(
+    contentTypes: OpcContentTypes,
+    name: string,
+  ): string | null {
+    const override = contentTypes.overrides.get(name);
+    if (override) return override;
+    const basename = name.slice(name.lastIndexOf('/') + 1);
+    const extension = basename
+      .slice(basename.lastIndexOf('.') + 1)
+      .toLowerCase();
+    return contentTypes.defaults.get(extension) ?? null;
+  }
+
+  private isAllowed3mfPart(
+    entry: ZipEntry,
+    content: Buffer,
+    contentTypes: OpcContentTypes,
+    modelName: string,
+  ): boolean {
+    // v1.10 accepts only the core OPC/model parts plus XML metadata and
+    // signature-checked PNG/JPEG thumbnails with matching content types.
+    // Executable/native/nested-archive and undeclared extensions are rejected.
+    if (entry.name.endsWith('/')) {
+      return entry.compressedSize === 0 && entry.uncompressedSize === 0;
+    }
+    if (this.normalizeOpcPartUri(entry.name, false) !== entry.name)
+      return false;
+    if (this.hasExecutableSignature(content)) return false;
+    if (content.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
+      return false;
+    }
+    if (entry.name === '[Content_Types].xml') {
+      return this.isSafeXml(content.toString('utf8'));
+    }
+    const contentType = this.contentTypeForPart(contentTypes, entry.name);
+    if (!contentType) return false;
+    if (entry.name === modelName) {
+      return (
+        contentType ===
+          'application/vnd.ms-package.3dmanufacturing-3dmodel+xml' &&
+        this.isSafeXml(content.toString('utf8'))
+      );
+    }
+    if (entry.name.endsWith('.rels')) {
+      return (
+        contentType ===
+          'application/vnd.openxmlformats-package.relationships+xml' &&
+        this.isSafeRelationshipsXml(content.toString('utf8'))
+      );
+    }
+    if (entry.name.endsWith('.xml')) {
+      return (
+        ['application/xml', 'text/xml'].includes(contentType) &&
+        this.isSafeXml(content.toString('utf8'))
+      );
+    }
+    if (entry.name.endsWith('.png')) {
+      return (
+        contentType === 'image/png' &&
+        content
+          .subarray(0, 8)
+          .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+      );
+    }
+    if (/\.jpe?g$/i.test(entry.name)) {
+      return (
+        contentType === 'image/jpeg' &&
+        content.length >= 3 &&
+        content[0] === 0xff &&
+        content[1] === 0xd8 &&
+        content[2] === 0xff
+      );
+    }
+    return false;
+  }
+
+  private isSafeRelationshipsXml(xml: string): boolean {
+    try {
+      const root = this.xmlRoot(xml, 'Relationships');
+      if (
+        root['@_xmlns'] !==
+        'http://schemas.openxmlformats.org/package/2006/relationships'
+      ) {
+        return false;
+      }
+      return this.xmlArray(root.Relationship).every((entry) => {
+        const record = this.xmlRecord(entry);
+        const target = record?.['@_Target'];
+        return (
+          typeof record?.['@_Id'] === 'string' &&
+          record['@_Id'].trim().length > 0 &&
+          typeof record['@_Type'] === 'string' &&
+          typeof target === 'string' &&
+          (record['@_TargetMode'] === undefined ||
+            record['@_TargetMode'] === 'Internal') &&
+          this.normalizeOpcPartUri(target, target.startsWith('/')) !== null
+        );
       });
     } catch {
       return false;
     }
+  }
+
+  private isSafeXml(xml: string): boolean {
+    return (
+      !/<!DOCTYPE\b|<!ENTITY\b/i.test(xml) &&
+      XMLValidator.validate(xml) === true
+    );
+  }
+
+  private strictNonNegativeInteger(value: unknown): number | null {
+    if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) ? parsed : null;
+  }
+
+  private normalizeOpcPartUri(
+    value: string,
+    allowLeadingSlash: boolean,
+  ): string | null {
+    if (
+      !value ||
+      value.includes('\\') ||
+      value.includes('\0') ||
+      value.includes('?') ||
+      value.includes('#') ||
+      value.includes('%') ||
+      value.includes(':')
+    ) {
+      return null;
+    }
+    if (value.startsWith('/') !== allowLeadingSlash) return null;
+    const withoutRoot = allowLeadingSlash ? value.slice(1) : value;
+    const segments = withoutRoot.split('/');
+    if (
+      segments.length < 1 ||
+      segments.some(
+        (segment) =>
+          !segment ||
+          segment === '.' ||
+          segment === '..' ||
+          segment.normalize('NFC') !== segment,
+      )
+    ) {
+      return null;
+    }
+    return segments.join('/');
   }
 
   private xmlRoot(xml: string, expectedRoot: string): XmlRecord {
@@ -563,6 +1023,7 @@ export class CatalogUploadPolicyService {
     const entries = new Map<string, ZipEntry>();
     const normalizedNames = new Set<string>();
     let cursor = 0;
+    let totalCompressed = 0;
     let totalUncompressed = 0;
     for (let index = 0; index < entryCount; index += 1) {
       if (
@@ -586,17 +1047,21 @@ export class CatalogUploadPolicyService {
         .subarray(cursor + 46, cursor + 46 + nameLength)
         .toString('utf8');
       const normalizedName = this.normalizedZipName(name);
+      totalCompressed += compressedSize;
       totalUncompressed += uncompressedSize;
       const ratio =
         compressedSize === 0 ? Infinity : uncompressedSize / compressedSize;
       if (
         (flags & 1) !== 0 ||
-        (flags & ~(0x0008 | 0x0800)) !== 0 ||
+        (flags & ~(0x0006 | 0x0008 | 0x0800)) !== 0 ||
+        (method !== 8 && (flags & 0x0006) !== 0) ||
         ![0, 8].includes(method) ||
         !this.isSafeZipName(name) ||
         entries.has(name) ||
         normalizedNames.has(normalizedName) ||
+        compressedSize > MAX_ENTRY_UNCOMPRESSED_BYTES ||
         uncompressedSize > MAX_ENTRY_UNCOMPRESSED_BYTES ||
+        totalCompressed > MAX_TOTAL_UNCOMPRESSED_BYTES ||
         totalUncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES ||
         localOffset + 30 > centralOffset ||
         (uncompressedSize > 64 * 1024 && ratio > MAX_COMPRESSION_RATIO)
@@ -751,16 +1216,10 @@ export class CatalogUploadPolicyService {
   }
 
   private isSafeZipName(name: string): boolean {
-    if (
-      !name ||
-      name.includes('\\') ||
-      name.includes('\0') ||
-      name.startsWith('/')
-    )
-      return false;
-    if (/^[A-Za-z]:/.test(name)) return false;
-    return name
-      .split('/')
-      .every((segment) => segment !== '..' && segment !== '.');
+    if (name.endsWith('/')) {
+      const directoryName = name.slice(0, -1);
+      return this.normalizeOpcPartUri(directoryName, false) === directoryName;
+    }
+    return this.normalizeOpcPartUri(name, false) === name;
   }
 }
