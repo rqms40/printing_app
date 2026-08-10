@@ -66,6 +66,26 @@ describe('seed script', () => {
     expect(freshStack).toContain('MINIO_ACCESS_KEY MINIO_SECRET_KEY');
   });
 
+  it('wires the migration lifecycle to the CI job MinIO service', () => {
+    const serverCi = workflowSource('ci-server.yml');
+    const migrationJob = serverCi.slice(serverCi.indexOf('  migration:'));
+    const migrationEnv = migrationJob.slice(
+      migrationJob.indexOf('    env:'),
+      migrationJob.indexOf('    steps:'),
+    );
+
+    expect(migrationEnv).toContain(
+      'GRIDGO_LIFECYCLE_MINIO_ENDPOINT: 127.0.0.1',
+    );
+    expect(migrationEnv).toContain('GRIDGO_LIFECYCLE_MINIO_PORT: "9000"');
+    expect(migrationEnv).toContain(
+      'GRIDGO_LIFECYCLE_MINIO_ACCESS_KEY: minioadmin',
+    );
+    expect(migrationEnv).toContain(
+      'GRIDGO_LIFECYCLE_MINIO_SECRET_KEY: minioadmin',
+    );
+  });
+
   it('isolates release signing from publication with job-level least privilege', () => {
     const release = workflowSource('release-apk.yml');
     const topLevel = release.slice(0, release.indexOf('jobs:'));
