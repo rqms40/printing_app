@@ -736,10 +736,8 @@ export class OrdersService {
   ): Promise<{
     businessName: string;
     logoUrl: string | null;
-    address: string | null;
     broadAddress: string | null;
     selfQcEvidenceUrls: string[];
-    selfQcEvidenceFileIds: number[];
   } | null> {
     return this.buildAssignedSupplierContact(assignment);
   }
@@ -749,10 +747,8 @@ export class OrdersService {
   ): Promise<{
     businessName: string;
     logoUrl: string | null;
-    address: string | null;
     broadAddress: string | null;
     selfQcEvidenceUrls: string[];
-    selfQcEvidenceFileIds: number[];
   } | null> {
     if (!assignment) return null;
     const supplier = assignment.supplier;
@@ -779,10 +775,8 @@ export class OrdersService {
       businessName:
         supplier?.businessName?.trim() || `Supplier #${assignment.supplierId}`,
       logoUrl,
-      address,
       broadAddress,
       selfQcEvidenceUrls,
-      selfQcEvidenceFileIds: evidenceIds,
     };
   }
 

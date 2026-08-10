@@ -2450,6 +2450,41 @@ describe('OrdersService', () => {
       expect(JSON.stringify(result)).not.toContain('finalPriceMinor');
     });
 
+    it('limits customer supplier contact to public presentation fields', async () => {
+      repo.find.mockResolvedValue([{ ...mockOrder, id: 43 }] as Order[]);
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 903,
+          orderId: 43,
+          supplierId: 79,
+          decision: SupplierAssignmentDecision.ACCEPTED,
+          selfQcEvidenceFileIds: [501],
+          supplier: {
+            id: 79,
+            businessName: 'Safe Print Co',
+            address: '123 Exact Supplier Street, Davao City',
+            serviceZones: ['Davao City'],
+            logoFileId: 500,
+          },
+        } as SupplierAssignment,
+      ]);
+      jest
+        .spyOn(service as any, 'signFileId')
+        .mockImplementation(async (id: number) => `https://signed/${id}`);
+
+      const [result] = await service.findByUser(1);
+
+      expect((result as any).assignedSupplierContact).toEqual({
+        businessName: 'Safe Print Co',
+        logoUrl: 'https://signed/500',
+        broadAddress: 'Exact Supplier, Davao City',
+        selfQcEvidenceUrls: ['https://signed/501'],
+      });
+      expect(JSON.stringify(result)).not.toContain('123 Exact Supplier Street');
+      expect(JSON.stringify(result)).not.toContain('selfQcEvidenceFileIds');
+    });
+
     it('withholds a pending assignment id from the customer', async () => {
       repo.find.mockResolvedValue([{ ...mockOrder, id: 42 }] as Order[]);
       assignmentRepo.find.mockResolvedValue([]);

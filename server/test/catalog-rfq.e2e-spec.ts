@@ -109,6 +109,22 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
     await admin.end();
   });
 
+  it('restores mutated environment keys without stringifying absent values', () => {
+    const presentKey = 'GRIDGO_TASK9_ENV_PRESENT';
+    const absentKey = 'GRIDGO_TASK9_ENV_ABSENT';
+    process.env[presentKey] = 'original';
+    delete process.env[absentKey];
+    const snapshot = snapshotEnvironment([presentKey, absentKey]);
+    process.env[presentKey] = 'changed';
+    process.env[absentKey] = 'created';
+
+    restoreEnvironment(snapshot);
+
+    expect(process.env[presentKey]).toBe('original');
+    expect(absentKey in process.env).toBe(false);
+    delete process.env[presentKey];
+  });
+
   it('executes the join-free category/spec/option lock path in a transaction', async () => {
     const dataSource = await initializeDatabase(await createDatabase('graph'));
     try {
@@ -337,7 +353,16 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
             order.totalPrice === null,
         ),
       ).toBe(true);
-      await expectNoPaymentMutation(dataSource, customer.id);
+      await expectNoPaymentMutation(
+        dataSource,
+        customer.id,
+        submitted.orders.map((order) => ({
+          id: order.id,
+          orderStatus: OrderStatus.SUBMITTED,
+          pricingStatus: PricingStatus.PENDING_QUOTE,
+          quotedTotalMinor: null,
+        })),
+      );
 
       for (const order of submitted.orders) {
         await services.quality.recordDecision(
@@ -588,11 +613,7 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
     const seeded = runSeed(database, bucket);
     expect(seeded.status).toBe(0);
 
-    const previous = {
-      DATABASE_NAME: process.env.DATABASE_NAME,
-      MINIO_BUCKET: process.env.MINIO_BUCKET,
-    };
-    Object.assign(process.env, {
+    const httpEnvironment = {
       NODE_ENV: 'test',
       DATABASE_HOST: adminConfig.host,
       DATABASE_PORT: String(adminConfig.port),
@@ -611,7 +632,9 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
       ),
       MINIO_BUCKET: bucket,
       GRIDGO_TRUST_PROXY_HOPS: '1',
-    });
+    };
+    const previous = snapshotEnvironment(Object.keys(httpEnvironment));
+    Object.assign(process.env, httpEnvironment);
     const storage = createStorage(bucket);
     let app: INestApplication<App> | undefined;
     try {
@@ -775,7 +798,16 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
         .get(`/api/orders/${submitted[0].id}`)
         .set('Authorization', bearer(strangerToken))
         .expect(403);
-      await expectNoPaymentMutation(dataSource, customer.id);
+      await expectNoPaymentMutation(
+        dataSource,
+        customer.id,
+        submitted.map((order) => ({
+          id: order.id,
+          orderStatus: OrderStatus.SUBMITTED,
+          pricingStatus: PricingStatus.PENDING_QUOTE,
+          quotedTotalMinor: null,
+        })),
+      );
 
       for (const order of submitted) {
         await request(http)
@@ -859,14 +891,33 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
         .expect(201);
       const staleAssignmentId = firstMatch.body.assignment.id as number;
       await request(http)
-        .post(`/api/supplier/jobs/${staleAssignmentId}/decline`)
-        .set('Authorization', bearer(supplierTokens[0]))
-        .send({ reason: 'Force isolated rematch' })
-        .expect(201);
-      const rematch = await request(http)
-        .post(`/api/ops/matching/${flyerOrder.id}/auto-match`)
+        .patch(`/api/orders/${flyerOrder.id}/status`)
         .set('Authorization', bearer(opsToken))
+        .send({
+          status: 'approved_for_matching',
+          notes: 'Operations supplier reassignment',
+        })
+        .expect(200);
+      const rematch = await request(http)
+        .post(`/api/ops/matching/${flyerOrder.id}/assign`)
+        .set('Authorization', bearer(opsToken))
+        .send({
+          supplierId: profiles[1].id,
+          notes: 'Supersede first pending supplier',
+        })
         .expect(201);
+      expect(rematch.body.assignment.id).not.toBe(staleAssignmentId);
+      await request(http)
+        .get(`/api/ops/matching/${flyerOrder.id}/assignment`)
+        .set('Authorization', bearer(opsToken))
+        .expect(200)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            id: rematch.body.assignment.id,
+            supplierId: profiles[1].id,
+            decision: SupplierAssignmentDecision.PENDING,
+          });
+        });
       const apparelMatch = await request(http)
         .post(`/api/ops/matching/${apparelOrder.id}/auto-match`)
         .set('Authorization', bearer(opsToken))
@@ -875,6 +926,16 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
         rematch.body.assignment as SupplierAssignment,
         apparelMatch.body.assignment as SupplierAssignment,
       ];
+      await expectNoPaymentMutation(
+        dataSource,
+        customer.id,
+        [flyerOrder, apparelOrder].map((order) => ({
+          id: order.id,
+          orderStatus: OrderStatus.SUPPLIER_ASSIGNED,
+          pricingStatus: PricingStatus.PENDING_QUOTE,
+          quotedTotalMinor: null,
+        })),
+      );
       const promisedDate = new Date(Date.now() + 3 * 86_400_000).toISOString();
       await request(http)
         .post(`/api/supplier/jobs/${assignments[0].id}/accept`)
@@ -886,7 +947,20 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
         .set('Authorization', bearer(supplierTokens[2]))
         .send({ finalPriceMinor: 20_000, promisedDate })
         .expect(201);
-      await expectNoPaymentMutation(dataSource, customer.id);
+      await expectNoPaymentMutation(dataSource, customer.id, [
+        {
+          id: flyerOrder.id,
+          orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
+          pricingStatus: PricingStatus.QUOTED,
+          quotedTotalMinor: '12700',
+        },
+        {
+          id: apparelOrder.id,
+          orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
+          pricingStatus: PricingStatus.QUOTED,
+          quotedTotalMinor: '20000',
+        },
+      ]);
 
       await request(http)
         .get(`/api/admin/orders/${flyerOrder.id}`)
@@ -900,7 +974,7 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
               id: assignments[0].id,
               supplier_id: profiles[1].id,
               decision: 'accepted',
-              rank_position: 1,
+              rank_position: 2,
               final_price_minor: '10000',
               promised_date: expect.any(String),
             },
@@ -913,6 +987,32 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
         .expect(200);
       const publicFlyer = customerOrders.body.find(
         (order: { id: number }) => order.id === flyerOrder.id,
+      );
+      await dataSource.getRepository(SupplierProfile).update(profiles[1].id, {
+        address: '789 Exact Supplier Address, Davao City',
+        logoFileId: flyerFile.id,
+      });
+      await dataSource
+        .getRepository(SupplierAssignment)
+        .update(assignments[0].id, { selfQcEvidenceFileIds: [apparelFile.id] });
+      const refreshedCustomerOrders = await request(http)
+        .get('/api/orders')
+        .set('Authorization', bearer(customerToken))
+        .expect(200);
+      const publicContact = refreshedCustomerOrders.body.find(
+        (order: { id: number }) => order.id === flyerOrder.id,
+      ).assignedSupplierContact;
+      expect(Object.keys(publicContact).sort()).toEqual([
+        'broadAddress',
+        'businessName',
+        'logoUrl',
+        'selfQcEvidenceUrls',
+      ]);
+      expect(publicContact.logoUrl).toEqual(expect.any(String));
+      expect(publicContact.selfQcEvidenceUrls).toEqual([expect.any(String)]);
+      expect(JSON.stringify(publicContact)).not.toContain('789 Exact');
+      expect(JSON.stringify(publicContact)).not.toContain(
+        'selfQcEvidenceFileIds',
       );
       expect(publicFlyer).toMatchObject({
         quoteAssignmentId: assignments[0].id,
@@ -953,7 +1053,20 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
           })
           .expect(201);
       }
-      await expectNoPaymentMutation(dataSource, customer.id);
+      await expectNoPaymentMutation(dataSource, customer.id, [
+        {
+          id: flyerOrder.id,
+          orderStatus: OrderStatus.AWAITING_PAYMENT,
+          pricingStatus: PricingStatus.ACCEPTED,
+          quotedTotalMinor: '12700',
+        },
+        {
+          id: apparelOrder.id,
+          orderStatus: OrderStatus.AWAITING_PAYMENT,
+          pricingStatus: PricingStatus.ACCEPTED,
+          quotedTotalMinor: '20000',
+        },
+      ]);
 
       for (const order of [flyerOrder, apparelOrder]) {
         await request(http)
@@ -1000,7 +1113,67 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
         await dataSource.getRepository(SupplierAssignment).findOneByOrFail({
           id: staleAssignmentId,
         }),
-      ).toMatchObject({ decision: SupplierAssignmentDecision.DECLINED });
+      ).toMatchObject({
+        decision: SupplierAssignmentDecision.CANCELLED,
+        decisionReason: 'superseded_by_new_assignment',
+      });
+      const expectedPerOrder = new Map([
+        [
+          flyerOrder.id,
+          {
+            statuses: [
+              OrderStatus.NEEDS_QA,
+              OrderStatus.APPROVED_FOR_MATCHING,
+              OrderStatus.SUPPLIER_ASSIGNED,
+              OrderStatus.APPROVED_FOR_MATCHING,
+              OrderStatus.SUPPLIER_ASSIGNED,
+              OrderStatus.SUPPLIER_ACCEPTED,
+              OrderStatus.AWAITING_PAYMENT,
+              OrderStatus.PAYMENT_AUTHORIZED,
+            ],
+            actions: [
+              'status_transition',
+              'status_transition',
+              'quality_review_decision',
+              'status_transition',
+              'supplier_assigned',
+              'status_transition',
+              'status_transition',
+              'supplier_assigned',
+              'status_transition',
+              'supplier_job_accepted',
+              'status_transition',
+              'customer_quote_accepted',
+              'status_transition',
+            ],
+          },
+        ],
+        [
+          apparelOrder.id,
+          {
+            statuses: [
+              OrderStatus.NEEDS_QA,
+              OrderStatus.APPROVED_FOR_MATCHING,
+              OrderStatus.SUPPLIER_ASSIGNED,
+              OrderStatus.SUPPLIER_ACCEPTED,
+              OrderStatus.AWAITING_PAYMENT,
+              OrderStatus.PAYMENT_AUTHORIZED,
+            ],
+            actions: [
+              'status_transition',
+              'status_transition',
+              'quality_review_decision',
+              'status_transition',
+              'supplier_assigned',
+              'status_transition',
+              'supplier_job_accepted',
+              'status_transition',
+              'customer_quote_accepted',
+              'status_transition',
+            ],
+          },
+        ],
+      ]);
       for (const order of [flyerOrder, apparelOrder]) {
         const history = await dataSource
           .getRepository(OrderStatusHistory)
@@ -1008,17 +1181,15 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
             where: { orderId: order.id },
             order: { id: 'ASC' },
           });
-        expect(history.at(-1)?.toStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
+        expect(history.map((entry) => entry.toStatus)).toEqual(
+          expectedPerOrder.get(order.id)!.statuses,
+        );
         const audit = await dataSource.getRepository(AuditEvent).find({
           where: { orderId: order.id },
+          order: { id: 'ASC' },
         });
         expect(audit.map((event) => event.action)).toEqual(
-          expect.arrayContaining([
-            'quality_review_decision',
-            'supplier_assigned',
-            'supplier_job_accepted',
-            'customer_quote_accepted',
-          ]),
+          expectedPerOrder.get(order.id)!.actions,
         );
       }
       const boundFiles = await dataSource
@@ -1058,8 +1229,7 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
       );
     } finally {
       await app?.close();
-      process.env.DATABASE_NAME = previous.DATABASE_NAME;
-      process.env.MINIO_BUCKET = previous.MINIO_BUCKET;
+      restoreEnvironment(previous);
       await emptyAndRemoveBucket(storage.client, bucket);
     }
   });
@@ -1125,6 +1295,19 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
       throw new Error(`${name} is required for isolated catalog RFQ tests`);
     }
     return value;
+  }
+
+  function snapshotEnvironment(
+    keys: string[],
+  ): Record<string, string | undefined> {
+    return Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  }
+
+  function restoreEnvironment(snapshot: Record<string, string | undefined>) {
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 
   function createStorage(bucket: string) {
@@ -1221,6 +1404,12 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
   async function expectNoPaymentMutation(
     dataSource: DataSource,
     customerId: number,
+    expectedOrders: Array<{
+      id: number;
+      orderStatus: OrderStatus;
+      pricingStatus: PricingStatus;
+      quotedTotalMinor: string | null;
+    }> = [],
   ) {
     await expect(
       Promise.all([
@@ -1231,6 +1420,18 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
         dataSource.getRepository(CodCollection).count(),
       ]),
     ).resolves.toEqual([0, 0, 0]);
+    for (const expected of expectedOrders) {
+      await expect(
+        dataSource.getRepository(Order).findOneByOrFail({ id: expected.id }),
+      ).resolves.toMatchObject({
+        orderStatus: expected.orderStatus,
+        pricingStatus: expected.pricingStatus,
+        quotedTotalMinor: expected.quotedTotalMinor,
+        authorizationSnapshot: null,
+        finalTotalMinor: null,
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+      });
+    }
   }
 
   function createLifecycleServices(
