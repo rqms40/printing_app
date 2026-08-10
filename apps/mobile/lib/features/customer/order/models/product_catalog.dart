@@ -342,10 +342,36 @@ class ProductCatalog {
       categories.where((category) => category.isActive).toList()
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
+  /// Top-level browse nodes (Category L1 + legacy orderable roots).
+  List<ProductCategory> get rootCategories => activeCategories
+      .where((category) => category.parentId == null)
+      .toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+  /// Orderable leaves only (checkout-eligible products).
+  List<ProductCategory> get orderableCategories => activeCategories
+      .where((category) => category.isOrderable)
+      .toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+  List<ProductCategory> childrenOf(int? parentId) {
+    return activeCategories
+        .where((category) => category.parentId == parentId)
+        .toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
   ProductCategory? categoryBySlug(String? slug) {
     if (slug == null) return null;
     for (final category in categories) {
       if (category.slug == slug) return category;
+    }
+    return null;
+  }
+
+  ProductCategory? categoryById(int id) {
+    for (final category in categories) {
+      if (category.id == id) return category;
     }
     return null;
   }
@@ -358,7 +384,11 @@ class ProductCategory {
     required this.slug,
     this.description,
     this.mobileDescription,
+    this.audienceLabel,
     this.icon,
+    this.parentId,
+    this.catalogLevel = 1,
+    this.isOrderable = true,
     required this.fileProcessingType,
     required this.pricingModel,
     required this.baseRate,
@@ -375,7 +405,11 @@ class ProductCategory {
   final String slug;
   final String? description;
   final String? mobileDescription;
+  final String? audienceLabel;
   final String? icon;
+  final int? parentId;
+  final int catalogLevel;
+  final bool isOrderable;
   final String fileProcessingType;
   final String pricingModel;
   final double baseRate;
@@ -386,8 +420,11 @@ class ProductCategory {
   final int sortOrder;
   final List<ProductSpecDefinition> specs;
 
+  bool get isBrowseGroup => !isOrderable;
+
   factory ProductCategory.fromJson(Map<String, dynamic> json) {
     final rawSpecs = json['specs'];
+    final parentRaw = json['parentId'] ?? json['parent_id'];
     return ProductCategory(
       id: _readInt(json['id'], 0),
       name: json['name']?.toString() ?? '',
@@ -395,7 +432,18 @@ class ProductCategory {
       description: json['description']?.toString(),
       mobileDescription:
           (json['mobileDescription'] ?? json['mobile_description'])?.toString(),
+      audienceLabel:
+          (json['audienceLabel'] ?? json['audience_label'])?.toString(),
       icon: json['icon']?.toString(),
+      parentId: parentRaw == null ? null : _readInt(parentRaw, 0),
+      catalogLevel: _readInt(
+        json['catalogLevel'] ?? json['catalog_level'],
+        1,
+      ),
+      isOrderable: _readBool(
+        json['isOrderable'] ?? json['is_orderable'],
+        true,
+      ),
       fileProcessingType:
           (json['fileProcessingType'] ?? json['file_processing_type'])
               ?.toString() ??

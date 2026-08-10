@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,7 +17,10 @@ class CheckoutFooter extends ConsumerWidget {
     required this.onPlaceOrder,
     this.placeOrderKey,
   });
-  final VoidCallback onPlaceOrder;
+
+  /// Async place-order handler. Footer awaits it so Flutter web does not log
+  /// uncaught promise rejections (`T[_eval] is not a function`).
+  final Future<void> Function() onPlaceOrder;
   final GlobalKey? placeOrderKey;
 
   @override
@@ -127,7 +131,7 @@ class CheckoutFooter extends ConsumerWidget {
             key: placeOrderKey,
             child: _PlaceOrderButton(
               enabled: canPlace,
-              onTap: canPlace ? onPlaceOrder : null,
+              onPlaceOrder: canPlace ? onPlaceOrder : null,
               colors: colors,
             ),
           ),
@@ -137,23 +141,46 @@ class CheckoutFooter extends ConsumerWidget {
   }
 }
 
-class _PlaceOrderButton extends StatelessWidget {
+class _PlaceOrderButton extends StatefulWidget {
   const _PlaceOrderButton({
     required this.enabled,
-    required this.onTap,
+    required this.onPlaceOrder,
     required this.colors,
   });
   final bool enabled;
-  final VoidCallback? onTap;
+  final Future<void> Function()? onPlaceOrder;
   final AppColorSet colors;
 
   @override
+  State<_PlaceOrderButton> createState() => _PlaceOrderButtonState();
+}
+
+class _PlaceOrderButtonState extends State<_PlaceOrderButton> {
+  bool _submitting = false;
+
+  Future<void> _handleTap() async {
+    final action = widget.onPlaceOrder;
+    if (!widget.enabled || _submitting || action == null) return;
+    setState(() => _submitting = true);
+    try {
+      await action();
+    } catch (e) {
+      // Parent already surfaces errors; keep web free of uncaught promises.
+      debugPrint('Place order button error: $e');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final enabled = widget.enabled && !_submitting;
+    final colors = widget.colors;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: AppRadius.borderXl,
-        onTap: onTap,
+        onTap: enabled ? _handleTap : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           height: 56,
@@ -174,8 +201,19 @@ class _PlaceOrderButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              if (_submitting) ...[
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.background,
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
               Text(
-                'Place Order',
+                _submitting ? 'Placing…' : 'Place Order',
                 style: AppTypography.bodyBold.copyWith(
                   color: colors.background,
                   fontSize: 16,
@@ -183,12 +221,14 @@ class _PlaceOrderButton extends StatelessWidget {
                   letterSpacing: 0.3,
                 ),
               ),
-              const SizedBox(width: 8),
-              HugeIcon(
-                icon: HugeIcons.strokeRoundedArrowRight01,
-                size: 20,
-                color: colors.background,
-              ),
+              if (!_submitting) ...[
+                const SizedBox(width: 8),
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedArrowRight01,
+                  size: 20,
+                  color: colors.background,
+                ),
+              ],
             ],
           ),
         ),

@@ -289,6 +289,11 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       return;
     }
     if (!mounted) return;
+    // Full refresh so pickupOtp is loaded from the server for the proof sheet.
+    if (realFlow) {
+      await refreshAssignments();
+      return;
+    }
     _updateAssignment(assignmentId, (a) {
       if (a.status != DeliveryStatus.assigned) return a;
       return a.copyWith(
@@ -397,7 +402,11 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     }
 
     final proofType = proofPayload['type']?.toString();
-    final otp = proofPayload['otp']?.toString().trim();
+    // Prefer OTP from the sheet; fall back to the server-issued assignment OTP.
+    var otp = proofPayload['otp']?.toString().trim();
+    if (otp == null || otp.isEmpty) {
+      otp = current.pickupOtp?.trim();
+    }
     final fileId = proofPayload['fileId'];
     if (proofType != 'photo' || otp == null || otp.isEmpty) {
       state = state.copyWith(
@@ -443,7 +452,10 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     }
 
     final proofType = proofPayload['type']?.toString();
-    final otp = proofPayload['otp']?.toString().trim();
+    var otp = proofPayload['otp']?.toString().trim();
+    if (otp == null || otp.isEmpty) {
+      otp = current.deliveryOtp?.trim();
+    }
     if (proofType == null || proofType.isEmpty || otp == null || otp.isEmpty) {
       state = state.copyWith(
         errorMessage: () =>

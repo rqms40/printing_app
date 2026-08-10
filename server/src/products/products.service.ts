@@ -107,6 +107,7 @@ export class ProductsService {
     if (existing) {
       throw new ConflictException(`Slug '${dto.slug}' is already in use`);
     }
+    await this.assertValidParent(dto.parentId ?? null, dto.catalogLevel);
     const category = this.catRepo.create(this.normalizeCategoryDto(dto));
     return this.catRepo.save(category);
   }
@@ -115,7 +116,7 @@ export class ProductsService {
     id: number,
     dto: UpdateCategoryDto,
   ): Promise<ProductCategory> {
-    await this.catRepo.findOneOrFail({ where: { id } });
+    const current = await this.catRepo.findOneOrFail({ where: { id } });
     if (dto.slug) {
       const conflict = await this.catRepo.findOne({
         where: { slug: dto.slug },
@@ -123,6 +124,15 @@ export class ProductsService {
       if (conflict && conflict.id !== id) {
         throw new ConflictException(`Slug '${dto.slug}' is already in use`);
       }
+    }
+    if (dto.parentId !== undefined) {
+      if (dto.parentId === id) {
+        throw new BadRequestException('Category cannot be its own parent');
+      }
+      await this.assertValidParent(
+        dto.parentId,
+        dto.catalogLevel ?? current.catalogLevel,
+      );
     }
     await this.catRepo.update(id, this.normalizeCategoryDto(dto) as any);
     return this.catRepo.findOneOrFail({ where: { id } });
@@ -394,14 +404,46 @@ export class ProductsService {
     return spec;
   }
 
+  private async assertValidParent(
+    parentId: number | null | undefined,
+    catalogLevel?: number,
+  ): Promise<void> {
+    if (parentId == null) return;
+    const parent = await this.catRepo.findOne({ where: { id: parentId } });
+    if (!parent) {
+      throw new BadRequestException(`Parent category ${parentId} not found`);
+    }
+    if (catalogLevel != null && catalogLevel <= parent.catalogLevel) {
+      throw new BadRequestException(
+        `catalogLevel ${catalogLevel} must be greater than parent level ${parent.catalogLevel}`,
+      );
+    }
+    if (parent.catalogLevel >= 3) {
+      throw new BadRequestException(
+        'Variant leaves cannot have children; pick a category or subgroup parent',
+      );
+    }
+  }
+
   private normalizeCategoryDto(dto: CategoryInput): Partial<ProductCategory> {
     const allowedExtensions =
       dto.allowedExtensions == null
         ? undefined
         : this.normalizeAllowedExtensions(dto.allowedExtensions);
+    const isOrderable =
+      (dto as Partial<ProductCategory>).isOrderable ??
+      ((dto as Partial<ProductCategory>).catalogLevel != null
+        ? (dto as Partial<ProductCategory>).catalogLevel === 3
+        : undefined);
     return {
       ...dto,
-      allowedExtensions,
+      parentId:
+        (dto as Partial<ProductCategory>).parentId === undefined
+          ? undefined
+          : ((dto as Partial<ProductCategory>).parentId ?? null),
+      allowedExtensions:
+        allowedExtensions ??
+        (isOrderable === false ? [] : undefined),
       fileProcessingType:
         (dto as Partial<ProductCategory>).fileProcessingType ??
         this.defaultFileProcessingType(dto.slug),
@@ -409,6 +451,13 @@ export class ProductsService {
         (dto as Partial<ProductCategory>).pricingModel ??
         this.defaultPricingModel(dto.slug),
       quantityUnit: (dto as Partial<ProductCategory>).quantityUnit ?? 'copy',
+      baseRate:
+        (dto as Partial<ProductCategory>).baseRate ??
+        (isOrderable === false ? 0 : undefined),
+      maxFileSizeMb:
+        (dto as Partial<ProductCategory>).maxFileSizeMb ??
+        (isOrderable === false ? 50 : undefined),
+      isOrderable,
     };
   }
 

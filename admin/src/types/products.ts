@@ -22,7 +22,14 @@ export interface ServiceCategory {
   slug: string;
   description?: string;
   mobile_description?: string;
+  audience_label?: string;
   icon?: string;
+  /** Parent category id for Category → Subgroup → Variant nesting. */
+  parent_id?: string | null;
+  /** 1 = category, 2 = subgroup, 3 = variant/leaf. */
+  catalog_level: number;
+  /** Only orderable leaves accept checkout. */
+  is_orderable: boolean;
   file_processing_type: ProductFileProcessingType;
   pricing_model: ProductPricingModel;
   base_rate: number;
@@ -32,6 +39,7 @@ export interface ServiceCategory {
   is_active: boolean;
   sort_order: number;
   specs?: ProductSpecDefinition[];
+  children?: ServiceCategory[];
   created_at: string;
   updated_at: string;
 }

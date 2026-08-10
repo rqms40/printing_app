@@ -46,6 +46,7 @@ import {
   SupplierAssignmentDecision,
 } from '../matching/entities/supplier-assignment.entity';
 import { UpdateAdminRiderDto } from './dto/update-admin-rider.dto';
+import { AuditEvent } from '../audit/entities/audit-event.entity';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -93,6 +94,8 @@ export class AdminController {
     private deliveryAssignmentsRepo: Repository<DeliveryAssignment>,
     @InjectRepository(SupplierAssignment)
     private supplierAssignmentsRepo: Repository<SupplierAssignment>,
+    @InjectRepository(AuditEvent)
+    private auditEventsRepo: Repository<AuditEvent>,
   ) {}
 
   @Patch('tam-surveys/settings')
@@ -504,10 +507,10 @@ export class AdminController {
       !assignment.pickupOtpVerifiedAt && assignment.pickupOtpCode
         ? assignment.pickupOtpCode
         : null;
+    // Delivery OTP is available from assign through handoff (same code the
+    // customer sees on their order status card).
     const deliveryOtp =
-      assignment.pickupOtpVerifiedAt &&
-      !assignment.deliveryOtpVerifiedAt &&
-      assignment.deliveryOtpCode
+      !assignment.deliveryOtpVerifiedAt && assignment.deliveryOtpCode
         ? assignment.deliveryOtpCode
         : null;
     return {
@@ -538,6 +541,26 @@ export class AdminController {
       signatureData: assignment.proofSignatureData ?? null,
       capturedAt: assignment.proofCapturedAt ?? null,
       capturedByRiderId: assignment.proofCapturedByRiderId ?? null,
+    };
+  }
+
+  /** Rider pickup handoff photo (required at picked_up). */
+  private pickupProofFromAssignment(
+    assignment: DeliveryAssignment | undefined,
+  ) {
+    if (!assignment) return null;
+    const hasPhoto =
+      assignment.pickupProofFileId != null && assignment.pickupProofFileId > 0;
+    const hasSignature = Boolean(assignment.pickupProofSignatureData?.trim());
+    if (!hasPhoto && !hasSignature) return null;
+    return {
+      type: hasPhoto ? 'photo' : 'signature',
+      fileId: assignment.pickupProofFileId ?? null,
+      objectKey: assignment.pickupProofObjectKey ?? null,
+      signatureData: assignment.pickupProofSignatureData ?? null,
+      capturedAt: assignment.pickupProofCapturedAt ?? null,
+      // Pickup path does not store a separate capturer column — use rider profile.
+      capturedByRiderId: assignment.riderId ?? null,
     };
   }
 
@@ -616,19 +639,13 @@ export class AdminController {
               }
             : null),
         deliveryProof: this.deliveryProofFromAssignment(assignment),
+        pickupProof: this.pickupProofFromAssignment(assignment),
       });
     });
   }
 
-  private deliveryProof(o: Order) {
-    const enriched = o as Order & {
-      deliveryProof?: Record<string, unknown> | null;
-      assignedRiderContact?: { proof?: Record<string, unknown> | null } | null;
-    };
-    const proof =
-      enriched.deliveryProof ?? enriched.assignedRiderContact?.proof;
+  private mapProofSnapshot(proof: Record<string, unknown> | null | undefined) {
     if (!proof) return null;
-
     return {
       type: proof.type ?? null,
       file_id: proof.fileId ?? proof.file_id ?? null,
@@ -640,7 +657,33 @@ export class AdminController {
     };
   }
 
-  private mapOrder(o: Order) {
+  private deliveryProof(o: Order) {
+    const enriched = o as Order & {
+      deliveryProof?: Record<string, unknown> | null;
+      assignedRiderContact?: { proof?: Record<string, unknown> | null } | null;
+    };
+    const proof =
+      enriched.deliveryProof ?? enriched.assignedRiderContact?.proof;
+    return this.mapProofSnapshot(proof);
+  }
+
+  private pickupProof(o: Order) {
+    const enriched = o as Order & {
+      pickupProof?: Record<string, unknown> | null;
+    };
+    return this.mapProofSnapshot(enriched.pickupProof);
+  }
+
+  private mapOrder(
+    o: Order,
+    extras?: {
+      productionMilestones?: Array<{
+        milestone: string;
+        reached_at: Date;
+        notes: string | null;
+      }>;
+    },
+  ) {
     const firstPaperItem = (o.items ?? []).find(
       (item) => item.category === 'paper',
     );
@@ -695,7 +738,9 @@ export class AdminController {
       assigned_rider_id: o.assignedRiderId ?? null,
       assigned_rider_contact: this.assignedRiderContact(o),
       assigned_supplier_contact: this.assignedSupplierContact(o),
+      pickup_proof: this.pickupProof(o),
       delivery_proof: this.deliveryProof(o),
+      production_milestones: extras?.productionMilestones ?? [],
       created_at: o.createdAt,
       updated_at: o.updatedAt,
       paper_specs: paperSpecs,
@@ -850,7 +895,49 @@ export class AdminController {
     } catch {
       /* non-fatal — fall back to basic supplier contact */
     }
-    return this.mapOrder(enriched);
+
+    const productionMilestones = await this.loadProductionMilestones(id);
+    return this.mapOrder(enriched, { productionMilestones });
+  }
+
+  /**
+   * Supplier production sub-steps (materials → in production → complete)
+   * are audited while order status stays at `production`.
+   */
+  private async loadProductionMilestones(orderId: number): Promise<
+    Array<{
+      milestone: string;
+      reached_at: Date;
+      notes: string | null;
+    }>
+  > {
+    const events = await this.auditEventsRepo.find({
+      where: {
+        orderId,
+        action: 'supplier_production_milestone',
+      },
+      order: { createdAt: 'ASC' },
+    });
+    const byMilestone = new Map<
+      string,
+      { milestone: string; reached_at: Date; notes: string | null }
+    >();
+    for (const event of events) {
+      const raw = event.metadata?.milestone;
+      const milestone =
+        typeof raw === 'string' && raw.trim()
+          ? raw.trim().toLowerCase()
+          : null;
+      if (!milestone) continue;
+      // Keep first reach time for each milestone key.
+      if (byMilestone.has(milestone)) continue;
+      byMilestone.set(milestone, {
+        milestone,
+        reached_at: event.createdAt,
+        notes: event.reason ?? null,
+      });
+    }
+    return [...byMilestone.values()];
   }
 
   // Update any order's status

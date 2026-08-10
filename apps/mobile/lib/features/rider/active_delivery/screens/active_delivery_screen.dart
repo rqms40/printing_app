@@ -140,6 +140,9 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   }
 
   Future<void> _handleAdvance(String assignmentId) async {
+    // Refresh so pickup/delivery OTP from the server is available to prefill.
+    await ref.read(deliveriesProvider.notifier).refreshAssignments();
+    if (!mounted) return;
     final current = ref.read(deliveriesProvider).viewById(assignmentId);
     if (current?.status == DeliveryStatus.accepted) {
       final proof = await _openProofSheet(

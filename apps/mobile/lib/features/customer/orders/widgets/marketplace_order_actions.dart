@@ -9,11 +9,15 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/features/customer/orders/widgets/order_concern_helpers.dart';
+import 'package:printing_app/features/customer/orders/widgets/order_post_delivery_actions.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
+
+export 'package:printing_app/features/customer/orders/widgets/order_concern_helpers.dart';
 
 /// Split free-text Ops notes into checklist-style bullets for client review.
 List<String> correctionChecklistItems(Order order) {
@@ -34,23 +38,6 @@ List<String> correctionChecklistItems(Order order) {
   add(order.adminNotes);
   add(order.adminStatusNote);
   return chunks;
-}
-
-/// Material concern categories for post-collection / delivery claims.
-const reportConcernCategories = <({String value, String label})>[
-  (value: 'print_defect', label: 'Print quality defect'),
-  (value: 'damaged', label: 'Damaged item'),
-  (value: 'wrong_item', label: 'Wrong item / specs'),
-  (value: 'incomplete', label: 'Incomplete / missing pieces'),
-  (value: 'delivery_issue', label: 'Delivery / packaging issue'),
-  (value: 'other', label: 'Other concern'),
-];
-
-/// Whether the client can file a post-receipt material concern.
-bool canReportConcern(OrderStatus status) {
-  return status == OrderStatus.collectedByCustomer ||
-      status == OrderStatus.issueWindowOpen ||
-      status == OrderStatus.delivered;
 }
 
 /// Client-facing marketplace gates: correction / proof / pay wait / report concern.
@@ -563,23 +550,8 @@ class _MarketplaceOrderActionsState
               onTap: _promptRejectProof,
             ),
           ] else if (showReportConcern) ...[
-            AppButton(
-              label: 'Order received',
-              isFullWidth: true,
-              icon: HugeIcons.strokeRoundedCheckmarkBadge01,
-              onTap: () => _run(
-                () => ref.read(ordersProvider.notifier).confirmReceipt(order.id),
-                'Order successfully completed',
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            AppButton(
-              label: 'Return / Refund',
-              variant: AppButtonVariant.ghost,
-              isFullWidth: true,
-              icon: HugeIcons.strokeRoundedAlert02,
-              onTap: _showConcernModal,
-            ),
+            // Compact responsive buttons (shared with My Orders list).
+            OrderPostDeliveryActions(order: order, showIntro: false),
           ]
         ],
       ),

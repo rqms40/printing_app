@@ -172,6 +172,7 @@ describe('seed script', () => {
     expect(seedSource).toContain('per_page_modifiers');
     expect(seedSource).toContain('base_plus_material_estimate');
     expect(seedSource).toContain('"tif","tiff"');
+    expect(seedSource).toContain('seedBusinessCatalog');
   });
 
   it('seeds print scaling as a paper catalog option', () => {

@@ -20,6 +20,7 @@ import {
 } from '../riders/entities/delivery-assignment.entity';
 import { SuppliersService } from '../suppliers/suppliers.service';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import { AuditEvent } from '../audit/entities/audit-event.entity';
 import { In } from 'typeorm';
 import * as userInsights from './user-insights';
 
@@ -105,6 +106,10 @@ describe('AdminController analytics', () => {
         },
         {
           provide: getRepositoryToken(SupplierAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(AuditEvent),
           useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         { provide: getRepositoryToken(TamSurvey), useValue: mockRepo() },
@@ -548,6 +553,45 @@ describe('AdminController analytics', () => {
         object_key: 'uploads/pod/55.jpg',
         signature_data: null,
         captured_at: new Date('2026-05-02T19:00:36.788Z'),
+        captured_by_rider_id: 10,
+      });
+    });
+
+    it('includes proof of pickup photo metadata for admin order review', () => {
+      const order = {
+        id: 8,
+        orderId: 'ORD-10008',
+        userId: 1,
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 12,
+        deliveryFee: 0,
+        paymentMethod: 'gcash',
+        paymentStatus: 'paid',
+        orderStatus: OrderStatus.PICKED_UP,
+        deliveryOption: 'delivery',
+        assignedRiderId: 70,
+        pickupProof: {
+          type: 'photo',
+          fileId: 25,
+          objectKey: 'uploads/proof_of_delivery/pickup-25.jpg',
+          signatureData: null,
+          capturedAt: new Date('2026-05-02T18:00:00.000Z'),
+          capturedByRiderId: 10,
+        },
+        statusHistory: [],
+        createdAt: new Date('2026-05-02T17:00:00.000Z'),
+        updatedAt: new Date('2026-05-02T18:00:00.000Z'),
+      } as unknown as Order;
+
+      const mapped = (controller as any).mapOrder(order);
+
+      expect(mapped.pickup_proof).toEqual({
+        type: 'photo',
+        file_id: 25,
+        object_key: 'uploads/proof_of_delivery/pickup-25.jpg',
+        signature_data: null,
+        captured_at: new Date('2026-05-02T18:00:00.000Z'),
         captured_by_rider_id: 10,
       });
     });

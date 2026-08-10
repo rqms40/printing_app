@@ -8,6 +8,8 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
     show ordersProvider, activeOrdersProvider, completedOrdersProvider;
 import 'package:printing_app/features/customer/orders/widgets/order_card.dart';
+import 'package:printing_app/features/customer/orders/widgets/order_post_delivery_actions.dart';
+import 'package:printing_app/features/customer/orders/widgets/order_concern_helpers.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
@@ -201,11 +203,14 @@ class _OrdersList extends StatelessWidget {
       itemCount: orders.length,
       itemBuilder: (context, index) {
         final order = orders[index];
+        final showPostDelivery = canReportConcern(order.orderStatus);
         return Padding(
           padding: EdgeInsets.only(
-            bottom: index < orders.length - 1 ? AppSpacing.sm : AppSpacing.xxl,
+            bottom: index < orders.length - 1 ? AppSpacing.md : AppSpacing.xxl,
           ),
-          child:
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               OrderCard(
                     order: order,
                     onTap: () => context.push('/customer/orders/${order.id}'),
@@ -222,6 +227,18 @@ class _OrdersList extends StatelessWidget {
                     delay: (index * 50).ms,
                     curve: Curves.easeOut,
                   ),
+              if (showPostDelivery) ...[
+                const SizedBox(height: AppSpacing.sm),
+                OrderPostDeliveryActions(order: order)
+                    .animate()
+                    .fadeIn(
+                      duration: 350.ms,
+                      delay: (index * 50 + 40).ms,
+                      curve: Curves.easeOut,
+                    ),
+              ],
+            ],
+          ),
         );
       },
     );

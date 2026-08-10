@@ -228,7 +228,8 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                 ),
               ),
               const SizedBox(height: AppSpacing.xs),
-              if (_otpPrefixed) ...[
+              // When the server issued an OTP, show it pre-set (no manual typing).
+              if (_otpPrefixed)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
@@ -236,15 +237,17 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                     vertical: AppSpacing.sm,
                   ),
                   decoration: BoxDecoration(
-                    color: colors.primary.withValues(alpha: 0.12),
+                    color: colors.brand.withValues(alpha: 0.12),
                     borderRadius: AppRadius.borderMd,
-                    border: Border.all(color: colors.primary.withValues(alpha: 0.35)),
+                    border: Border.all(
+                      color: colors.brand.withValues(alpha: 0.35),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isPickup ? 'Pickup OTP' : 'Delivery OTP',
+                        isPickup ? 'Pickup OTP (auto-set)' : 'Delivery OTP (auto-set)',
                         style: AppTypography.caption.copyWith(
                           color: colors.onSurfaceDim,
                         ),
@@ -261,33 +264,31 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-              ],
-              TextField(
-                key: const Key('proof-otp-field'),
-                controller: _otpController,
-                keyboardType: TextInputType.number,
-                maxLength: 8,
-                readOnly: _otpPrefixed,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: _otpHint,
-                  labelText: _otpPrefixed ? 'OTP (auto-filled)' : 'OTP',
-                  counterText: '',
-                  filled: true,
-                  fillColor: colors.surfaceVariant,
-                  border: OutlineInputBorder(
-                    borderRadius: AppRadius.borderMd,
-                    borderSide: BorderSide(color: colors.outline),
+                )
+              else
+                TextField(
+                  key: const Key('proof-otp-field'),
+                  controller: _otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 8,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: _otpHint,
+                    labelText: 'OTP',
+                    counterText: '',
+                    filled: true,
+                    fillColor: colors.surfaceVariant,
+                    border: OutlineInputBorder(
+                      borderRadius: AppRadius.borderMd,
+                      borderSide: BorderSide(color: colors.outline),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: AppRadius.borderMd,
+                      borderSide: BorderSide(color: colors.outline),
+                    ),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: AppRadius.borderMd,
-                    borderSide: BorderSide(color: colors.outline),
-                  ),
                 ),
-              ),
               const SizedBox(height: AppSpacing.md),
               if (!isPickup)
                 SegmentedButton<String>(

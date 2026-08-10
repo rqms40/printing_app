@@ -11,6 +11,7 @@ import 'package:printing_app/features/customer/profile/models/account_state.dart
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/widgets/app_bottom_nav.dart';
+import 'package:printing_app/shared/widgets/app_scaffold_messenger.dart';
 import 'package:printing_app/shared/widgets/scaffold_with_nav.dart';
 
 // ---------------------------------------------------------------------------
@@ -395,14 +396,23 @@ final routerProvider = Provider<GoRouter>((ref) {
 
             // Show a real-time toast when a single new notification arrives
             // via WebSocket (diff > 3 = bulk fetch on startup, skip).
+            // Use the root messenger key — never ScaffoldMessenger.of(context)
+            // here. Order-placement WS events fire during navigation, and
+            // ancestor lookup throws on Flutter web (T[_eval] RTI error).
             ref.listen(notificationsProvider, (prev, next) {
               final prevLen = prev?.length ?? -1;
               final diff = next.length - prevLen;
               if (prevLen < 0 || diff <= 0 || diff > 3) return;
+              if (next.isEmpty) return;
               final newest = next.first;
-              ScaffoldMessenger.of(context)
-                ..clearSnackBars()
-                ..showSnackBar(
+              final brightness = MediaQuery.maybeOf(context)?.platformBrightness;
+              final brand = (brightness == Brightness.dark
+                      ? AppColors.dark
+                      : AppColors.light)
+                  .brand;
+              // Defer to next frame so we never show during a dispose/nav.
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                showAppSnackBar(
                   SnackBar(
                     content: Row(
                       children: [
@@ -442,11 +452,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                         ),
                       ],
                     ),
-                    backgroundColor:
-                        (Theme.of(context).brightness == Brightness.dark
-                                ? AppColors.dark
-                                : AppColors.light)
-                            .brand,
+                    backgroundColor: brand,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -455,6 +461,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                     duration: const Duration(seconds: 4),
                   ),
                 );
+              });
             });
 
             return NextBatchSessionTrigger(
@@ -599,10 +606,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/customer/order/success',
         pageBuilder: (_, state) {
-          final extra = (state.extra as Map?) ?? const {};
-          final refs =
-              (extra['orderRefs'] as List?)?.cast<String>() ?? const <String>[];
-          final firstId = extra['firstOrderId'] as int?;
+          final extra = state.extra is Map
+              ? Map<Object?, Object?>.from(state.extra as Map)
+              : const <Object?, Object?>{};
+          final rawRefs = extra['orderRefs'];
+          final refs = rawRefs is List
+              ? rawRefs
+                    .map((e) => e?.toString() ?? '')
+                    .where((e) => e.isNotEmpty)
+                    .toList(growable: false)
+              : const <String>[];
+          final rawFirstId = extra['firstOrderId'];
+          final firstId = rawFirstId is int
+              ? rawFirstId
+              : int.tryParse(rawFirstId?.toString() ?? '');
           return slideUpTransition(
             OrderSuccessScreen(orderRefs: refs, firstOrderId: firstId),
             state,

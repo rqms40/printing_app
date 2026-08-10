@@ -468,11 +468,15 @@ export class OrdersService {
             assignment.status,
           );
 
-        // Customer-facing delivery handoff OTP only (pickup OTP is supplier/ops).
+        // Customer-facing delivery handoff OTP (issued at rider assign so it
+        // appears next to Status once a rider is assigned). Pickup OTP stays
+        // ops/supplier/rider-only.
         const deliveryOtp =
           assignment &&
           !assignment.deliveryOtpVerifiedAt &&
           [
+            DeliveryStatus.ASSIGNED,
+            DeliveryStatus.ACCEPTED,
             DeliveryStatus.PICKED_UP,
             DeliveryStatus.ON_THE_WAY,
             DeliveryStatus.ARRIVED,

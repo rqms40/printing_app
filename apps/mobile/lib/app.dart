@@ -5,6 +5,7 @@ import 'config/routes/app_router.dart';
 import 'config/theme/app_theme.dart';
 import 'features/customer/beta/widgets/beta_indicator.dart';
 import 'shared/providers/theme_provider.dart';
+import 'shared/widgets/app_scaffold_messenger.dart';
 
 class App extends ConsumerWidget {
   const App({super.key});
@@ -20,6 +21,7 @@ class App extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
       routerConfig: router,
+      scaffoldMessengerKey: appScaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       builder: (context, child) =>
           BetaIndicatorOverlay(child: child ?? const SizedBox.shrink()),
