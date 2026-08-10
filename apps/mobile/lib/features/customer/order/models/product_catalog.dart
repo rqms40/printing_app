@@ -382,7 +382,7 @@ class ProductCatalog {
 
   List<ProductCategory> get activeCategories =>
       categories.where((category) => category.isActive).toList()
-        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+        ..sort(_compareProductOrder);
 
   List<ProductGroup> get activeGroups {
     final active = groups
@@ -463,11 +463,7 @@ class ProductGroup {
               )
               .toList()
         : <ProductCategory>[];
-    products.sort(
-      (left, right) => left.sortOrder.compareTo(right.sortOrder) != 0
-          ? left.sortOrder.compareTo(right.sortOrder)
-          : left.slug.compareTo(right.slug),
-    );
+    products.sort(_compareProductOrder);
     return ProductGroup(
       slug: slug,
       name: name,
@@ -494,15 +490,24 @@ List<ProductGroup> _groupsFromFlatCategories(List<ProductCategory> categories) {
     grouped.putIfAbsent(slug, () => []).add(category);
   }
   return grouped.entries.map((entry) {
-    final first = entry.value.first;
+    final products = entry.value.toList()..sort(_compareProductOrder);
+    final first = products.first;
     return ProductGroup(
       slug: entry.key,
       name: first.groupName ?? '',
       description: first.groupDescription ?? '',
       sortOrder: first.groupSortOrder ?? 0,
-      products: entry.value,
+      products: products,
     );
   }).toList();
+}
+
+int _compareProductOrder(ProductCategory left, ProductCategory right) {
+  final bySortOrder = left.sortOrder.compareTo(right.sortOrder);
+  if (bySortOrder != 0) return bySortOrder;
+  final byId = left.id.compareTo(right.id);
+  if (byId != 0) return byId;
+  return left.slug.compareTo(right.slug);
 }
 
 const _generalArtworkExtensions = [

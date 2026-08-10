@@ -8,6 +8,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/catalog_group_card.dart';
+import 'package:printing_app/features/customer/order/widgets/catalog_authority_banner.dart';
 
 /// Customer entry point for the grouped v1.10 product catalog.
 class CategoryScreen extends ConsumerWidget {
@@ -56,9 +57,10 @@ class CategoryScreen extends ConsumerWidget {
               'Choose the kind of product you need. We’ll confirm availability, price, and turnaround after review.',
               style: AppTypography.bodyLarge.copyWith(color: colors.onSurface),
             ),
-            if (catalogState.error != null) ...[
+            if (catalogState.isLoading || catalogState.error != null) ...[
               const SizedBox(height: AppSpacing.md),
-              _CatalogWarning(
+              CatalogAuthorityBanner(
+                state: catalogState,
                 onRetry: () =>
                     ref.read(productCatalogProvider.notifier).retry(),
               ),
@@ -88,47 +90,4 @@ class CategoryScreen extends ConsumerWidget {
     'specialized-prototyping' => HugeIcons.strokeRoundedCube,
     _ => HugeIcons.strokeRoundedPrinter,
   };
-}
-
-class _CatalogWarning extends StatelessWidget {
-  const _CatalogWarning({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
-    return Semantics(
-      liveRegion: true,
-      label: 'Catalog connection warning',
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: colors.surfaceVariant,
-          border: Border.all(color: colors.warning),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            HugeIcon(
-              icon: HugeIcons.strokeRoundedAlert02,
-              size: 22,
-              color: colors.warning,
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                'Using the saved catalog for browsing. Reconnect before submitting a request.',
-                style: AppTypography.body.copyWith(color: colors.onSurface),
-              ),
-            ),
-            TextButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
-      ),
-    );
-  }
 }

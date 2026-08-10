@@ -6,6 +6,27 @@ import 'package:printing_app/features/customer/order/models/product_catalog.dart
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 
 void main() {
+  test('loading is published in immutable catalog state', () async {
+    final response = Completer<Map<String, dynamic>>();
+    final container = ProviderContainer(
+      overrides: [
+        productCatalogLoaderProvider.overrideWithValue(() => response.future),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final loading = container.read(productCatalogProvider);
+    expect(loading.isLoading, isTrue);
+    expect(loading.catalog.activeGroups.length, 4);
+    expect(loading.canSubmit, isFalse);
+
+    response.complete(_serverCatalog('Server Flyers'));
+    await _waitForLoad(container);
+
+    expect(container.read(productCatalogProvider).isLoading, isFalse);
+    expect(container.read(productCatalogProvider).canSubmit, isTrue);
+  });
+
   test(
     'failed API keeps exact snapshot browseable but submission unauthorized',
     () async {
@@ -76,6 +97,37 @@ void main() {
     },
   );
 
+  test(
+    'retry publishes progress while preserving browseable fallback',
+    () async {
+      final retryResponse = Completer<Map<String, dynamic>>();
+      var attempts = 0;
+      final container = ProviderContainer(
+        overrides: [
+          productCatalogLoaderProvider.overrideWithValue(() async {
+            attempts++;
+            if (attempts == 1) throw StateError('offline');
+            return retryResponse.future;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await _waitForLoad(container);
+      final retry = container.read(productCatalogProvider.notifier).retry();
+
+      final loading = container.read(productCatalogProvider);
+      expect(loading.isLoading, isTrue);
+      expect(loading.error, isA<StateError>());
+      expect(loading.catalog.activeGroups.length, 4);
+      expect(loading.canSubmit, isFalse);
+
+      retryResponse.complete(_serverCatalog('Recovered Flyers'));
+      await retry;
+      expect(container.read(productCatalogProvider).isLoading, isFalse);
+    },
+  );
+
   test('malformed success cannot authorize submission', () async {
     final container = ProviderContainer(
       overrides: [
@@ -96,15 +148,14 @@ void main() {
 }
 
 Future<void> _waitForLoad(ProviderContainer container) async {
-  if (!container.read(productCatalogProvider.notifier).isLoading) return;
+  if (!container.read(productCatalogProvider).isLoading) return;
   final completer = Completer<void>();
   late final ProviderSubscription<ProductCatalogState> subscription;
   subscription = container.listen<ProductCatalogState>(productCatalogProvider, (
     _,
     next,
   ) {
-    if (!container.read(productCatalogProvider.notifier).isLoading &&
-        !completer.isCompleted) {
+    if (!next.isLoading && !completer.isCompleted) {
       completer.complete();
     }
   }, fireImmediately: true);

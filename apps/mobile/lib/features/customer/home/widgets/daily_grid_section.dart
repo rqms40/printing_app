@@ -10,9 +10,6 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/daily_grid_provider.dart';
-import 'package:printing_app/features/customer/order/models/product_catalog.dart';
-import 'package:printing_app/features/customer/order/providers/order_provider.dart';
-import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/shared/models/daily_grid_item.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 
@@ -146,39 +143,8 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
     super.dispose();
   }
 
-  void _onCardTap(BuildContext context, DailyGridItem card) {
-    final notifier = ref.read(orderFlowProvider.notifier);
-    final catalog = ref.read(productCatalogProvider).catalog;
-    final fallback = ProductCatalog.legacyFallback();
-    final category =
-        catalog.categoryBySlug(card.category) ??
-        fallback.categoryBySlug(card.category) ??
-        fallback.categoryBySlug(card.category == '3d' ? '3d' : 'paper')!;
-    final selectedSpecs = card.specs ?? const <String, dynamic>{};
-    final displayValues = card.specDisplayValues.isNotEmpty
-        ? card.specDisplayValues
-        : category.displayValues(
-            category.defaultSpecValues(overrides: selectedSpecs),
-          );
-
-    notifier.reset();
-    // setCategory must come before spec setters because it clears spec state.
-    notifier.setCategory(
-      category.slug,
-      categoryName: card.categoryName ?? category.name,
-    );
-    if (selectedSpecs.isNotEmpty) {
-      notifier.setCatalogSpecs(
-        specs: selectedSpecs,
-        displayValues: displayValues,
-      );
-    }
-    notifier.goToStep(1);
-    context.push(
-      category.fileProcessingType == 'document' || category.slug == 'paper'
-          ? '/customer/order/paper-specs'
-          : '/customer/order/3d-specs',
-    );
+  void _onCardTap(BuildContext context) {
+    context.push('/customer/order/new');
   }
 
   void _onDailyGridUpdated() {
@@ -271,7 +237,7 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
                 child: _DailyGridCard(
                   item: item,
                   colors: colors,
-                  onTap: () => _onCardTap(context, item),
+                  onTap: () => _onCardTap(context),
                 ),
               );
             },

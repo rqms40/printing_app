@@ -7,6 +7,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/catalog_product_card.dart';
+import 'package:printing_app/features/customer/order/widgets/catalog_authority_banner.dart';
 
 class ProductScreen extends ConsumerWidget {
   const ProductScreen({super.key, required this.groupSlug});
@@ -51,6 +52,14 @@ class ProductScreen extends ConsumerWidget {
                       color: colors.onSurface,
                     ),
                   ),
+                  if (catalogState.isLoading || catalogState.error != null) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    CatalogAuthorityBanner(
+                      state: catalogState,
+                      onRetry: () =>
+                          ref.read(productCatalogProvider.notifier).retry(),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.xl),
                   for (final product in group.products) ...[
                     CatalogProductCard(

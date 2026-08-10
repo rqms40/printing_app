@@ -38,6 +38,7 @@ import 'package:printing_app/features/customer/notifications/screens/notificatio
 import 'package:printing_app/features/customer/profile/screens/profile_screen.dart';
 import 'package:printing_app/features/customer/order/screens/category_screen.dart';
 import 'package:printing_app/features/customer/order/screens/product_screen.dart';
+import 'package:printing_app/features/customer/order/navigation/legacy_order_route_guard.dart';
 import 'package:printing_app/features/customer/order/screens/paper_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/three_d_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/upload_screen.dart';
@@ -576,11 +577,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/customer/order/paper-specs',
+        redirect: (_, _) => resolveLegacyOrderDraftRedirect(
+          requestedCategory: 'paper',
+          savedDraftCategory: loadSavedLegacyDraftCategory(),
+        ),
         pageBuilder: (_, state) =>
             slideUpTransition(const PaperSpecsScreen(), state),
       ),
       GoRoute(
         path: '/customer/order/3d-specs',
+        redirect: (_, _) => resolveLegacyOrderDraftRedirect(
+          requestedCategory: '3d',
+          savedDraftCategory: loadSavedLegacyDraftCategory(),
+        ),
         pageBuilder: (_, state) =>
             slideUpTransition(const ThreeDSpecsScreen(), state),
       ),

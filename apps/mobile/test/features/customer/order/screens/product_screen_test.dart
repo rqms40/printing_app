@@ -67,19 +67,33 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('shows fallback warning when authority fails after navigation', (
+    tester,
+  ) async {
+    await _pumpProducts(
+      tester,
+      loader: () async => throw StateError('offline'),
+    );
+
+    expect(find.textContaining('saved catalog'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+    expect(find.text('Flyers'), findsOneWidget);
+  });
 }
 
 Future<GoRouter> _pumpProducts(
   WidgetTester tester, {
   String groupSlug = 'marketing-promo',
   ThemeData? theme,
+  ProductCatalogLoader? loader,
 }) async {
   await tester.binding.setSurfaceSize(const Size(800, 1600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final container = ProviderContainer(
     overrides: [
       productCatalogLoaderProvider.overrideWithValue(
-        () async => _snapshotWire(),
+        loader ?? () async => _snapshotWire(),
       ),
     ],
   );

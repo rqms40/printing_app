@@ -91,6 +91,23 @@ void main() {
       expect(catalog.productBySlug('legacy-paper'), isNull);
     });
 
+    test('sorts flat compatibility products by sort order then id', () {
+      final catalog = ProductCatalog.fromJson({
+        'version': '1.10',
+        'categories': [
+          _product(id: 30, slug: 'later', sortOrder: 2),
+          _product(id: 20, slug: 'second-tie', sortOrder: 1),
+          _product(id: 10, slug: 'first-tie', sortOrder: 1),
+        ],
+      });
+
+      expect(catalog.activeGroups.single.products.map((item) => item.slug), [
+        'first-tie',
+        'second-tie',
+        'later',
+      ]);
+    });
+
     test('rejects a malformed response with no orderable groups', () {
       expect(
         () => ProductCatalog.fromJson({'version': '1.10', 'groups': 'bad'}),

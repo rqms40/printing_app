@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -73,6 +74,43 @@ void main() {
 
     expect(find.textContaining('saved catalog'), findsNothing);
     expect(container.read(productCatalogProvider).canSubmit, isTrue);
+  });
+
+  testWidgets('retry exposes progress while saved catalog remains browseable', (
+    tester,
+  ) async {
+    final retryResponse = Completer<Map<String, dynamic>>();
+    var attempts = 0;
+    final container = ProviderContainer(
+      overrides: [
+        productCatalogLoaderProvider.overrideWithValue(() async {
+          attempts++;
+          if (attempts == 1) throw StateError('offline');
+          return retryResponse.future;
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(theme: AppTheme.light, home: const CategoryScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, 'Retry'));
+    await tester.pump();
+
+    expect(find.text('Retrying…'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Marketing & Promotional Collateral'), findsOneWidget);
+    expect(container.read(productCatalogProvider).canSubmit, isFalse);
+
+    retryResponse.complete(_snapshotWire());
+    await tester.pumpAndSettle();
+    expect(find.textContaining('saved catalog'), findsNothing);
   });
 
   testWidgets('group browsing renders in light and dark themes', (

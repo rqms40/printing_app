@@ -22,14 +22,16 @@ class ProductCatalogState {
   const ProductCatalogState({
     required this.catalog,
     required this.isServerBacked,
+    required this.isLoading,
     this.error,
   });
 
   final ProductCatalog catalog;
   final bool isServerBacked;
+  final bool isLoading;
   final Object? error;
 
-  bool get canSubmit => isServerBacked && error == null;
+  bool get canSubmit => isServerBacked && !isLoading && error == null;
 }
 
 class ProductCatalogNotifier extends StateNotifier<ProductCatalogState> {
@@ -38,34 +40,40 @@ class ProductCatalogNotifier extends StateNotifier<ProductCatalogState> {
         ProductCatalogState(
           catalog: ProductCatalog.v110Snapshot(),
           isServerBacked: false,
+          isLoading: false,
         ),
       ) {
     unawaited(_load());
   }
 
   final ProductCatalogLoader _loader;
-  bool isLoading = false;
 
   Future<void> retry() => _load();
 
   Future<void> _load() async {
-    if (isLoading) return;
-    isLoading = true;
+    if (state.isLoading) return;
+    state = ProductCatalogState(
+      catalog: state.catalog,
+      isServerBacked: state.isServerBacked,
+      isLoading: true,
+      error: state.error,
+    );
     try {
       final catalog = ProductCatalog.fromJson(await _loader());
       if (!mounted) return;
-      isLoading = false;
-      state = ProductCatalogState(catalog: catalog, isServerBacked: true);
+      state = ProductCatalogState(
+        catalog: catalog,
+        isServerBacked: true,
+        isLoading: false,
+      );
     } catch (error) {
       if (!mounted) return;
-      isLoading = false;
       state = ProductCatalogState(
         catalog: ProductCatalog.v110Snapshot(),
         isServerBacked: false,
+        isLoading: false,
         error: error,
       );
-    } finally {
-      isLoading = false;
     }
   }
 }
