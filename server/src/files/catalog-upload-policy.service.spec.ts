@@ -9,7 +9,10 @@ import {
   FileProcessingType,
   PricingModel,
 } from '../products/enums/catalog.enums';
-import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
+import {
+  BoundedInspectionPool,
+  CatalogUploadPolicyService,
+} from './catalog-upload-policy.service';
 
 const MB = 1024 * 1024;
 const VALID_MODEL_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -90,9 +93,30 @@ const makePsd = (overrides: { version?: number; width?: number } = {}) => {
   return psd;
 };
 
-const makeBinaryStl = (extraBytes = 0) => {
-  const stl = Buffer.alloc(134 + extraBytes);
-  stl.writeUInt32LE(1, 80);
+const makeBinaryStl = (
+  extraBytes = 0,
+  triangles: Array<{
+    normal?: [number, number, number];
+    vertices?: [number, number, number][];
+  }> = [{}],
+) => {
+  const stl = Buffer.alloc(84 + triangles.length * 50 + extraBytes);
+  stl.writeUInt32LE(triangles.length, 80);
+  triangles.forEach((triangle, triangleIndex) => {
+    const values = [
+      ...(triangle.normal ?? [0, 0, 1]),
+      ...(
+        triangle.vertices ?? [
+          [0, 0, 0],
+          [1, 0, 0],
+          [0, 1, 0],
+        ]
+      ).flat(),
+    ];
+    values.forEach((value, valueIndex) => {
+      stl.writeFloatLE(value, 84 + triangleIndex * 50 + valueIndex * 4);
+    });
+  });
   return stl;
 };
 
@@ -196,11 +220,14 @@ describe('CatalogUploadPolicyService', () => {
       Buffer.from('%!PS-Adobe-3.0\n%%Creator: Adobe Illustrator'),
     ],
     ['artwork.psd', 'image/vnd.adobe.photoshop', makePsd()],
-  ])('accepts structurally valid general artwork %s', (name, mime, content) => {
-    expect(() =>
-      policy.validate(general, makeUpload(name, mime, content)),
-    ).not.toThrow();
-  });
+  ])(
+    'accepts structurally valid general artwork %s',
+    async (name, mime, content) => {
+      await expect(
+        policy.validate(general, makeUpload(name, mime, content)),
+      ).resolves.toBeUndefined();
+    },
+  );
 
   it.each([
     [
@@ -225,20 +252,20 @@ describe('CatalogUploadPolicyService', () => {
       'model/obj',
       Buffer.from('v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n'),
     ],
-  ])('accepts structurally valid 3D format %s', (name, mime, content) => {
-    expect(() =>
+  ])('accepts structurally valid 3D format %s', async (name, mime, content) => {
+    await expect(
       policy.validate(model, makeUpload(name, mime, content)),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
   it('accepts a real bounded 3MF OPC package', async () => {
     const archive = await make3mf();
-    expect(() =>
+    await expect(
       policy.validate(
         model,
         makeUpload('model.3mf', 'application/zip', archive),
       ),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -275,18 +302,18 @@ describe('CatalogUploadPolicyService', () => {
         ),
       ),
     ],
-  ])('accepts structurally valid %s', (_case, category, upload) => {
-    expect(() => policy.validate(category, upload)).not.toThrow();
+  ])('accepts structurally valid %s', async (_case, category, upload) => {
+    await expect(policy.validate(category, upload)).resolves.toBeUndefined();
   });
 
-  it('accepts ASCII STL whose only geometry is beyond the first MiB', () => {
+  it('accepts ASCII STL whose only geometry is beyond the first MiB', async () => {
     const content = Buffer.from(
       `solid delayed\n${'# harmless padding\n'.repeat(70_000)}facet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\n${'# trailing padding\n'.repeat(70_000)}endsolid delayed\n`,
     );
 
-    expect(() =>
+    await expect(
       policy.validate(model, makeUpload('delayed.stl', 'model/stl', content)),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -330,19 +357,232 @@ describe('CatalogUploadPolicyService', () => {
         ),
       ),
     ],
-  ])('rejects %s during complete text parsing', (_case, category, upload) => {
-    expect(() => policy.validate(category, upload)).toThrow(
-      'File content does not match its type',
-    );
-  });
+  ])(
+    'rejects %s during complete text parsing',
+    async (_case, category, upload) => {
+      await expect(policy.validate(category, upload)).rejects.toThrow(
+        'File content does not match its type',
+      );
+    },
+  );
 
-  it('accepts valid positive and negative OBJ vertex references', () => {
+  it('accepts valid positive and negative OBJ vertex references', async () => {
     const content = Buffer.from(
       'v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\nf -3 -2 -1\n',
     );
-    expect(() =>
+    await expect(
       policy.validate(model, makeUpload('refs.obj', 'model/obj', content)),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
+  });
+
+  it('streams and validates every binary STL triangle record', async () => {
+    const content = makeBinaryStl(0, [
+      {},
+      {
+        vertices: [
+          [0, 0, 1],
+          [1, 0, 1],
+          [0, 1, 1],
+        ],
+      },
+    ]);
+
+    await expect(
+      (async () =>
+        policy.validate(
+          model,
+          makeUpload('two-triangles.stl', 'model/stl', content),
+        ))(),
+    ).resolves.toBeUndefined();
+  });
+
+  it.each([
+    [
+      'a non-finite value in a later record',
+      makeBinaryStl(0, [
+        {},
+        {
+          vertices: [
+            [0, 0, 1],
+            [Number.NaN, 0, 1],
+            [0, 1, 1],
+          ],
+        },
+      ]),
+    ],
+    [
+      'a degenerate triangle',
+      makeBinaryStl(0, [
+        {
+          vertices: [
+            [0, 0, 0],
+            [1, 1, 1],
+            [2, 2, 2],
+          ],
+        },
+      ]),
+    ],
+  ])('rejects binary STL with %s', async (_case, content) => {
+    await expect(
+      (async () =>
+        policy.validate(
+          model,
+          makeUpload('invalid.stl', 'model/stl', content),
+        ))(),
+    ).rejects.toThrow('File content does not match its type');
+  });
+
+  it('accepts exact OBJ face, line, point, and parameter reference grammar', async () => {
+    const content = Buffer.from(
+      [
+        'v 0 0 0',
+        'v 1 0 0',
+        'v 0 1 0',
+        'vt 0 0',
+        'vt 1 0',
+        'vt 0 1',
+        'vn 0 0 1',
+        'vp 0.5 0.25 1',
+        'f 1 2 3',
+        'f 1/1 2/2 3/3',
+        'f 1//1 2//1 3//1',
+        'f -3/-3/-1 -2/-2/-1 -1/-1/-1',
+        'l 1/1 2/2 3/3',
+        'p 1 -1',
+      ].join('\n'),
+    );
+
+    await expect(
+      (async () =>
+        policy.validate(
+          model,
+          makeUpload('grammar.obj', 'model/obj', content),
+        ))(),
+    ).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ['empty trailing face component', 'f 1/ 2/2 3/3'],
+    ['zero texture reference', 'f 1/0 2/2 3/3'],
+    ['fractional normal reference', 'f 1//1.5 2//1 3//1'],
+    ['out-of-range texture reference', 'f 1/9 2/2 3/3'],
+    ['out-of-range normal reference', 'f 1//9 2//1 3//1'],
+    ['malformed line reference', 'l 1/ 2/2'],
+    ['out-of-range point reference', 'p 99'],
+    ['non-finite parameter vertex', 'vp Infinity 0'],
+    ['unsupported malformed free-form geometry', 'curv nope 1 2'],
+  ])('rejects OBJ with %s', async (_case, statement) => {
+    const content = Buffer.from(
+      `v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\n${statement}\nf 1 2 3\n`,
+    );
+    await expect(
+      (async () =>
+        policy.validate(
+          model,
+          makeUpload('invalid.obj', 'model/obj', content),
+        ))(),
+    ).rejects.toThrow('File content does not match its type');
+  });
+
+  it.each([
+    ['fractional integer', '70\n1.5'],
+    ['invalid boolean', '290\n2'],
+    ['invalid handle', '320\nnot-hex'],
+    ['invalid binary chunk', '310\n0xz1'],
+  ])('rejects ASCII DXF with %s values', async (_case, pair) => {
+    const content = Buffer.from(
+      `0\nSECTION\n2\nENTITIES\n${pair}\n0\nENDSEC\n0\nEOF\n`,
+    );
+    await expect(
+      (async () =>
+        policy.validate(
+          cad,
+          makeUpload('typed.dxf', 'image/vnd.dxf', content),
+        ))(),
+    ).rejects.toThrow('File content does not match its type');
+  });
+
+  it.each([
+    Buffer.from('AutoCAD Binary DXF\r\n\u001a\u0000', 'binary'),
+    Buffer.concat([
+      Buffer.from('AutoCAD Binary DXF\r\n\u001a\u0000', 'binary'),
+      Buffer.from([0, 1, 2, 3]),
+    ]),
+  ])(
+    'rejects unsupported binary DXF instead of trusting magic',
+    async (content) => {
+      await expect(
+        (async () =>
+          policy.validate(
+            cad,
+            makeUpload('binary.dxf', 'application/octet-stream', content),
+          ))(),
+      ).rejects.toThrow('File content does not match its type');
+    },
+  );
+
+  it('yields to the event loop while scanning a worst-case text model', async () => {
+    const content = Buffer.from(
+      `solid responsive\n${'facet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\n'.repeat(30_000)}endsolid responsive\n`,
+    );
+    let validationSettled = false;
+    const validation = Promise.resolve()
+      .then(() =>
+        policy.validate(
+          model,
+          makeUpload('responsive.stl', 'model/stl', content),
+        ),
+      )
+      .finally(() => {
+        validationSettled = true;
+      });
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(validationSettled).toBe(false);
+    await expect(validation).resolves.toBeUndefined();
+  });
+
+  it('bounds concurrent inspectors and applies queue backpressure', async () => {
+    const pool = new BoundedInspectionPool(2, 2);
+    let active = 0;
+    let maximumActive = 0;
+    const releases: Array<() => void> = [];
+    const task = () =>
+      pool.run(async () => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active -= 1;
+      });
+
+    const first = task();
+    const second = task();
+    const third = task();
+    const fourth = task();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(active).toBe(2);
+    expect(maximumActive).toBe(2);
+    await expect(task()).rejects.toThrow('Upload inspection is busy');
+    releases.shift()!();
+    releases.shift()!();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    releases.shift()!();
+    releases.shift()!();
+    await Promise.all([first, second, third, fourth]);
+    expect(maximumActive).toBe(2);
+  });
+
+  it('releases an inspection slot when a task throws before returning', async () => {
+    const pool = new BoundedInspectionPool(1, 1, 20);
+
+    await expect(
+      pool.run((() => {
+        throw new Error('early inspector failure');
+      }) as never),
+    ).rejects.toThrow('early inspector failure');
+    await expect(pool.run(async () => 'next inspector')).resolves.toBe(
+      'next inspector',
+    );
   });
 
   it.each([
@@ -423,21 +663,21 @@ describe('CatalogUploadPolicyService', () => {
     ],
   ])('rejects 3MF XML with %s', async (_case, options) => {
     const archive = await make3mf(options);
-    expect(() =>
+    await expect(
       policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
   it.each(['3D//bad.model', 'http:evil.model'])(
     'rejects non-normalized OPC model URI %s',
     async (modelName) => {
       const archive = await make3mf({ modelName });
-      expect(() =>
+      await expect(
         policy.validate(
           model,
           makeUpload('bad.3mf', 'application/zip', archive),
         ),
-      ).toThrow('File content does not match its type');
+      ).rejects.toThrow('File content does not match its type');
     },
   );
 
@@ -445,12 +685,12 @@ describe('CatalogUploadPolicyService', () => {
     const archive = await make3mf({
       comment: `comment-PK\u0005\u0006-${'x'.repeat(40)}`,
     });
-    expect(() =>
+    await expect(
       policy.validate(
         model,
         makeUpload('commented.3mf', 'application/zip', archive),
       ),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -542,9 +782,9 @@ describe('CatalogUploadPolicyService', () => {
     ],
   ])('rejects 3MF ZIP with %s', async (_case, archiveFactory) => {
     const archive = await archiveFactory();
-    expect(() =>
+    await expect(
       policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
   it.each([
@@ -553,9 +793,9 @@ describe('CatalogUploadPolicyService', () => {
     ['embedded native executable', 'Payload/tool.exe', Buffer.from('MZevil')],
   ])('rejects a valid 3MF with %s content', async (_case, name, content) => {
     const archive = await make3mf({ extras: { [name]: content } });
-    expect(() =>
+    await expect(
       policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
   it('rejects a corrupt unreferenced ZIP entry CRC', async () => {
@@ -572,9 +812,9 @@ describe('CatalogUploadPolicyService', () => {
     archive.writeUInt32LE(wrongCrc, local + 14);
     archive.writeUInt32LE(wrongCrc, central + 16);
 
-    expect(() =>
+    await expect(
       policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
   it('accepts legal DEFLATE compression-option flag bits', async () => {
@@ -596,12 +836,12 @@ describe('CatalogUploadPolicyService', () => {
       );
     }
 
-    expect(() =>
+    await expect(
       policy.validate(
         model,
         makeUpload('deflate.3mf', 'application/zip', archive),
       ),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
   it('accepts a declared safe PNG thumbnail part', async () => {
@@ -616,12 +856,12 @@ describe('CatalogUploadPolicyService', () => {
       },
     });
 
-    expect(() =>
+    await expect(
       policy.validate(
         model,
         makeUpload('thumbnail.3mf', 'application/zip', archive),
       ),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
   it.each([
@@ -643,16 +883,14 @@ describe('CatalogUploadPolicyService', () => {
       'image/vnd.dxf',
       Buffer.from('0\nSECTION\n2\nHEADER\n0\nENDSEC\n0\nEOF\n'),
     ],
-    [
-      'drawing.dxf',
-      'application/octet-stream',
-      Buffer.from('AutoCAD Binary DXF\r\n\u001a\u0000', 'binary'),
-    ],
-  ])('accepts structurally valid CAD format %s', (name, mime, content) => {
-    expect(() =>
-      policy.validate(cad, makeUpload(name, mime, content)),
-    ).not.toThrow();
-  });
+  ])(
+    'accepts structurally valid CAD format %s',
+    async (name, mime, content) => {
+      await expect(
+        policy.validate(cad, makeUpload(name, mime, content)),
+      ).resolves.toBeUndefined();
+    },
+  );
 
   it.each([
     [
@@ -692,13 +930,13 @@ describe('CatalogUploadPolicyService', () => {
       'image/vnd.dxf',
       Buffer.from('SECTION HEADER EOF'),
     ],
-  ])('rejects malformed %s content', (_case, name, mime, content) => {
-    expect(() =>
+  ])('rejects malformed %s content', async (_case, name, mime, content) => {
+    await expect(
       policy.validate(
         name.endsWith('.dxf') ? cad : name.endsWith('.psd') ? general : model,
         makeUpload(name, mime, content),
       ),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
   it.each([
@@ -718,22 +956,22 @@ describe('CatalogUploadPolicyService', () => {
             Object.values(options.extras)[0],
           )
           .generateAsync({ type: 'nodebuffer' });
-    expect(() =>
+    await expect(
       policy.validate(
         model,
         makeUpload('model.3mf', 'application/zip', archive),
       ),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
   it('rejects empty ZIP archives renamed as 3MF', async () => {
     const archive = await new JSZip().generateAsync({ type: 'nodebuffer' });
-    expect(() =>
+    await expect(
       policy.validate(
         model,
         makeUpload('empty.3mf', 'application/zip', archive),
       ),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
   it('rejects high-ratio 3MF model XML before decompression can expand it', async () => {
@@ -741,12 +979,12 @@ describe('CatalogUploadPolicyService', () => {
       modelXml: VALID_MODEL_XML + '<!--' + 'A'.repeat(6 * MB) + '-->',
       compression: 'DEFLATE',
     });
-    expect(() =>
+    await expect(
       policy.validate(
         model,
         makeUpload('bomb.3mf', 'application/zip', archive),
       ),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
   it('rejects archives with excessive entry counts', async () => {
@@ -754,15 +992,15 @@ describe('CatalogUploadPolicyService', () => {
       Array.from({ length: 70 }, (_, index) => [`Metadata/${index}.txt`, 'x']),
     );
     const archive = await make3mf({ extras });
-    expect(() =>
+    await expect(
       policy.validate(
         model,
         makeUpload('many.3mf', 'application/zip', archive),
       ),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
-  it('rejects a 200 MB sparse fake 3MF without materializing it', () => {
+  it('rejects a 200 MB sparse fake 3MF without materializing it', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'catalog-3mf-'));
     const path = join(directory, 'sparse.3mf');
     writeFileSync(path, Buffer.alloc(0));
@@ -776,7 +1014,7 @@ describe('CatalogUploadPolicyService', () => {
     upload.buffer = undefined as never;
     upload.path = path;
     try {
-      expect(() => policy.validate(model, upload)).toThrow(
+      await expect(policy.validate(model, upload)).rejects.toThrow(
         'File content does not match its type',
       );
     } finally {
@@ -793,12 +1031,12 @@ describe('CatalogUploadPolicyService', () => {
       if (signature === 0x02014b50)
         archive.writeUInt16LE(archive.readUInt16LE(offset + 8) | 1, offset + 8);
     }
-    expect(() =>
+    await expect(
       policy.validate(
         model,
         makeUpload('encrypted.3mf', 'application/zip', archive),
       ),
-    ).toThrow('File content does not match its type');
+    ).rejects.toThrow('File content does not match its type');
   });
 
   it.each([
@@ -839,8 +1077,8 @@ describe('CatalogUploadPolicyService', () => {
     ).toThrow('File type not allowed');
   });
 
-  it('normalizes uppercase filename extensions', () => {
-    expect(() =>
+  it('normalizes uppercase filename extensions', async () => {
+    await expect(
       policy.validate(
         general,
         makeUpload(
@@ -849,7 +1087,7 @@ describe('CatalogUploadPolicyService', () => {
           Buffer.from([0xff, 0xd8, 0xff]),
         ),
       ),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
   it('rejects a dangerous executable double extension', () => {
@@ -870,13 +1108,13 @@ describe('CatalogUploadPolicyService', () => {
     ['ELF', Buffer.from([0x7f, 0x45, 0x4c, 0x46])],
     ['Mach-O', Buffer.from([0xfe, 0xed, 0xfa, 0xce])],
     ['shebang', Buffer.from('#!/bin/sh')],
-  ])('rejects %s executable bytes spoofed as PDF', (_case, content) => {
-    expect(() =>
+  ])('rejects %s executable bytes spoofed as PDF', async (_case, content) => {
+    await expect(
       policy.validate(
         general,
         makeUpload('artwork.pdf', 'application/pdf', content),
       ),
-    ).toThrow('Executable uploads are not allowed');
+    ).rejects.toThrow('Executable uploads are not allowed');
   });
 
   it('rejects MIME and filename extension mismatches', () => {
@@ -888,8 +1126,8 @@ describe('CatalogUploadPolicyService', () => {
     ).toThrow('File type not allowed');
   });
 
-  it('enforces 100 MB general and 200 MB 3D boundaries', () => {
-    expect(() =>
+  it('enforces 100 MB general and 200 MB 3D boundaries', async () => {
+    await expect(
       policy.validate(
         general,
         makeUpload(
@@ -899,7 +1137,7 @@ describe('CatalogUploadPolicyService', () => {
           100 * MB,
         ),
       ),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
     expect(() =>
       policy.validate(
         general,

@@ -80,7 +80,7 @@ export class FilesService {
         if (!category) {
           throw new BadRequestException('Active catalog product required');
         }
-        this.catalogUploadPolicy.validate(category, file);
+        await this.catalogUploadPolicy.validate(category, file);
       } else {
         const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
         const extOk =

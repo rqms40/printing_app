@@ -1,7 +1,13 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import {
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { open } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
-import { inflateRawSync } from 'node:zlib';
+import { promisify } from 'node:util';
+import { inflateRaw } from 'node:zlib';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 
 import {
@@ -26,6 +32,10 @@ const MAX_TEXT_INSPECTION_MS = 5_000;
 const TEXT_SCAN_CHUNK_BYTES = 64 * 1024;
 const MAX_TEXT_LINE_BYTES = 16 * 1024;
 const MAX_TEXT_LINES = 5_000_000;
+const MAX_CONCURRENT_INSPECTIONS = 2;
+const MAX_QUEUED_INSPECTIONS = 16;
+const MAX_INSPECTION_QUEUE_MS = 5_000;
+const BINARY_STL_RECORDS_PER_CHUNK = 1024;
 const ZIP_EOCD_SIGNATURE = 0x06054b50;
 const ZIP_CENTRAL_SIGNATURE = 0x02014b50;
 const ZIP_LOCAL_SIGNATURE = 0x04034b50;
@@ -81,22 +91,100 @@ type OpcContentTypes = {
   overrides: Map<string, string>;
 };
 
-class BoundedReader {
-  readonly size: number;
-  private descriptor: number | null = null;
+const inflateRawAsync = promisify(inflateRaw);
+const yieldToEventLoop = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve));
 
-  constructor(private readonly file: Express.Multer.File) {
-    if (Buffer.isBuffer(file.buffer)) {
-      this.size = file.buffer.length;
-    } else if (file.path) {
-      this.descriptor = openSync(file.path, 'r');
-      this.size = fstatSync(this.descriptor).size;
-    } else {
-      throw new BadRequestException('Uploaded file is missing content');
+type QueuedInspection = {
+  start: () => void;
+  reject: (error: Error) => void;
+  timer: NodeJS.Timeout;
+};
+
+export class BoundedInspectionPool {
+  private active = 0;
+  private readonly queue: QueuedInspection[] = [];
+
+  constructor(
+    private readonly maximumActive = MAX_CONCURRENT_INSPECTIONS,
+    private readonly maximumQueued = MAX_QUEUED_INSPECTIONS,
+    private readonly maximumQueueMs = MAX_INSPECTION_QUEUE_MS,
+  ) {
+    if (maximumActive < 1 || maximumQueued < 0 || maximumQueueMs < 1) {
+      throw new Error('Invalid inspection pool limits');
     }
   }
 
-  read(offset: number, length: number): Buffer {
+  run<T>(inspection: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const execute = () => {
+        this.active += 1;
+        void Promise.resolve()
+          .then(inspection)
+          .then(resolve, reject)
+          .finally(() => {
+            this.active -= 1;
+            this.startNext();
+          });
+      };
+      if (this.active < this.maximumActive) {
+        execute();
+        return;
+      }
+      if (this.queue.length >= this.maximumQueued) {
+        reject(new ServiceUnavailableException('Upload inspection is busy'));
+        return;
+      }
+      const queued: QueuedInspection = {
+        start: execute,
+        reject,
+        timer: setTimeout(() => {
+          const index = this.queue.indexOf(queued);
+          if (index < 0) return;
+          this.queue.splice(index, 1);
+          reject(new ServiceUnavailableException('Upload inspection is busy'));
+        }, this.maximumQueueMs),
+      };
+      queued.timer.unref();
+      this.queue.push(queued);
+    });
+  }
+
+  private startNext(): void {
+    const next = this.queue.shift();
+    if (!next) return;
+    clearTimeout(next.timer);
+    next.start();
+  }
+}
+
+const catalogInspectionPool = new BoundedInspectionPool();
+
+class BoundedReader {
+  private constructor(
+    private readonly file: Express.Multer.File,
+    readonly size: number,
+    private handle: FileHandle | null,
+  ) {}
+
+  static async create(file: Express.Multer.File): Promise<BoundedReader> {
+    if (Buffer.isBuffer(file.buffer)) {
+      return new BoundedReader(file, file.buffer.length, null);
+    }
+    if (!file.path) {
+      throw new BadRequestException('Uploaded file is missing content');
+    }
+    const handle = await open(file.path, 'r');
+    try {
+      const stats = await handle.stat();
+      return new BoundedReader(file, stats.size, handle);
+    } catch (error) {
+      await handle.close();
+      throw error;
+    }
+  }
+
+  async read(offset: number, length: number): Promise<Buffer> {
     if (
       !Number.isSafeInteger(offset) ||
       !Number.isSafeInteger(length) ||
@@ -109,15 +197,15 @@ class BoundedReader {
     if (Buffer.isBuffer(this.file.buffer)) {
       return this.file.buffer.subarray(offset, offset + length);
     }
-    const result = Buffer.alloc(length);
-    const bytesRead = readSync(this.descriptor!, result, 0, length, offset);
+    const result = Buffer.allocUnsafe(length);
+    const { bytesRead } = await this.handle!.read(result, 0, length, offset);
     if (bytesRead !== length) {
       throw new BadRequestException('Uploaded file is missing content');
     }
     return result;
   }
 
-  scanLines(visitor: (line: string) => boolean): boolean {
+  async scanLines(visitor: (line: string) => boolean): Promise<boolean> {
     const started = Date.now();
     let carry = '';
     let offset = 0;
@@ -125,15 +213,7 @@ class BoundedReader {
     while (offset < this.size) {
       if (Date.now() - started > MAX_TEXT_INSPECTION_MS) return false;
       const length = Math.min(TEXT_SCAN_CHUNK_BYTES, this.size - offset);
-      let chunk: Buffer;
-      if (Buffer.isBuffer(this.file.buffer)) {
-        chunk = this.file.buffer.subarray(offset, offset + length);
-      } else {
-        chunk = Buffer.allocUnsafe(length);
-        if (readSync(this.descriptor!, chunk, 0, length, offset) !== length) {
-          return false;
-        }
-      }
+      const chunk = await this.read(offset, length);
       offset += length;
       const text = carry + chunk.toString('latin1');
       const lines = text.split('\n');
@@ -149,6 +229,7 @@ class BoundedReader {
         const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
         if (!visitor(line)) return false;
       }
+      await yieldToEventLoop();
     }
     if (carry.length > 0) {
       if (++lineCount > MAX_TEXT_LINES || carry.length > MAX_TEXT_LINE_BYTES) {
@@ -161,31 +242,21 @@ class BoundedReader {
     return Date.now() - started <= MAX_TEXT_INSPECTION_MS;
   }
 
-  readHeadAndTail(windowBytes = CONTENT_INSPECTION_BYTES): {
-    head: Buffer;
-    tail: Buffer;
-  } {
-    const headLength = Math.min(this.size, windowBytes);
-    const head = this.read(0, headLength);
-    if (this.size <= headLength) return { head, tail: Buffer.alloc(0) };
-    const tailLength = Math.min(this.size - headLength, windowBytes);
-    return {
-      head,
-      tail: this.read(this.size - tailLength, tailLength),
-    };
-  }
-
-  close(): void {
-    if (this.descriptor != null) {
-      closeSync(this.descriptor);
-      this.descriptor = null;
+  async close(): Promise<void> {
+    if (this.handle != null) {
+      const handle = this.handle;
+      this.handle = null;
+      await handle.close();
     }
   }
 }
 
 @Injectable()
 export class CatalogUploadPolicyService {
-  validate(category: ProductCategory, file: Express.Multer.File): void {
+  validate(
+    category: ProductCategory,
+    file: Express.Multer.File,
+  ): Promise<void> {
     const extension = this.validateProperties(
       category,
       file.originalname,
@@ -193,24 +264,27 @@ export class CatalogUploadPolicyService {
       file.size,
     );
 
-    let reader: BoundedReader;
-    try {
-      reader = new BoundedReader(file);
-    } catch (error) {
-      if (error instanceof BadRequestException) throw error;
-      throw new BadRequestException('Uploaded file is missing content');
-    }
-    try {
-      const prefix = reader.read(0, Math.min(reader.size, 32));
-      if (this.hasExecutableSignature(prefix)) {
-        throw new BadRequestException('Executable uploads are not allowed');
+    const inspection = catalogInspectionPool.run(async () => {
+      let reader: BoundedReader;
+      try {
+        reader = await BoundedReader.create(file);
+      } catch (error) {
+        if (error instanceof BadRequestException) throw error;
+        throw new BadRequestException('Uploaded file is missing content');
       }
-      if (!this.signatureMatches(extension, reader)) {
-        throw new BadRequestException('File content does not match its type');
+      try {
+        const prefix = await reader.read(0, Math.min(reader.size, 32));
+        if (this.hasExecutableSignature(prefix)) {
+          throw new BadRequestException('Executable uploads are not allowed');
+        }
+        if (!(await this.signatureMatches(extension, reader))) {
+          throw new BadRequestException('File content does not match its type');
+        }
+      } finally {
+        await reader.close();
       }
-    } finally {
-      reader.close();
-    }
+    });
+    return inspection;
   }
 
   validateMetadata(category: ProductCategory, file: StoredCatalogFile): void {
@@ -293,13 +367,16 @@ export class CatalogUploadPolicyService {
     );
   }
 
-  private signatureMatches(extension: string, reader: BoundedReader): boolean {
+  private async signatureMatches(
+    extension: string,
+    reader: BoundedReader,
+  ): Promise<boolean> {
     if (reader.size === 0) return false;
     if (extension === '.3mf') return this.isValid3mf(reader);
     if (extension === '.stl') return this.isValidStl(reader);
     if (extension === '.obj') return this.isValidObj(reader);
 
-    const content = reader.read(
+    const content = await reader.read(
       0,
       Math.min(reader.size, CONTENT_INSPECTION_BYTES),
     );
@@ -358,11 +435,18 @@ export class CatalogUploadPolicyService {
     );
   }
 
-  private isValidStl(reader: BoundedReader): boolean {
+  private async isValidStl(reader: BoundedReader): Promise<boolean> {
     if (reader.size >= 84) {
-      const header = reader.read(0, 84);
+      const header = await reader.read(0, 84);
       const triangles = header.readUInt32LE(80);
-      if (triangles > 0 && 84 + triangles * 50 === reader.size) return true;
+      const expectedSize = 84 + triangles * 50;
+      if (
+        triangles > 0 &&
+        Number.isSafeInteger(expectedSize) &&
+        expectedSize === reader.size
+      ) {
+        return this.isValidBinaryStl(reader, triangles);
+      }
     }
     let state:
       | 'start'
@@ -375,7 +459,7 @@ export class CatalogUploadPolicyService {
     let vertexCount = 0;
     let facetCount = 0;
     let ended = false;
-    const valid = reader.scanLines((rawLine) => {
+    const valid = await reader.scanLines((rawLine) => {
       const line = rawLine.trim();
       if (!line || line.startsWith('#')) return true;
       const tokens = line.split(/\s+/);
@@ -437,45 +521,53 @@ export class CatalogUploadPolicyService {
     return valid && ended && facetCount > 0;
   }
 
-  private isValidObj(reader: BoundedReader): boolean {
+  private async isValidBinaryStl(
+    reader: BoundedReader,
+    triangleCount: number,
+  ): Promise<boolean> {
+    const started = Date.now();
+    for (
+      let firstTriangle = 0;
+      firstTriangle < triangleCount;
+      firstTriangle += BINARY_STL_RECORDS_PER_CHUNK
+    ) {
+      if (Date.now() - started > MAX_INSPECTION_MS) return false;
+      const records = Math.min(
+        BINARY_STL_RECORDS_PER_CHUNK,
+        triangleCount - firstTriangle,
+      );
+      const content = await reader.read(84 + firstTriangle * 50, records * 50);
+      for (let record = 0; record < records; record += 1) {
+        const offset = record * 50;
+        const values = Array.from({ length: 12 }, (_, index) =>
+          content.readFloatLE(offset + index * 4),
+        );
+        if (!values.every(Number.isFinite)) return false;
+        const [ax, ay, az, bx, by, bz, cx, cy, cz] = values.slice(3);
+        const abx = bx - ax;
+        const aby = by - ay;
+        const abz = bz - az;
+        const acx = cx - ax;
+        const acy = cy - ay;
+        const acz = cz - az;
+        const crossX = aby * acz - abz * acy;
+        const crossY = abz * acx - abx * acz;
+        const crossZ = abx * acy - aby * acx;
+        const areaSquared = crossX * crossX + crossY * crossY + crossZ * crossZ;
+        if (!Number.isFinite(areaSquared) || areaSquared <= 0) return false;
+      }
+      await yieldToEventLoop();
+    }
+    return Date.now() - started <= MAX_INSPECTION_MS;
+  }
+
+  private async isValidObj(reader: BoundedReader): Promise<boolean> {
     let vertices = 0;
     let textureVertices = 0;
     let normals = 0;
     let faces = 0;
     const maxPositive = { vertex: 0, texture: 0, normal: 0 };
-    const inertKeywords = new Set([
-      'o',
-      'g',
-      's',
-      'usemtl',
-      'mtllib',
-      'l',
-      'p',
-      'vp',
-      'cstype',
-      'deg',
-      'bmat',
-      'step',
-      'curv',
-      'curv2',
-      'surf',
-      'parm',
-      'trim',
-      'hole',
-      'scrv',
-      'sp',
-      'end',
-      'con',
-      'bevel',
-      'c_interp',
-      'd_interp',
-      'lod',
-      'shadow_obj',
-      'trace_obj',
-      'ctech',
-      'stech',
-    ]);
-    const valid = reader.scanLines((rawLine) => {
+    const valid = await reader.scanLines((rawLine) => {
       const line = rawLine.split('#', 1)[0].trim();
       if (!line) return true;
       const tokens = line.split(/\s+/);
@@ -511,24 +603,25 @@ export class CatalogUploadPolicyService {
         normals += 1;
         return true;
       }
+      if (keyword === 'vp') {
+        return (
+          tokens.length >= 1 &&
+          tokens.length <= 3 &&
+          tokens.every((value) => this.isFiniteNumber(value))
+        );
+      }
       if (keyword === 'f') {
         if (tokens.length < 3) return false;
         for (const token of tokens) {
-          const parts = token.split('/');
-          if (parts.length > 3 || !parts[0]) return false;
           if (
-            !this.validateObjIndex(parts[0], vertices, maxPositive, 'vertex') ||
-            (parts[1] !== undefined &&
-              parts[1] !== '' &&
-              !this.validateObjIndex(
-                parts[1],
-                textureVertices,
-                maxPositive,
-                'texture',
-              )) ||
-            (parts[2] !== undefined &&
-              parts[2] !== '' &&
-              !this.validateObjIndex(parts[2], normals, maxPositive, 'normal'))
+            !this.validateObjReference(
+              token,
+              'face',
+              vertices,
+              textureVertices,
+              normals,
+              maxPositive,
+            )
           ) {
             return false;
           }
@@ -536,7 +629,48 @@ export class CatalogUploadPolicyService {
         faces += 1;
         return true;
       }
-      return inertKeywords.has(keyword);
+      if (keyword === 'l') {
+        return (
+          tokens.length >= 2 &&
+          tokens.every((token) =>
+            this.validateObjReference(
+              token,
+              'line',
+              vertices,
+              textureVertices,
+              normals,
+              maxPositive,
+            ),
+          )
+        );
+      }
+      if (keyword === 'p') {
+        return (
+          tokens.length >= 1 &&
+          tokens.every((token) =>
+            this.validateObjReference(
+              token,
+              'point',
+              vertices,
+              textureVertices,
+              normals,
+              maxPositive,
+            ),
+          )
+        );
+      }
+      if (keyword === 's') {
+        return (
+          tokens.length === 1 &&
+          (tokens[0].toLowerCase() === 'off' || /^\d+$/.test(tokens[0]))
+        );
+      }
+      if (keyword === 'o' || keyword === 'g') return true;
+      if (keyword === 'usemtl' || keyword === 'mtllib') {
+        return tokens.length >= 1;
+      }
+      // Free-form curve/surface statements are outside the v1.10 mesh policy.
+      return false;
     });
     return (
       valid &&
@@ -545,6 +679,43 @@ export class CatalogUploadPolicyService {
       maxPositive.vertex <= vertices &&
       maxPositive.texture <= textureVertices &&
       maxPositive.normal <= normals
+    );
+  }
+
+  private validateObjReference(
+    token: string,
+    kind: 'face' | 'line' | 'point',
+    vertices: number,
+    textureVertices: number,
+    normals: number,
+    maxima: { vertex: number; texture: number; normal: number },
+  ): boolean {
+    let match: RegExpMatchArray | null;
+    if (kind === 'point') {
+      match = token.match(/^([+-]?\d+)$/);
+    } else if (kind === 'line') {
+      match = token.match(/^([+-]?\d+)(?:\/([+-]?\d+))?$/);
+    } else {
+      match = token.match(
+        /^(?:([+-]?\d+)|([+-]?\d+)\/([+-]?\d+)|([+-]?\d+)\/\/([+-]?\d+)|([+-]?\d+)\/([+-]?\d+)\/([+-]?\d+))$/,
+      );
+      if (!match) return false;
+      const vertex = match[1] ?? match[2] ?? match[4] ?? match[6];
+      const texture = match[3] ?? match[7];
+      const normal = match[5] ?? match[8];
+      return (
+        this.validateObjIndex(vertex, vertices, maxima, 'vertex') &&
+        (texture === undefined ||
+          this.validateObjIndex(texture, textureVertices, maxima, 'texture')) &&
+        (normal === undefined ||
+          this.validateObjIndex(normal, normals, maxima, 'normal'))
+      );
+    }
+    if (!match) return false;
+    return (
+      this.validateObjIndex(match[1], vertices, maxima, 'vertex') &&
+      (match[2] === undefined ||
+        this.validateObjIndex(match[2], textureVertices, maxima, 'texture'))
     );
   }
 
@@ -562,16 +733,21 @@ export class CatalogUploadPolicyService {
     return true;
   }
 
-  private isValidDxf(reader: BoundedReader, content: Buffer): boolean {
+  private async isValidDxf(
+    reader: BoundedReader,
+    content: Buffer,
+  ): Promise<boolean> {
     if (content.subarray(0, BINARY_DXF_MAGIC.length).equals(BINARY_DXF_MAGIC)) {
-      return true;
+      // Binary DXF is deliberately unsupported until a complete bounded
+      // record parser exists; magic-only acceptance is not structural proof.
+      return false;
     }
     let pendingCode: number | null = null;
     let inSection = false;
     let sawSection = false;
-    let sawEndSection = false;
+    let expectingSectionName = false;
     let sawEof = false;
-    const valid = reader.scanLines((rawLine) => {
+    const valid = await reader.scanLines((rawLine) => {
       const line = rawLine.trim();
       if (pendingCode === null) {
         if (sawEof || !/^\d{1,4}$/.test(line)) return false;
@@ -582,41 +758,105 @@ export class CatalogUploadPolicyService {
       }
       const code = pendingCode;
       pendingCode = null;
-      if (this.isDxfNumericCode(code) && !this.isFiniteNumber(line)) {
-        return false;
+      if (!this.isValidDxfValue(code, line)) return false;
+      if (expectingSectionName) {
+        if (code !== 2 || !line) return false;
+        expectingSectionName = false;
+        return true;
       }
-      if (code !== 0) return true;
+      if (code !== 0) return inSection || code === 999;
       const marker = line.toUpperCase();
       if (marker === 'SECTION') {
         if (inSection || sawEof) return false;
         inSection = true;
         sawSection = true;
+        expectingSectionName = true;
       } else if (marker === 'ENDSEC') {
-        if (!inSection) return false;
+        if (!inSection || expectingSectionName) return false;
         inSection = false;
-        sawEndSection = true;
       } else if (marker === 'EOF') {
-        if (inSection || !sawSection || !sawEndSection) return false;
+        if (inSection || !sawSection) return false;
         sawEof = true;
+      } else if (!inSection) {
+        return false;
       }
       return true;
     });
-    return valid && pendingCode === null && !inSection && sawEof;
+    return (
+      valid &&
+      pendingCode === null &&
+      !inSection &&
+      !expectingSectionName &&
+      sawEof
+    );
   }
 
-  private isDxfNumericCode(code: number): boolean {
-    return (
+  private isValidDxfValue(code: number, value: string): boolean {
+    if (
       (code >= 10 && code <= 59) ||
-      (code >= 60 && code <= 99) ||
       (code >= 110 && code <= 149) ||
-      (code >= 160 && code <= 179) ||
       (code >= 210 && code <= 239) ||
+      (code >= 460 && code <= 469) ||
+      (code >= 1010 && code <= 1059)
+    ) {
+      return this.isFiniteNumber(value);
+    }
+    if (code >= 290 && code <= 299) return value === '0' || value === '1';
+    if (code >= 310 && code <= 319) {
+      return value.length <= 254 && /^(?:[0-9A-Fa-f]{2})*$/.test(value);
+    }
+    if (
+      code === 105 ||
+      (code >= 320 && code <= 369) ||
+      (code >= 390 && code <= 399)
+    ) {
+      return /^[0-9A-Fa-f]+$/.test(value);
+    }
+    const integerRange = this.dxfIntegerRange(code);
+    if (integerRange) {
+      if (!/^[+-]?\d+$/.test(value)) return false;
+      try {
+        const parsed = BigInt(value);
+        return parsed >= integerRange[0] && parsed <= integerRange[1];
+      } catch {
+        return false;
+      }
+    }
+    return (
+      (code >= 0 && code <= 9) ||
+      (code >= 100 && code <= 104) ||
+      (code >= 300 && code <= 309) ||
+      (code >= 410 && code <= 419) ||
+      (code >= 430 && code <= 439) ||
+      (code >= 470 && code <= 481) ||
+      code === 999 ||
+      (code >= 1000 && code <= 1009)
+    );
+  }
+
+  private dxfIntegerRange(code: number): readonly [bigint, bigint] | null {
+    if (
+      (code >= 60 && code <= 79) ||
+      (code >= 170 && code <= 179) ||
       (code >= 270 && code <= 289) ||
       (code >= 370 && code <= 389) ||
       (code >= 400 && code <= 409) ||
-      (code >= 420 && code <= 469) ||
-      (code >= 1010 && code <= 1071)
-    );
+      (code >= 1060 && code <= 1070)
+    ) {
+      return [-32768n, 65535n];
+    }
+    if (
+      (code >= 90 && code <= 99) ||
+      (code >= 420 && code <= 429) ||
+      (code >= 440 && code <= 459) ||
+      code === 1071
+    ) {
+      return [-2147483648n, 4294967295n];
+    }
+    if (code >= 160 && code <= 169) {
+      return [-9223372036854775808n, 9223372036854775807n];
+    }
+    return null;
   }
 
   private isFiniteNumber(value: string): boolean {
@@ -626,19 +866,23 @@ export class CatalogUploadPolicyService {
     );
   }
 
-  private isValid3mf(reader: BoundedReader): boolean {
+  private async isValid3mf(reader: BoundedReader): Promise<boolean> {
     try {
       const started = Date.now();
-      const entries = this.readZipDirectory(reader);
-      const contentTypesXml = this.readZipEntry(
-        reader,
-        entries.get('[Content_Types].xml'),
-        MAX_XML_BYTES,
+      const entries = await this.readZipDirectory(reader);
+      const contentTypesXml = (
+        await this.readZipEntry(
+          reader,
+          entries.get('[Content_Types].xml'),
+          MAX_XML_BYTES,
+        )
       ).toString('utf8');
-      const relationshipsXml = this.readZipEntry(
-        reader,
-        entries.get('_rels/.rels'),
-        MAX_XML_BYTES,
+      const relationshipsXml = (
+        await this.readZipEntry(
+          reader,
+          entries.get('_rels/.rels'),
+          MAX_XML_BYTES,
+        )
       ).toString('utf8');
       const contentTypeRoot = this.xmlRoot(contentTypesXml, 'Types');
       const contentTypes = this.opcContentTypes(contentTypeRoot);
@@ -685,7 +929,7 @@ export class CatalogUploadPolicyService {
                 entry.name.endsWith('.xml')
               ? MAX_XML_BYTES
               : MAX_ENTRY_UNCOMPRESSED_BYTES;
-        const content = this.readZipEntry(reader, entry, limit);
+        const content = await this.readZipEntry(reader, entry, limit);
         if (!this.isAllowed3mfPart(entry, content, contentTypes, modelName)) {
           return false;
         }
@@ -983,9 +1227,11 @@ export class CatalogUploadPolicyService {
     return Array.isArray(value) ? value : [value];
   }
 
-  private readZipDirectory(reader: BoundedReader): Map<string, ZipEntry> {
+  private async readZipDirectory(
+    reader: BoundedReader,
+  ): Promise<Map<string, ZipEntry>> {
     const tailLength = Math.min(reader.size, 65_557);
-    const tail = reader.read(reader.size - tailLength, tailLength);
+    const tail = await reader.read(reader.size - tailLength, tailLength);
     let eocd = -1;
     for (let index = tail.length - 22; index >= 0; index -= 1) {
       if (
@@ -1019,7 +1265,7 @@ export class CatalogUploadPolicyService {
     ) {
       throw new Error('Unsafe ZIP');
     }
-    const central = reader.read(centralOffset, centralSize);
+    const central = await reader.read(centralOffset, centralSize);
     const entries = new Map<string, ZipEntry>();
     const normalizedNames = new Set<string>();
     let cursor = 0;
@@ -1082,12 +1328,14 @@ export class CatalogUploadPolicyService {
       cursor = end;
     }
     if (cursor !== central.length) throw new Error('Invalid central directory');
-    const localRanges = [...entries.values()]
-      .map((entry) => ({
+    const localRanges: Array<{ start: number; end: number }> = [];
+    for (const entry of entries.values()) {
+      localRanges.push({
         start: entry.localOffset,
-        end: this.validateZipLocalEntry(reader, entry).recordEnd,
-      }))
-      .sort((left, right) => left.start - right.start);
+        end: (await this.validateZipLocalEntry(reader, entry)).recordEnd,
+      });
+    }
+    localRanges.sort((left, right) => left.start - right.start);
     if (
       localRanges[0]?.start !== 0 ||
       localRanges.at(-1)?.end !== centralOffset ||
@@ -1101,34 +1349,36 @@ export class CatalogUploadPolicyService {
     return entries;
   }
 
-  private readZipEntry(
+  private async readZipEntry(
     reader: BoundedReader,
     entry: ZipEntry | undefined,
     outputLimit: number,
-  ): Buffer {
+  ): Promise<Buffer> {
     if (!entry || entry.uncompressedSize > outputLimit)
       throw new Error('Missing ZIP entry');
-    const { dataOffset } = this.validateZipLocalEntry(reader, entry);
-    const compressed = reader.read(dataOffset, entry.compressedSize);
+    const { dataOffset } = await this.validateZipLocalEntry(reader, entry);
+    const compressed = await reader.read(dataOffset, entry.compressedSize);
     const result =
       entry.method === 0
         ? compressed
-        : inflateRawSync(compressed, { maxOutputLength: outputLimit + 1 });
+        : await inflateRawAsync(compressed, {
+            maxOutputLength: outputLimit + 1,
+          });
     if (
       result.length !== entry.uncompressedSize ||
       result.length > outputLimit ||
-      this.crc32(result) !== entry.crc32
+      (await this.crc32(result)) !== entry.crc32
     ) {
       throw new Error('Invalid ZIP entry');
     }
     return result;
   }
 
-  private validateZipLocalEntry(
+  private async validateZipLocalEntry(
     reader: BoundedReader,
     entry: ZipEntry,
-  ): { dataOffset: number; recordEnd: number } {
-    const header = reader.read(entry.localOffset, 30);
+  ): Promise<{ dataOffset: number; recordEnd: number }> {
+    const header = await reader.read(entry.localOffset, 30);
     if (
       header.readUInt32LE(0) !== ZIP_LOCAL_SIGNATURE ||
       header.readUInt16LE(6) !== entry.flags ||
@@ -1139,9 +1389,9 @@ export class CatalogUploadPolicyService {
     const nameLength = header.readUInt16LE(26);
     const extraLength = header.readUInt16LE(28);
     if (nameLength + extraLength > 65_535) throw new Error('Unsafe ZIP entry');
-    const name = reader
-      .read(entry.localOffset + 30, nameLength)
-      .toString('utf8');
+    const name = (
+      await reader.read(entry.localOffset + 30, nameLength)
+    ).toString('utf8');
     if (name !== entry.name) throw new Error('Invalid ZIP entry');
     const dataOffset = entry.localOffset + 30 + nameLength + extraLength;
     const dataEnd = dataOffset + entry.compressedSize;
@@ -1169,26 +1419,26 @@ export class CatalogUploadPolicyService {
       throw new Error('Inconsistent ZIP entry');
     }
     const descriptorLength = usesDescriptor
-      ? this.validateDataDescriptor(reader, entry, dataEnd)
+      ? await this.validateDataDescriptor(reader, entry, dataEnd)
       : 0;
     return { dataOffset, recordEnd: dataEnd + descriptorLength };
   }
 
-  private validateDataDescriptor(
+  private async validateDataDescriptor(
     reader: BoundedReader,
     entry: ZipEntry,
     offset: number,
-  ): number {
+  ): Promise<number> {
     if (offset + 12 > entry.centralOffset) {
       throw new Error('Missing ZIP data descriptor');
     }
-    const first = reader.read(offset, 4).readUInt32LE(0);
+    const first = (await reader.read(offset, 4)).readUInt32LE(0);
     const hasSignature = first === 0x08074b50;
     const length = hasSignature ? 16 : 12;
     if (offset + length > entry.centralOffset) {
       throw new Error('Invalid ZIP data descriptor');
     }
-    const descriptor = reader.read(offset, length);
+    const descriptor = await reader.read(offset, length);
     const valuesOffset = hasSignature ? 4 : 0;
     if (
       descriptor.readUInt32LE(valuesOffset) !== entry.crc32 ||
@@ -1200,13 +1450,21 @@ export class CatalogUploadPolicyService {
     return length;
   }
 
-  private crc32(content: Buffer): number {
+  private async crc32(content: Buffer): Promise<number> {
     let crc = 0xffffffff;
-    for (const byte of content) {
-      crc ^= byte;
-      for (let bit = 0; bit < 8; bit += 1) {
-        crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    for (
+      let offset = 0;
+      offset < content.length;
+      offset += TEXT_SCAN_CHUNK_BYTES
+    ) {
+      const end = Math.min(content.length, offset + TEXT_SCAN_CHUNK_BYTES);
+      for (let index = offset; index < end; index += 1) {
+        crc ^= content[index];
+        for (let bit = 0; bit < 8; bit += 1) {
+          crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+        }
       }
+      await yieldToEventLoop();
     }
     return (crc ^ 0xffffffff) >>> 0;
   }

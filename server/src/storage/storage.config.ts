@@ -109,7 +109,9 @@ export const CATALOG_MIME_ALLOWED_EXTENSIONS: Readonly<
 > = {
   // Browser/OS MIME aliases are client-compatibility hints only. Catalog
   // uploads must also pass the extension ceiling and bounded structural
-  // inspection; aliases never authorize content by themselves.
+  // inspection; aliases never authorize content by themselves. DXF catalog
+  // inspection supports the ASCII interchange form only; binary DXF is
+  // rejected until a complete bounded binary-record parser is available.
   'application/pdf': ['.pdf', '.ai'],
   'image/png': ['.png'],
   'image/jpeg': ['.jpg', '.jpeg'],

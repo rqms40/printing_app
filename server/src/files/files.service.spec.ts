@@ -97,6 +97,7 @@ const makeFileMeta = (overrides: Partial<FileMetadata> = {}): FileMetadata =>
 
 describe('FilesService', () => {
   let service: FilesService;
+  let catalogPolicy: CatalogUploadPolicyService;
   let dataSource: { transaction: jest.Mock };
   let transactionQuery: jest.Mock;
   let transactionManager: EntityManager;
@@ -152,6 +153,9 @@ describe('FilesService', () => {
       ],
     }).compile();
     service = module.get<FilesService>(FilesService);
+    catalogPolicy = module.get<CatalogUploadPolicyService>(
+      CatalogUploadPolicyService,
+    );
   });
 
   describe('storeMetadata', () => {
@@ -277,6 +281,39 @@ describe('FilesService', () => {
         'application/pdf',
       );
       expect(mockAnalysisService.analyze).not.toHaveBeenCalled();
+    });
+
+    it('awaits asynchronous catalog inspection before planning or storing objects', async () => {
+      const file = makeFile({
+        originalname: 'artwork.pdf',
+        mimetype: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.7\n'),
+      });
+      mockCategoryRepo.findOne.mockResolvedValue(flyers);
+      let releaseInspection!: () => void;
+      const inspection = new Promise<void>((resolve) => {
+        releaseInspection = resolve;
+      });
+      jest
+        .spyOn(catalogPolicy, 'validate')
+        .mockImplementation((async () => inspection) as never);
+      mockStorageService.upload.mockResolvedValue('http://x/artwork.pdf');
+      mockFileRepo.create.mockImplementation(
+        (value: Partial<FileMetadata>) => value as FileMetadata,
+      );
+
+      const storing = service.storeMetadata(
+        file,
+        42,
+        'catalog_artwork',
+        'flyers',
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(mockPendingUploadCleanup.plan).not.toHaveBeenCalled();
+      expect(mockStorageService.upload).not.toHaveBeenCalled();
+
+      releaseInspection();
+      await expect(storing).resolves.toBeDefined();
     });
 
     it.each([
