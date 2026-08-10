@@ -311,14 +311,29 @@ export class PaymentsService {
    * Create a pending COD collection row after eligible COD checkout.
    * Idempotent per order: returns existing row if present.
    */
-  async ensurePendingCodCollection(input: {
-    orderId: number;
-    amountMinor: string;
-    eligible: boolean;
-    eligibilityReason?: string | null;
-    riderId?: number | null;
-  }): Promise<CodCollection> {
-    const existing = await this.codCollectionRepo.findOne({
+  async ensurePendingCodCollection(
+    input: {
+      orderId: number;
+      amountMinor: string;
+      eligible: boolean;
+      eligibilityReason?: string | null;
+      riderId?: number | null;
+    },
+    manager?: EntityManager,
+  ): Promise<CodCollection> {
+    const codCollectionRepo = manager
+      ? manager.getRepository(CodCollection)
+      : this.codCollectionRepo;
+    if (manager) {
+      // Callers follow the commerce lock order before reaching this method;
+      // re-locking the order makes direct concurrent calls deterministic too.
+      await manager.getRepository(Order).findOneOrFail({
+        where: { id: input.orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+    }
+
+    const existing = await codCollectionRepo.findOne({
       where: { orderId: input.orderId },
       order: { id: 'ASC' },
     });
@@ -326,7 +341,7 @@ export class PaymentsService {
       return existing;
     }
 
-    const row = this.codCollectionRepo.create({
+    const row = codCollectionRepo.create({
       orderId: input.orderId,
       riderId: input.riderId ?? null,
       eligible: input.eligible,
@@ -343,7 +358,7 @@ export class PaymentsService {
       discrepancyReason: null,
       returnReason: null,
     });
-    return this.codCollectionRepo.save(row);
+    return codCollectionRepo.save(row);
   }
 
   /**

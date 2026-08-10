@@ -1,14 +1,11 @@
 import { getMetadataArgsStorage } from 'typeorm';
 import { CodCollection } from './cod-collection.entity';
 
-function columnType(
-  target: Function,
-  propertyName: string,
-): string | Function | undefined {
+function columnType(propertyName: string): unknown {
   return getMetadataArgsStorage().columns.find(
     (column) =>
-      column.target === target && column.propertyName === propertyName,
-  )?.options.type as string | Function | undefined;
+      column.target === CodCollection && column.propertyName === propertyName,
+  )?.options.type;
 }
 
 describe('CodCollection entity metadata', () => {
@@ -20,19 +17,30 @@ describe('CodCollection entity metadata', () => {
   });
 
   it('declares eligibility, amount minor, proof, and recon columns', () => {
-    expect(columnType(CodCollection, 'orderId')).toBe('int');
-    expect(columnType(CodCollection, 'riderId')).toBe('int');
-    expect(columnType(CodCollection, 'eligible')).toBe('boolean');
-    expect(columnType(CodCollection, 'eligibilityReason')).toBe('text');
-    expect(columnType(CodCollection, 'amountMinor')).toBe('bigint');
-    expect(columnType(CodCollection, 'status')).toBe('enum');
-    expect(columnType(CodCollection, 'otpRef')).toBe('varchar');
-    expect(columnType(CodCollection, 'photoFileId')).toBe('int');
-    expect(columnType(CodCollection, 'receiptRefs')).toBe('jsonb');
-    expect(columnType(CodCollection, 'collectedAt')).toBe('timestamptz');
-    expect(columnType(CodCollection, 'failedAt')).toBe('timestamptz');
-    expect(columnType(CodCollection, 'reconciledAt')).toBe('timestamptz');
-    expect(columnType(CodCollection, 'discrepancyReason')).toBe('text');
-    expect(columnType(CodCollection, 'returnReason')).toBe('text');
+    expect(columnType('orderId')).toBe('int');
+    expect(columnType('riderId')).toBe('int');
+    expect(columnType('eligible')).toBe('boolean');
+    expect(columnType('eligibilityReason')).toBe('text');
+    expect(columnType('amountMinor')).toBe('bigint');
+    expect(columnType('status')).toBe('enum');
+    expect(columnType('otpRef')).toBe('varchar');
+    expect(columnType('photoFileId')).toBe('int');
+    expect(columnType('receiptRefs')).toBe('jsonb');
+    expect(columnType('collectedAt')).toBe('timestamptz');
+    expect(columnType('failedAt')).toBe('timestamptz');
+    expect(columnType('reconciledAt')).toBe('timestamptz');
+    expect(columnType('discrepancyReason')).toBe('text');
+    expect(columnType('returnReason')).toBe('text');
+  });
+
+  it('enforces one COD collection per order in entity metadata', () => {
+    const index = getMetadataArgsStorage().indices.find(
+      (candidate) =>
+        candidate.target === CodCollection &&
+        candidate.name === 'uq_cod_collections_order_id',
+    );
+
+    expect(index?.columns).toEqual(['orderId']);
+    expect(index?.unique).toBe(true);
   });
 });

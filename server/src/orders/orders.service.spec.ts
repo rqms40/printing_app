@@ -779,6 +779,32 @@ describe('OrdersService', () => {
       });
     });
 
+    it('rejects a superseded assignment even when replaying an accepted downstream order', async () => {
+      const order = quotedOrder({
+        orderStatus: OrderStatus.PRODUCTION,
+        pricingStatus: PricingStatus.ACCEPTED,
+        quoteAcceptedAt: new Date('2026-08-10T12:00:00Z'),
+        paymentMethod: 'pilot_credit',
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        acceptedAssignment({ id: 17 }),
+        acceptedAssignment({ id: 18 }),
+      ]);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'stale_quote' }),
+      });
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
+    });
+
     it.each([
       ['price', { finalPriceMinor: null }],
       ['promised date', { promisedDate: null }],
@@ -816,6 +842,40 @@ describe('OrdersService', () => {
       expect(repo.save).not.toHaveBeenCalled();
       expect(historyRepo.insert).not.toHaveBeenCalled();
     });
+
+    it.each([OrderStatus.PAYMENT_AUTHORIZED, OrderStatus.PRODUCTION])(
+      'replays an accepted quote idempotently from downstream status %s',
+      async (orderStatus) => {
+        const order = quotedOrder({
+          orderStatus,
+          pricingStatus: PricingStatus.ACCEPTED,
+          quoteAcceptedAt: new Date('2026-08-10T12:00:00Z'),
+          paymentMethod: 'pilot_credit',
+          paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
+        });
+        repo.findOne.mockResolvedValue(order);
+        repo.findOneOrFail.mockResolvedValue(order);
+
+        await expect(
+          service.acceptQuote(42, 1, {
+            supplierAssignmentId: 17,
+            paymentMethod: 'pilot_credit',
+          }),
+        ).resolves.toBe(order);
+        expect(repo.save).not.toHaveBeenCalled();
+        expect(historyRepo.insert).not.toHaveBeenCalled();
+        expect(auditService.recordOrderStatusTransition).not.toHaveBeenCalled();
+        expect(auditService.append).not.toHaveBeenCalled();
+        expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+        expect(creditsService.spendCredits).not.toHaveBeenCalled();
+        expect(
+          paymentsService.assertCodEligibleForCheckout,
+        ).not.toHaveBeenCalled();
+        expect(
+          paymentsService.ensurePendingCodCollection,
+        ).not.toHaveBeenCalled();
+      },
+    );
 
     it('rejects a conflicting payment rail after acceptance', async () => {
       const order = quotedOrder({
@@ -1013,6 +1073,7 @@ describe('OrdersService', () => {
           amountMinor: '100000',
           eligible: true,
         }),
+        expect.anything(),
       );
       expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
       expect(result.paymentAuthorizationStatus).toBe(
@@ -1415,8 +1476,9 @@ describe('OrdersService', () => {
         new Date('2026-08-04T12:00:00.000Z'),
       );
 
-      expect(result.orderStatus).toBe(OrderStatus.APPROVED_FOR_MATCHING);
-      expect(result.paymentAuthorizationStatus).toBe(
+      expect(result.outcome).toBe('expired');
+      expect(result.order.orderStatus).toBe(OrderStatus.APPROVED_FOR_MATCHING);
+      expect(result.order.paymentAuthorizationStatus).toBe(
         PaymentAuthorizationStatus.EXPIRED,
       );
       expect(historyRepo.insert).toHaveBeenCalledWith(
@@ -1429,6 +1491,48 @@ describe('OrdersService', () => {
         expect.stringContaining('supplier_assignments'),
         [9, 'payment_timeout'],
       );
+    });
+
+    it('keeps a customer-accepted RFQ immutable for Operations resolution on timeout', async () => {
+      const order = {
+        id: 10,
+        orderId: 'ORD-10',
+        userId: 2,
+        orderStatus: OrderStatus.AWAITING_PAYMENT,
+        pricingStatus: PricingStatus.ACCEPTED,
+        quoteAcceptedAt: new Date('2026-08-03T12:00:00.000Z'),
+        quotedTotalMinor: '12500',
+        paymentMethod: 'cod',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(order);
+      const txQuery = jest.fn();
+      (dataSource as any).transaction = jest.fn(async (run) =>
+        run({
+          query: txQuery,
+          getRepository: (entity: { name?: string }) => {
+            if (entity?.name === 'Order') return repo;
+            if (entity?.name === 'OrderStatusHistory') return historyRepo;
+            throw new Error(`Unexpected repository ${entity?.name}`);
+          },
+        }),
+      );
+
+      const result = await service.expirePaymentWait(
+        10,
+        new Date('2026-08-04T12:00:00.000Z'),
+      );
+
+      expect(result).toEqual({
+        outcome: 'operations_resolution_required',
+        order,
+      });
+      expect(order.orderStatus).toBe(OrderStatus.AWAITING_PAYMENT);
+      expect(order.pricingStatus).toBe(PricingStatus.ACCEPTED);
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
+      expect(auditService.recordOrderStatusTransition).not.toHaveBeenCalled();
+      expect(txQuery).not.toHaveBeenCalled();
     });
   });
 

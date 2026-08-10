@@ -14,6 +14,12 @@ type CapabilityDuplicateGroup = {
   rows: Array<{ id: number; payloadSignature: string }>;
 };
 
+type DuplicateCodCollectionRow = {
+  id: number | string;
+  order_id: number | string;
+  payload_signature: string;
+};
+
 /**
  * Add the v1.10 browsing-group and RFQ persistence contract.
  *
@@ -96,6 +102,77 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
     if (redundantIds.length > 0) {
       await queryRunner.query(
         `DELETE FROM "supplier_capabilities" WHERE "id" = ANY($1::int[])`,
+        [redundantIds],
+      );
+    }
+  }
+
+  private async reconcileCodCollectionDuplicates(
+    queryRunner: QueryRunner,
+  ): Promise<void> {
+    const duplicateRows = (await queryRunner.query(`
+      WITH duplicate_cod_collections AS (
+        SELECT
+          collection.*,
+          COUNT(*) OVER (PARTITION BY "order_id") AS duplicate_count
+        FROM "cod_collections" collection
+      )
+      SELECT
+        "id",
+        "order_id",
+        (
+          to_jsonb(duplicate_cod_collections)
+          - 'id'
+          - 'created_at'
+          - 'updated_at'
+          - 'duplicate_count'
+        )::text AS payload_signature
+      FROM duplicate_cod_collections
+      WHERE duplicate_count > 1
+      ORDER BY "order_id", "id"
+    `)) as unknown as DuplicateCodCollectionRow[];
+
+    const groups = new Map<
+      number,
+      Array<{ id: number; payloadSignature: string }>
+    >();
+    for (const row of duplicateRows) {
+      const orderId = Number(row.order_id);
+      const rows = groups.get(orderId) ?? [];
+      rows.push({
+        id: Number(row.id),
+        payloadSignature: row.payload_signature,
+      });
+      groups.set(orderId, rows);
+    }
+
+    const orderedGroups = [...groups.entries()].sort(
+      ([left], [right]) => left - right,
+    );
+    for (const [, rows] of orderedGroups) {
+      rows.sort((left, right) => left.id - right.id);
+    }
+    const conflicts = orderedGroups.filter(
+      ([, rows]) => new Set(rows.map((row) => row.payloadSignature)).size > 1,
+    );
+    if (conflicts.length > 0) {
+      const details = conflicts
+        .map(
+          ([orderId, rows]) =>
+            `order_id=${orderId}, collection_ids=[${rows.map((row) => row.id).join(', ')}]`,
+        )
+        .join('; ');
+      throw new Error(
+        `Cannot enforce uq_cod_collections_order_id: conflicting duplicate COD collections: ${details}. Resolve each order so only one authoritative collection remains before retrying the migration.`,
+      );
+    }
+
+    const redundantIds = orderedGroups.flatMap(([, rows]) =>
+      rows.slice(1).map((row) => row.id),
+    );
+    if (redundantIds.length > 0) {
+      await queryRunner.query(
+        `DELETE FROM "cod_collections" WHERE "id" = ANY($1::int[])`,
         [redundantIds],
       );
     }
@@ -324,6 +401,17 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
         END $$;
       `);
     }
+
+    if (await queryRunner.hasTable('cod_collections')) {
+      await queryRunner.query(`
+        LOCK TABLE "cod_collections" IN SHARE ROW EXCLUSIVE MODE
+      `);
+      await this.reconcileCodCollectionDuplicates(queryRunner);
+      await queryRunner.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "uq_cod_collections_order_id"
+        ON "cod_collections" ("order_id")
+      `);
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
@@ -355,6 +443,12 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
           ALTER TABLE "supplier_capabilities" DROP COLUMN "is_active"
         `);
       }
+    }
+
+    if (await queryRunner.hasTable('cod_collections')) {
+      await queryRunner.query(`
+        DROP INDEX IF EXISTS "uq_cod_collections_order_id"
+      `);
     }
 
     if (await queryRunner.hasTable('file_metadata')) {

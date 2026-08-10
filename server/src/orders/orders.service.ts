@@ -354,6 +354,16 @@ export function applyMarketplacePaymentDefaults(
   };
 }
 
+export type PaymentWaitExpiryOutcome =
+  | 'expired'
+  | 'not_waiting'
+  | 'operations_resolution_required';
+
+export interface PaymentWaitExpiryResult {
+  outcome: PaymentWaitExpiryOutcome;
+  order: Order;
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -1009,12 +1019,15 @@ export class OrdersService {
         isCodPaymentMethod(String(persistedOrder.paymentMethod ?? '')) &&
         persistedOrder.codEligible
       ) {
-        await this.paymentsService.ensurePendingCodCollection({
-          orderId: persistedOrder.id,
-          amountMinor: String(persistedOrder.finalTotalMinor ?? '0'),
-          eligible: true,
-          eligibilityReason: null,
-        });
+        await this.paymentsService.ensurePendingCodCollection(
+          {
+            orderId: persistedOrder.id,
+            amountMinor: String(persistedOrder.finalTotalMinor ?? '0'),
+            eligible: true,
+            eligibilityReason: null,
+          },
+          manager,
+        );
       }
       const savedItem = await transactionItemsRepo.save(
         transactionItemsRepo.create({
@@ -1935,12 +1948,15 @@ export class OrdersService {
       const savedOrder = await txOrdersRepo.save(aggregateOrder);
 
       if (codEligibleForBatch && isCodPaymentMethod(dto.paymentMethod)) {
-        await this.paymentsService.ensurePendingCodCollection({
-          orderId: savedOrder.id,
-          amountMinor: String(savedOrder.finalTotalMinor ?? '0'),
-          eligible: true,
-          eligibilityReason: null,
-        });
+        await this.paymentsService.ensurePendingCodCollection(
+          {
+            orderId: savedOrder.id,
+            amountMinor: String(savedOrder.finalTotalMinor ?? '0'),
+            eligible: true,
+            eligibilityReason: null,
+          },
+          manager,
+        );
       }
 
       for (const [index, item] of normalizedItems.entries()) {
@@ -2238,7 +2254,7 @@ export class OrdersService {
 
       if (locked.pricingStatus === PricingStatus.ACCEPTED) {
         if (
-          locked.orderStatus === OrderStatus.AWAITING_PAYMENT &&
+          locked.quoteAcceptedAt != null &&
           locked.paymentMethod === String(paymentMethod)
         ) {
           return locked;
@@ -2592,12 +2608,15 @@ export class OrdersService {
             manager,
           );
         locked.codEligible = codResult?.eligible === true;
-        await this.paymentsService.ensurePendingCodCollection({
-          orderId: locked.id,
-          amountMinor: String(authorizationTotalMinor ?? '0'),
-          eligible: locked.codEligible,
-          eligibilityReason: codResult?.message ?? null,
-        });
+        await this.paymentsService.ensurePendingCodCollection(
+          {
+            orderId: locked.id,
+            amountMinor: String(authorizationTotalMinor ?? '0'),
+            eligible: locked.codEligible,
+            eligibilityReason: codResult?.message ?? null,
+          },
+          manager,
+        );
         // paymentStatus stays pending until cash_collected.
       }
 
@@ -2730,9 +2749,11 @@ export class OrdersService {
    *
    * Invoked by PaymentTimeoutSchedulerService; also unit-testable with `now`.
    */
-  async expireStalePaymentAuthorizations(
-    now: Date = new Date(),
-  ): Promise<{ expiredOrderIds: number[]; scanned: number }> {
+  async expireStalePaymentAuthorizations(now: Date = new Date()): Promise<{
+    expiredOrderIds: number[];
+    operationsResolutionOrderIds: number[];
+    scanned: number;
+  }> {
     const waitingStatuses = [
       OrderStatus.SUPPLIER_ACCEPTED,
       OrderStatus.AWAITING_PAYMENT,
@@ -2743,6 +2764,7 @@ export class OrdersService {
     });
 
     const expiredOrderIds: number[] = [];
+    const operationsResolutionOrderIds: number[] = [];
     const cutoff = now.getTime() - OrdersService.PAYMENT_AUTH_TIMEOUT_MS;
 
     for (const candidate of candidates) {
@@ -2752,8 +2774,12 @@ export class OrdersService {
       }
 
       try {
-        await this.expirePaymentWait(candidate.id, now);
-        expiredOrderIds.push(candidate.id);
+        const result = await this.expirePaymentWait(candidate.id, now);
+        if (result.outcome === 'expired') {
+          expiredOrderIds.push(candidate.id);
+        } else if (result.outcome === 'operations_resolution_required') {
+          operationsResolutionOrderIds.push(candidate.id);
+        }
       } catch (err) {
         this.logger.warn(
           `Payment timeout expiry failed for order ${candidate.id}: ${err}`,
@@ -2761,7 +2787,11 @@ export class OrdersService {
       }
     }
 
-    return { expiredOrderIds, scanned: candidates.length };
+    return {
+      expiredOrderIds,
+      operationsResolutionOrderIds,
+      scanned: candidates.length,
+    };
   }
 
   /**
@@ -2796,7 +2826,7 @@ export class OrdersService {
   async expirePaymentWait(
     orderId: number,
     now: Date = new Date(),
-  ): Promise<Order> {
+  ): Promise<PaymentWaitExpiryResult> {
     const systemActorId = 0;
     const reason = `Payment authorization timed out after 24h (${now.toISOString()})`;
 
@@ -2808,10 +2838,25 @@ export class OrdersService {
       });
 
       if (
+        locked.pricingStatus === PricingStatus.ACCEPTED &&
+        locked.quoteAcceptedAt != null
+      ) {
+        return {
+          outcome: 'operations_resolution_required' as const,
+          previous: null as Order | null,
+          order: locked,
+        };
+      }
+
+      if (
         locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
         locked.orderStatus !== OrderStatus.AWAITING_PAYMENT
       ) {
-        return { previous: null as Order | null, order: locked };
+        return {
+          outcome: 'not_waiting' as const,
+          previous: null as Order | null,
+          order: locked,
+        };
       }
 
       assertOrderStatusTransition(
@@ -2855,23 +2900,28 @@ export class OrdersService {
       );
 
       return {
+        outcome: 'expired' as const,
         previous: { ...locked, orderStatus: fromStatus } as Order,
         order: saved,
       };
     });
 
     if (!result.previous) {
-      return result.order;
+      return { outcome: result.outcome, order: result.order };
     }
     try {
-      return await this.publishStatusUpdate(
+      const order = await this.publishStatusUpdate(
         result.previous,
         orderId,
         OrderStatus.APPROVED_FOR_MATCHING,
         null,
       );
+      return { outcome: result.outcome, order };
     } catch {
-      return (await this.findById(orderId)) ?? result.order;
+      return {
+        outcome: result.outcome,
+        order: (await this.findById(orderId)) ?? result.order,
+      };
     }
   }
 

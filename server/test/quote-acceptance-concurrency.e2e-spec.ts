@@ -20,9 +20,23 @@ import {
   SupplierAssignmentDecision,
 } from '../src/matching/entities/supplier-assignment.entity';
 import { SupplierJobsService } from '../src/suppliers/supplier-jobs.service';
-import type { AuditService } from '../src/audit/audit.service';
 import type { FilesService } from '../src/files/files.service';
 import type { NotificationsService } from '../src/notifications/notifications.service';
+import { OrdersService } from '../src/orders/orders.service';
+import { OrderItem } from '../src/orders/entities/order-item.entity';
+import { OrderItemSpecValue } from '../src/orders/entities/order-item-spec-value.entity';
+import { DeliveryAssignment } from '../src/riders/entities/delivery-assignment.entity';
+import { Address } from '../src/addresses/entities/address.entity';
+import { DeliveryDestination } from '../src/orders/entities/delivery-destination.entity';
+import { FileMetadata } from '../src/files/entities/file-metadata.entity';
+import { DispatchPlan } from '../src/riders/entities/dispatch-plan.entity';
+import { PaymentsService } from '../src/payments/payments.service';
+import { PaymentTransaction } from '../src/payments/entities/payment-transaction.entity';
+import { CodCollection } from '../src/payments/entities/cod-collection.entity';
+import { Payout } from '../src/payouts/entities/payout.entity';
+import { AuditService } from '../src/audit/audit.service';
+import { AuditEvent } from '../src/audit/entities/audit-event.entity';
+import { OrderStatusHistory } from '../src/orders/entities/order-status-history.entity';
 
 describe('supplier quote acceptance PostgreSQL concurrency (e2e)', () => {
   jest.setTimeout(120_000);
@@ -214,6 +228,217 @@ describe('supplier quote acceptance PostgreSQL concurrency (e2e)', () => {
       await dataSource.destroy();
     }
   });
+
+  it('authorizes first COD concurrently without self-blocking and creates one collection', async () => {
+    const dataSource = await initializeDatabase(
+      await createDatabase('cod_authorize'),
+    );
+    try {
+      const fixture = await createAcceptedCodFixture(dataSource, 'success');
+      const service = createOrdersService(dataSource);
+
+      const results = await Promise.all([
+        service.authorizePayment(fixture.order.id, fixture.context),
+        service.authorizePayment(fixture.order.id, fixture.context),
+      ]);
+
+      expect(
+        results.every(
+          (order) =>
+            order.orderStatus === OrderStatus.PAYMENT_AUTHORIZED &&
+            order.paymentAuthorizationStatus ===
+              PaymentAuthorizationStatus.AUTHORIZED,
+        ),
+      ).toBe(true);
+      expect(
+        await dataSource.getRepository(CodCollection).count({
+          where: { orderId: fixture.order.id },
+        }),
+      ).toBe(1);
+      expect(
+        await dataSource.getRepository(OrderStatusHistory).count({
+          where: { orderId: fixture.order.id },
+        }),
+      ).toBe(1);
+      expect(
+        await dataSource.getRepository(AuditEvent).count({
+          where: { orderId: fixture.order.id },
+        }),
+      ).toBe(1);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('rolls COD collection, order, history, and audit back when authorization fails after audit write', async () => {
+    const dataSource = await initializeDatabase(
+      await createDatabase('cod_rollback'),
+    );
+    try {
+      const fixture = await createAcceptedCodFixture(dataSource, 'rollback');
+      const realAudit = new AuditService(dataSource.getRepository(AuditEvent));
+      const forcingAudit = {
+        recordOrderStatusTransition: async (
+          ...args: Parameters<AuditService['recordOrderStatusTransition']>
+        ) => {
+          await realAudit.recordOrderStatusTransition(...args);
+          throw new Error('forced_after_cod_audit');
+        },
+      } as unknown as AuditService;
+      const service = createOrdersService(dataSource, forcingAudit);
+
+      await expect(
+        service.authorizePayment(fixture.order.id, fixture.context),
+      ).rejects.toThrow('forced_after_cod_audit');
+
+      const reloaded = await dataSource.getRepository(Order).findOneByOrFail({
+        id: fixture.order.id,
+      });
+      expect(reloaded.orderStatus).toBe(OrderStatus.AWAITING_PAYMENT);
+      expect(reloaded.paymentAuthorizationStatus).toBe(
+        PaymentAuthorizationStatus.NONE,
+      );
+      expect(
+        await dataSource.getRepository(CodCollection).count({
+          where: { orderId: fixture.order.id },
+        }),
+      ).toBe(0);
+      expect(
+        await dataSource.getRepository(OrderStatusHistory).count({
+          where: { orderId: fixture.order.id },
+        }),
+      ).toBe(0);
+      expect(
+        await dataSource.getRepository(AuditEvent).count({
+          where: { orderId: fixture.order.id },
+        }),
+      ).toBe(0);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  async function createAcceptedCodFixture(
+    dataSource: DataSource,
+    label: string,
+  ) {
+    const users = dataSource.getRepository(User);
+    const client = await users.save(
+      users.create({
+        email: `cod-client-${label}-${process.pid}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.CLIENT,
+        isActive: true,
+        pilotCodEligible: true,
+        codOpsRiskBlocked: false,
+      }),
+    );
+    const ops = await users.save(
+      users.create({
+        email: `cod-ops-${label}-${process.pid}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.OPS_ADMIN,
+        isActive: true,
+      }),
+    );
+    const supplierUser = await users.save(
+      users.create({
+        email: `cod-supplier-${label}-${process.pid}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.SUPPLIER,
+        isActive: true,
+      }),
+    );
+    const profile = await dataSource.getRepository(SupplierProfile).save({
+      userId: supplierUser.id,
+      businessName: `COD Shop ${label}`,
+      isActive: true,
+    });
+    const order = await dataSource.getRepository(Order).save({
+      orderId: `ORD-COD-${label}-${process.pid}`,
+      userId: client.id,
+      category: 'flyers',
+      quantity: 100,
+      totalPrice: 100,
+      deliveryFee: 25,
+      quotedTotalMinor: '12500',
+      promisedCompletionAt: new Date(Date.now() + 172_800_000),
+      quotedAt: new Date(),
+      quoteAcceptedAt: new Date(),
+      quotedByUserId: supplierUser.id,
+      pricingStatus: PricingStatus.ACCEPTED,
+      paymentMethod: 'cod',
+      paymentStatus: 'pending',
+      paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+      orderStatus: OrderStatus.AWAITING_PAYMENT,
+      deliveryOption: 'delivery',
+      codEligible: true,
+    });
+    await dataSource.getRepository(SupplierAssignment).save({
+      orderId: order.id,
+      supplierId: profile.id,
+      rankingInputs: {},
+      rankPosition: 1,
+      acceptanceDeadline: new Date(Date.now() + 86_400_000),
+      decision: SupplierAssignmentDecision.ACCEPTED,
+      finalPriceMinor: '10000',
+      promisedDate: new Date(Date.now() + 172_800_000),
+      decidedAt: new Date(),
+    });
+    return {
+      order,
+      context: {
+        actorUserId: ops.id,
+        actorRole: 'ops_admin',
+        reason: 'PG COD authorization',
+      },
+    };
+  }
+
+  function createOrdersService(
+    dataSource: DataSource,
+    auditService = new AuditService(dataSource.getRepository(AuditEvent)),
+  ): OrdersService {
+    const payments = new PaymentsService(
+      dataSource.getRepository(PaymentTransaction),
+      dataSource.getRepository(CodCollection),
+      dataSource.getRepository(Order),
+      dataSource.getRepository(User),
+      dataSource.getRepository(Payout),
+      { get: jest.fn() } as any,
+    );
+    const noop = new Proxy(
+      {},
+      { get: () => jest.fn().mockResolvedValue(null) },
+    ) as any;
+    return new OrdersService(
+      dataSource.getRepository(Order),
+      dataSource.getRepository(OrderItem),
+      dataSource.getRepository(OrderItemSpecValue),
+      dataSource.getRepository(DeliveryAssignment),
+      dataSource.getRepository(SupplierAssignment),
+      dataSource.getRepository(Address),
+      dataSource.getRepository(DeliveryDestination),
+      dataSource.getRepository(BatchOrder),
+      noop,
+      noop,
+      noop,
+      noop,
+      payments,
+      noop,
+      noop,
+      noop,
+      dataSource,
+      noop,
+      noop,
+      noop,
+      noop,
+      noop,
+      dataSource.getRepository(FileMetadata),
+      dataSource.getRepository(DispatchPlan),
+      auditService,
+    );
+  }
 
   function options(database: string): DataSourceOptions {
     return databaseOptionsFromEnv({

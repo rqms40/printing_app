@@ -402,6 +402,41 @@ describe('PaymentsService', () => {
     });
   });
 
+  describe('ensurePendingCodCollection', () => {
+    it('uses the transaction manager repositories and locks the order before creating', async () => {
+      const txOrdersRepo = {
+        findOneOrFail: jest.fn().mockResolvedValue({ id: 42 }),
+      };
+      const txCodRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn((row: Partial<CodCollection>) => row as CodCollection),
+        save: jest.fn(async (row: CodCollection) => ({ id: 7, ...row })),
+      };
+      const manager = {
+        getRepository: jest.fn((entity) =>
+          entity === Order ? txOrdersRepo : txCodRepo,
+        ),
+      } as any;
+
+      const result = await service.ensurePendingCodCollection(
+        { orderId: 42, amountMinor: '12500', eligible: true },
+        manager,
+      );
+
+      expect(txOrdersRepo.findOneOrFail).toHaveBeenCalledWith({
+        where: { id: 42 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(txCodRepo.findOne).toHaveBeenCalledWith({
+        where: { orderId: 42 },
+        order: { id: 'ASC' },
+      });
+      expect(txCodRepo.save).toHaveBeenCalled();
+      expect(codRepo.findOne).not.toHaveBeenCalled();
+      expect(result.id).toBe(7);
+    });
+  });
+
   describe('recordCashCollection + reconcile', () => {
     const codOrder = {
       id: 5,

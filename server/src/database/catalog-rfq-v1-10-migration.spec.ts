@@ -11,17 +11,24 @@ describe('CatalogRfqV1101784334500000', () => {
     product_family: string;
     payload_signature: string;
   };
+  type DuplicateCodCollectionRow = {
+    id: number;
+    order_id: number;
+    payload_signature: string;
+  };
 
   function createQueryRunner(
     options: {
       hasColumn?: boolean;
       duplicateCapabilities?: DuplicateCapabilityRow[];
+      duplicateCodCollections?: DuplicateCodCollectionRow[];
       pendingUploadCount?: number;
     } = {},
   ) {
     const {
       hasColumn = false,
       duplicateCapabilities = [],
+      duplicateCodCollections = [],
       pendingUploadCount = 0,
     } = options;
     const queries: Array<{ sql: string; parameters?: unknown[] }> = [];
@@ -30,7 +37,10 @@ describe('CatalogRfqV1101784334500000', () => {
       hasColumn: jest.fn(async () => hasColumn),
       query: jest.fn(async (sql: string, parameters?: unknown[]) => {
         queries.push({ sql, parameters });
-        if (sql.includes('payload_signature')) {
+        if (sql.includes('duplicate_cod_collections')) {
+          return duplicateCodCollections;
+        }
+        if (sql.includes('duplicate_capabilities')) {
           return duplicateCapabilities;
         }
         if (sql.includes('pending_upload_count')) {
@@ -60,6 +70,7 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(source).toContain('pending_file_uploads');
     expect(source).toContain('idx_pending_file_uploads_due');
     expect(source).toContain('uq_supplier_capability_product');
+    expect(source).toContain('uq_cod_collections_order_id');
   });
 
   it('adds nullable RFQ metadata and backfills historical orders as accepted', async () => {
@@ -170,6 +181,59 @@ describe('CatalogRfqV1101784334500000', () => {
     ).toBe(false);
   });
 
+  it('consolidates identical COD duplicates before enforcing one collection per order', async () => {
+    const signature = '{"status":"pending","amount_minor":12500}';
+    const { queryRunner, queries } = createQueryRunner({
+      duplicateCodCollections: [
+        { id: 8, order_id: 42, payload_signature: signature },
+        { id: 3, order_id: 42, payload_signature: signature },
+      ],
+    });
+
+    await new CatalogRfqV1101784334500000().up(queryRunner);
+
+    const deleteIndex = queries.findIndex((query) =>
+      query.sql.includes('DELETE FROM "cod_collections"'),
+    );
+    const uniqueIndex = queries.findIndex((query) =>
+      query.sql.includes('uq_cod_collections_order_id'),
+    );
+    expect(deleteIndex).toBeGreaterThanOrEqual(0);
+    expect(queries[deleteIndex]?.parameters).toEqual([[8]]);
+    expect(uniqueIndex).toBeGreaterThan(deleteIndex);
+  });
+
+  it('rejects conflicting COD duplicates with actionable order and row ids', async () => {
+    const { queryRunner, queries } = createQueryRunner({
+      duplicateCodCollections: [
+        {
+          id: 3,
+          order_id: 42,
+          payload_signature: '{"status":"pending","amount_minor":12500}',
+        },
+        {
+          id: 8,
+          order_id: 42,
+          payload_signature: '{"status":"collected","amount_minor":12500}',
+        },
+      ],
+    });
+
+    await expect(
+      new CatalogRfqV1101784334500000().up(queryRunner),
+    ).rejects.toThrow('order_id=42, collection_ids=[3, 8]');
+    expect(
+      queries.some((query) =>
+        query.sql.includes('DELETE FROM "cod_collections"'),
+      ),
+    ).toBe(false);
+    expect(
+      queries.some((query) =>
+        query.sql.includes('uq_cod_collections_order_id'),
+      ),
+    ).toBe(false);
+  });
+
   it('snapshots legacy activation state before deactivation', async () => {
     const { queryRunner, queries } = createQueryRunner();
 
@@ -206,6 +270,7 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(sql).toContain(
       'DROP CONSTRAINT IF EXISTS "uq_supplier_capability_product"',
     );
+    expect(sql).toContain('DROP INDEX IF EXISTS "uq_cod_collections_order_id"');
     expect(sql).toContain(
       'DROP CONSTRAINT IF EXISTS "fk_orders_quoted_by_user"',
     );

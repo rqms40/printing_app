@@ -588,6 +588,15 @@ export class SupplierJobsService {
         actor.role,
       );
 
+      // The preflight can wait behind commerce locks. Do not freeze a promise
+      // which has become historical while this transaction was blocked.
+      if (promisedDate.getTime() <= Date.now()) {
+        throw new BadRequestException({
+          code: 'promised_date_in_past',
+          message: 'promisedDate must still be in the future when quoted',
+        });
+      }
+
       let deliveryFeeMinor: string;
       let quotedTotalMinor: string;
       try {

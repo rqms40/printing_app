@@ -298,6 +298,34 @@ describe('SupplierJobsService', () => {
       );
     });
 
+    it('rechecks promised completion after commerce locks are acquired', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-08-10T10:00:00.000Z'));
+      try {
+        const promisedDate = '2026-08-10T10:00:01.000Z';
+        const assignment = baseAssignment();
+        txAssignmentRepo.findOne.mockResolvedValue(assignment);
+        txAssignmentRepo.find.mockImplementation(async () => {
+          jest.setSystemTime(new Date('2026-08-10T10:00:02.000Z'));
+          return [assignment];
+        });
+        txOrdersRepo.findOne.mockResolvedValue(baseOrder());
+
+        await expect(
+          service.acceptJob(
+            7,
+            { finalPriceMinor: 150000, promisedDate },
+            actor,
+          ),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({ code: 'promised_date_in_past' }),
+        });
+        expect(txAssignmentRepo.save).not.toHaveBeenCalled();
+        expect(txOrdersRepo.update).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('allocates a shared batch delivery fee only to the lowest persisted order id', async () => {
       const assignment = baseAssignment({ orderId: 43 });
       const order = baseOrder({
