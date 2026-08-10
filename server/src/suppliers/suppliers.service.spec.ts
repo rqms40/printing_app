@@ -16,6 +16,8 @@ import {
 } from './entities/supplier-verification.entity';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import { PricingModel } from '../products/enums/catalog.enums';
 
 describe('SuppliersService', () => {
   let service: SuppliersService;
@@ -44,12 +46,28 @@ describe('SuppliersService', () => {
   const assignmentRepo = {
     createQueryBuilder: jest.fn(),
   };
+  const categoryRepo = {
+    findOne: jest.fn(),
+  };
+
+  const flyersCategory = {
+    id: 100,
+    slug: 'flyers',
+    isActive: true,
+    pricingModel: PricingModel.QUOTE_REQUIRED,
+    groupSlug: 'marketing-promo',
+    groupName: 'Marketing & Promotional Collateral',
+    groupDescription: 'Promotional print products.',
+    groupSortOrder: 1,
+  } as ProductCategory;
 
   beforeEach(async () => {
     jest.resetAllMocks();
     profileRepo.create.mockImplementation((x) => x);
     capabilityRepo.create.mockImplementation((x) => x);
+    capabilityRepo.find.mockResolvedValue([]);
     verificationRepo.create.mockImplementation((x) => x);
+    categoryRepo.findOne.mockResolvedValue(flyersCategory);
     assignmentRepo.createQueryBuilder.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
@@ -74,6 +92,10 @@ describe('SuppliersService', () => {
         {
           provide: getRepositoryToken(SupplierAssignment),
           useValue: assignmentRepo,
+        },
+        {
+          provide: getRepositoryToken(ProductCategory),
+          useValue: categoryRepo,
         },
       ],
     }).compile();
@@ -454,13 +476,98 @@ describe('SuppliersService', () => {
       capabilityRepo.save.mockImplementation(async (c) => ({ ...c, id: 7 }));
 
       const out = await service.addOwnCapability(10, {
-        productFamily: 'flyer',
+        productFamily: '  FLYERS  ',
         materials: ['glossy'],
         maxCapacity: 50,
         leadTimeDays: 2,
       });
-      expect(out.productFamily).toBe('flyer');
-      expect(capabilityRepo.save).toHaveBeenCalled();
+      expect(out.productFamily).toBe('flyers');
+      expect(capabilityRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ productFamily: 'flyers', isActive: true }),
+      );
+    });
+
+    it.each([
+      [
+        'browsing group',
+        'marketing-promo',
+        {
+          ...flyersCategory,
+          slug: 'marketing-promo',
+          groupSlug: null,
+          groupName: null,
+          groupDescription: null,
+          groupSortOrder: null,
+        },
+      ],
+      [
+        'inactive legacy category',
+        'paper',
+        {
+          ...flyersCategory,
+          slug: 'paper',
+          isActive: false,
+          pricingModel: PricingModel.PER_PAGE_MODIFIERS,
+          groupSlug: null,
+          groupName: null,
+          groupDescription: null,
+          groupSortOrder: null,
+        },
+      ],
+      ['singular synonym', 'flyer', null],
+      ['free-form value', 'rush-printing', null],
+    ])('rejects a %s as a capability', async (_label, slug, category) => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      categoryRepo.findOne.mockResolvedValue(category);
+
+      await expect(
+        service.addOwnCapability(10, { productFamily: slug }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'invalid_supplier_capability_product',
+        }),
+      });
+      expect(capabilityRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects an existing normalized supplier/product capability', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      capabilityRepo.findOne.mockResolvedValue(null);
+      capabilityRepo.find.mockResolvedValue([
+        {
+          id: 7,
+          supplierId: 1,
+          productFamily: ' FLYERS ',
+        },
+      ]);
+
+      await expect(
+        service.addOwnCapability(10, { productFamily: ' FLYERS ' }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'supplier_capability_exists',
+        }),
+      });
+      expect(capabilityRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('maps a concurrent capability unique violation to the same conflict', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      capabilityRepo.findOne.mockResolvedValue(null);
+      capabilityRepo.save.mockRejectedValue({
+        driverError: {
+          code: '23505',
+          constraint: 'uq_supplier_capability_product',
+        },
+      });
+
+      await expect(
+        service.addOwnCapability(10, { productFamily: 'flyers' }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'supplier_capability_exists',
+        }),
+      });
     });
 
     it('removes only own capability', async () => {

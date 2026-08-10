@@ -23,6 +23,7 @@ function capability(
     materials: overrides.materials ?? [],
     maxCapacity: overrides.maxCapacity ?? 10,
     leadTimeDays: overrides.leadTimeDays ?? 1,
+    isActive: overrides.isActive ?? true,
     createdAt: new Date(),
     updatedAt: new Date(),
   } as SupplierCapability;
@@ -114,6 +115,56 @@ describe('rankSupplierCandidates', () => {
     );
 
     expect(candidates.map((c) => c.supplierId)).toEqual([2]);
+    expect(excluded).toContainEqual({
+      supplierId: 1,
+      reason: 'no_capability',
+    });
+  });
+
+  it('matches only the exact leaf slug after case and whitespace normalization', () => {
+    const order = { ...baseOrder, category: '  FLYERS ' };
+    const profiles = [
+      profile({ id: 1, productFamilies: ['flyer'] }),
+      profile({ id: 2, productFamilies: [' flyers '] }),
+    ];
+
+    const { candidates, excluded } = rankSupplierCandidates(
+      order,
+      profiles,
+      new Map(),
+      new Map(),
+    );
+
+    expect(candidates.map((candidate) => candidate.supplierId)).toEqual([2]);
+    expect(excluded).toContainEqual({
+      supplierId: 1,
+      reason: 'no_capability',
+    });
+  });
+
+  it('excludes an inactive exact capability', () => {
+    const profiles = [
+      profile({
+        id: 1,
+        capabilities: [
+          capability({
+            supplierId: 1,
+            productFamily: 'paper',
+            isActive: false,
+          }),
+        ],
+      }),
+      profile({ id: 2 }),
+    ];
+
+    const { candidates, excluded } = rankSupplierCandidates(
+      baseOrder,
+      profiles,
+      new Map(),
+      new Map(),
+    );
+
+    expect(candidates.map((candidate) => candidate.supplierId)).toEqual([2]);
     expect(excluded).toContainEqual({
       supplierId: 1,
       reason: 'no_capability',

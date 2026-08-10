@@ -30,6 +30,24 @@ import {
   SupplierAssignment,
   SupplierAssignmentDecision,
 } from '../matching/entities/supplier-assignment.entity';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import { isActiveOrderableRfqLeaf } from '../products/catalog-v1-10.definition';
+
+const SUPPLIER_CAPABILITY_UNIQUE_CONSTRAINT = 'uq_supplier_capability_product';
+
+function isSupplierCapabilityUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as {
+    code?: unknown;
+    constraint?: unknown;
+    driverError?: { code?: unknown; constraint?: unknown };
+  };
+  const code = candidate.driverError?.code ?? candidate.code;
+  const constraint = candidate.driverError?.constraint ?? candidate.constraint;
+  return (
+    code === '23505' && constraint === SUPPLIER_CAPABILITY_UNIQUE_CONSTRAINT
+  );
+}
 
 export type SupplierProfileView = SupplierProfile & {
   logoUrl?: string | null;
@@ -102,6 +120,8 @@ export class SuppliersService {
     private readonly profileRepo: Repository<SupplierProfile>,
     @InjectRepository(SupplierCapability)
     private readonly capabilityRepo: Repository<SupplierCapability>,
+    @InjectRepository(ProductCategory)
+    private readonly categoryRepo: Repository<ProductCategory>,
     @InjectRepository(SupplierVerification)
     private readonly verificationRepo: Repository<SupplierVerification>,
     @InjectRepository(FileMetadata)
@@ -713,14 +733,55 @@ export class SuppliersService {
     dto: CreateSupplierCapabilityDto,
   ): Promise<SupplierCapability> {
     await this.findById(supplierId);
+    const productFamily = dto.productFamily.trim().toLowerCase();
+    const product = productFamily
+      ? await this.categoryRepo.findOne({ where: { slug: productFamily } })
+      : null;
+    if (!product || !isActiveOrderableRfqLeaf(product)) {
+      throw new BadRequestException({
+        code: 'invalid_supplier_capability_product',
+        message:
+          'Supplier capability must reference an active orderable RFQ product slug',
+      });
+    }
+
+    const existingCapabilities = await this.capabilityRepo.find({
+      where: { supplierId },
+    });
+    const existing = existingCapabilities.some(
+      (capability) =>
+        capability.productFamily.trim().toLowerCase() === productFamily,
+    );
+    if (existing) {
+      throw this.capabilityConflict(supplierId, productFamily);
+    }
+
     const capability = this.capabilityRepo.create({
       supplierId,
-      productFamily: dto.productFamily,
+      productFamily,
       materials: dto.materials ?? [],
       maxCapacity: dto.maxCapacity ?? 0,
       leadTimeDays: dto.leadTimeDays ?? 1,
+      isActive: true,
     });
-    return this.capabilityRepo.save(capability);
+    try {
+      return await this.capabilityRepo.save(capability);
+    } catch (error) {
+      if (isSupplierCapabilityUniqueViolation(error)) {
+        throw this.capabilityConflict(supplierId, productFamily);
+      }
+      throw error;
+    }
+  }
+
+  private capabilityConflict(
+    supplierId: number,
+    productFamily: string,
+  ): ConflictException {
+    return new ConflictException({
+      code: 'supplier_capability_exists',
+      message: `Supplier ${supplierId} already has capability ${productFamily}`,
+    });
   }
 
   async listCapabilities(supplierId: number): Promise<SupplierCapability[]> {

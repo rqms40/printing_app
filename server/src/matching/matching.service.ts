@@ -7,8 +7,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
-import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  Order,
+  OrderStatus,
+  PricingStatus,
+} from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import {
   assertTransition,
@@ -24,13 +28,18 @@ import {
 import {
   CAPACITY_HOLDING_DECISIONS,
   DEFAULT_ACCEPTANCE_SLA_HOURS,
-  MATCHING_WEIGHTS,
   OrderMatchContext,
   rankSupplierCandidates,
   RankedSupplierCandidate,
   SupplierAcceptanceStats,
 } from './matching.ranking';
-import { SupplierVerificationStatus } from '../suppliers/entities/supplier-verification.entity';
+import {
+  SupplierVerification,
+  SupplierVerificationStatus,
+} from '../suppliers/entities/supplier-verification.entity';
+import { SupplierCapability } from '../suppliers/entities/supplier-capability.entity';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import { isActiveOrderableRfqLeaf } from '../products/catalog-v1-10.definition';
 
 export type MatchingActor = {
   userId: number;
@@ -61,6 +70,10 @@ export type CandidatesResult = {
   /** Ranked eligible suppliers (capability + zone + capacity filters). */
   candidates: RankedSupplierCandidate[];
   excludedCount: number;
+  outcome: {
+    code: 'eligible_suppliers_found' | 'no_eligible_supplier';
+    message: string;
+  };
   /**
    * All verified active suppliers for ops manual assign UI.
    * Includes suppliers that ranking may have excluded (capability/zone).
@@ -100,6 +113,8 @@ export class MatchingService {
     private readonly ordersRepo: Repository<Order>,
     @InjectRepository(SupplierProfile)
     private readonly supplierRepo: Repository<SupplierProfile>,
+    @InjectRepository(ProductCategory)
+    private readonly categoryRepo: Repository<ProductCategory>,
     private readonly dataSource: DataSource,
     private readonly auditService: AuditService,
     private readonly configService: ConfigService,
@@ -125,12 +140,18 @@ export class MatchingService {
     }
 
     const ctx = this.toMatchContext(order);
-    const { candidates, excluded } = await this.rankForOrder(ctx);
+    const categoryEligible = await this.categoryAllowsNewAssignment(order);
+    const ranked = categoryEligible
+      ? await this.rankForOrder(ctx)
+      : { candidates: [], excluded: [] };
+    const { candidates, excluded } = ranked;
     const verifiedSuppliers = await this.listVerifiedSuppliersForOrder(
       ctx,
       candidates,
       excluded,
+      categoryEligible,
     );
+    const count = candidates.length;
 
     return {
       order: {
@@ -143,6 +164,13 @@ export class MatchingService {
       },
       candidates,
       excludedCount: excluded.length,
+      outcome:
+        count > 0
+          ? {
+              code: 'eligible_suppliers_found',
+              message: `${count} eligible supplier${count === 1 ? '' : 's'} found`,
+            }
+          : this.noEligibleSupplierOutcome(orderId),
       verifiedSuppliers,
     };
   }
@@ -159,8 +187,7 @@ export class MatchingService {
   }
 
   /**
-   * Ops selects a verified supplier and creates a pending assignment.
-   * Prefers ranked candidates; allows ops override for any verified active shop.
+   * Ops selects a currently eligible ranked supplier and creates an assignment.
    */
   async assign(
     orderId: number,
@@ -171,9 +198,15 @@ export class MatchingService {
     assertOpsActor(actor);
 
     const ranked = await this.getCandidates(orderId);
-    let candidate = ranked.candidates.find((c) => c.supplierId === supplierId);
+    const candidate = ranked.candidates.find(
+      (entry) => entry.supplierId === supplierId,
+    );
     if (!candidate) {
-      candidate = await this.buildOpsOverrideCandidate(orderId, supplierId);
+      const knownSupplier = ranked.verifiedSuppliers.some(
+        (entry) => entry.supplierId === supplierId,
+      );
+      if (knownSupplier) throw this.supplierNotEligible(supplierId, orderId);
+      throw new BadRequestException(this.noEligibleSupplierOutcome(orderId));
     }
 
     return this.createAssignment(orderId, candidate, actor, notes);
@@ -191,10 +224,7 @@ export class MatchingService {
     const ranked = await this.getCandidates(orderId);
     const top = ranked.candidates[0];
     if (!top) {
-      throw new BadRequestException({
-        code: 'no_eligible_suppliers',
-        message: `No eligible suppliers for order ${orderId}`,
-      });
+      throw new BadRequestException(this.noEligibleSupplierOutcome(orderId));
     }
 
     return this.createAssignment(
@@ -399,6 +429,12 @@ export class MatchingService {
         });
       }
 
+      const assignmentCandidate = await this.revalidateCandidate(
+        manager,
+        locked,
+        candidate,
+      );
+
       assertTransition(
         OrderStatus.APPROVED_FOR_MATCHING,
         OrderStatus.SUPPLIER_ASSIGNED,
@@ -422,9 +458,12 @@ export class MatchingService {
 
       const assignment = assignmentRepo.create({
         orderId: locked.id,
-        supplierId: candidate.supplierId,
-        rankingInputs: candidate.rankingInputs as Record<string, unknown>,
-        rankPosition: candidate.rankPosition,
+        supplierId: assignmentCandidate.supplierId,
+        rankingInputs: assignmentCandidate.rankingInputs as Record<
+          string,
+          unknown
+        >,
+        rankPosition: assignmentCandidate.rankPosition,
         acceptanceDeadline: deadline,
         decision: SupplierAssignmentDecision.PENDING,
         decisionReason: notes?.trim() || null,
@@ -444,7 +483,7 @@ export class MatchingService {
         throw new BadRequestException('Order changed during supplier assign');
       }
 
-      const reason = `Supplier assigned: ${candidate.businessName} (id=${candidate.supplierId})`;
+      const reason = `Supplier assigned: ${assignmentCandidate.businessName} (id=${assignmentCandidate.supplierId})`;
       await historyRepo.insert({
         orderId: locked.id,
         fromStatus,
@@ -464,9 +503,9 @@ export class MatchingService {
           metadata: {
             source: 'matching.createAssignment',
             assignmentId: savedAssignment.id,
-            supplierId: candidate.supplierId,
-            rankPosition: candidate.rankPosition,
-            score: candidate.score,
+            supplierId: assignmentCandidate.supplierId,
+            rankPosition: assignmentCandidate.rankPosition,
+            score: assignmentCandidate.score,
             acceptanceDeadline: deadline.toISOString(),
           },
         },
@@ -485,9 +524,9 @@ export class MatchingService {
           toState: toStatus,
           reason,
           metadata: {
-            supplierId: candidate.supplierId,
-            rankPosition: candidate.rankPosition,
-            rankingInputs: candidate.rankingInputs,
+            supplierId: assignmentCandidate.supplierId,
+            rankPosition: assignmentCandidate.rankPosition,
+            rankingInputs: assignmentCandidate.rankingInputs,
             notes: notes?.trim() || null,
           },
         },
@@ -503,8 +542,8 @@ export class MatchingService {
         },
         fromStatus,
         toStatus,
-        candidate,
-        supplierUserId: candidate.userId,
+        candidate: assignmentCandidate,
+        supplierUserId: assignmentCandidate.userId,
       };
     });
 
@@ -567,6 +606,7 @@ export class MatchingService {
     ctx: OrderMatchContext,
     candidates: RankedSupplierCandidate[],
     excluded: Array<{ supplierId: number; reason: string }>,
+    categoryEligible = true,
   ): Promise<CandidatesResult['verifiedSuppliers']> {
     const profiles = await this.supplierRepo.find({
       relations: { verification: true, capabilities: true },
@@ -589,7 +629,11 @@ export class MatchingService {
         isEligibleCandidate: ranked != null,
         score: ranked?.score ?? null,
         rankPosition: ranked?.rankPosition ?? null,
-        excludeReason: ranked ? null : (excludeById.get(profile.id) ?? null),
+        excludeReason: ranked
+          ? null
+          : categoryEligible
+            ? (excludeById.get(profile.id) ?? null)
+            : 'product_not_orderable',
         serviceZones: profile.serviceZones ?? [],
         capabilities: (profile.capabilities ?? []).map((c) => c.productFamily),
       });
@@ -612,67 +656,107 @@ export class MatchingService {
     return rows;
   }
 
-  /** Ops override: assign any verified active supplier even if ranking excluded them. */
-  private async buildOpsOverrideCandidate(
-    orderId: number,
+  private noEligibleSupplierOutcome(orderId: number): {
+    code: 'no_eligible_supplier';
+    message: string;
+  } {
+    return {
+      code: 'no_eligible_supplier',
+      message: `No eligible supplier covers order ${orderId}`,
+    };
+  }
+
+  private supplierNotEligible(
     supplierId: number,
+    orderId: number,
+  ): BadRequestException {
+    return new BadRequestException({
+      code: 'supplier_not_eligible',
+      message: `Supplier ${supplierId} is not currently eligible for order ${orderId}`,
+    });
+  }
+
+  private async categoryAllowsNewAssignment(
+    order: Order,
+    repository: Repository<ProductCategory> = this.categoryRepo,
+    lock = false,
+  ): Promise<boolean> {
+    const slug = String(order.category ?? '')
+      .trim()
+      .toLowerCase();
+    if (!slug) return false;
+
+    const product = await repository.findOne({
+      where: { slug },
+      ...(lock ? { lock: { mode: 'pessimistic_read' as const } } : {}),
+    });
+    if (!product) {
+      return order.pricingStatus !== PricingStatus.PENDING_QUOTE;
+    }
+    if (!product.isActive) return false;
+    if (order.pricingStatus === PricingStatus.PENDING_QUOTE) {
+      return isActiveOrderableRfqLeaf(product);
+    }
+    return true;
+  }
+
+  /**
+   * Recheck every hard eligibility input while the order and supplier rows are
+   * locked. This prevents a capability/verification/capacity change between
+   * the Operations ranking screen and the assignment write.
+   */
+  private async revalidateCandidate(
+    manager: EntityManager,
+    order: Order,
+    rankedCandidate: RankedSupplierCandidate,
   ): Promise<RankedSupplierCandidate> {
-    const profile = await this.supplierRepo.findOne({
-      where: { id: supplierId },
-      relations: { verification: true, capabilities: true },
+    const categoryRepo = manager.getRepository(ProductCategory);
+    if (!(await this.categoryAllowsNewAssignment(order, categoryRepo, true))) {
+      throw new BadRequestException(this.noEligibleSupplierOutcome(order.id));
+    }
+
+    const supplierRepo = manager.getRepository(SupplierProfile);
+    const capabilityRepo = manager.getRepository(SupplierCapability);
+    const verificationRepo = manager.getRepository(SupplierVerification);
+    const assignmentRepo = manager.getRepository(SupplierAssignment);
+
+    const profile = await supplierRepo.findOne({
+      where: { id: rankedCandidate.supplierId },
+      lock: { mode: 'pessimistic_write' },
     });
     if (!profile) {
-      throw new NotFoundException(`Supplier ${supplierId} not found`);
-    }
-    if (!profile.isActive) {
-      throw new BadRequestException({
-        code: 'supplier_inactive',
-        message: `Supplier ${supplierId} is inactive`,
-      });
-    }
-    if (profile.verification?.status !== SupplierVerificationStatus.VERIFIED) {
-      throw new BadRequestException({
-        code: 'supplier_not_verified',
-        message: `Supplier ${supplierId} is not verified`,
-      });
+      throw this.supplierNotEligible(rankedCandidate.supplierId, order.id);
     }
 
-    const order = await this.loadOrderForMatching(orderId);
-    const ctx = this.toMatchContext(order);
-    const cap = profile.capabilities?.[0];
+    const capabilities = await capabilityRepo.find({
+      where: { supplierId: profile.id },
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_read' },
+    });
+    const verification = await verificationRepo.findOne({
+      where: { supplierId: profile.id },
+      lock: { mode: 'pessimistic_read' },
+    });
+    profile.capabilities = capabilities;
+    profile.verification = verification as SupplierVerification;
 
-    return {
-      supplierId: profile.id,
-      businessName: profile.businessName,
-      userId: profile.userId,
-      score: 0,
-      rankPosition: 0,
-      rankingInputs: {
-        formula: 'ops_manual_override',
-        weights: MATCHING_WEIGHTS,
-        capabilityFit: cap ? 1 : 0,
-        zoneFit: 1,
-        capacityFit: 1,
-        qualityScore: 0,
-        acceptanceRate: 0.5,
-        matchedProductFamily:
-          cap?.productFamily ?? order.category ?? 'ops_override',
-        maxCapacity: cap?.maxCapacity ?? 0,
-        openLoad: 0,
-        remainingCapacity: null,
-        leadTimeDays: cap?.leadTimeDays ?? 1,
-        serviceZones: profile.serviceZones ?? [],
-        ratingAverage: Number(profile.ratingAverage ?? 0),
-        acceptanceStats: { accepted: 0, declined: 0, expired: 0 },
-        zoneTokens: ctx.zoneTokens,
-      },
-      capability: {
-        id: cap?.id ?? 0,
-        productFamily: cap?.productFamily ?? order.category ?? 'ops_override',
-        maxCapacity: cap?.maxCapacity ?? 0,
-        leadTimeDays: cap?.leadTimeDays ?? 1,
-      },
-    };
+    const openLoads = await this.loadOpenLoads([profile.id], assignmentRepo);
+    const acceptanceStats = await this.loadAcceptanceStats(
+      [profile.id],
+      assignmentRepo,
+    );
+    const current = rankSupplierCandidates(
+      this.toMatchContext(order),
+      [profile],
+      openLoads,
+      acceptanceStats,
+    ).candidates[0];
+    if (!current) {
+      throw this.supplierNotEligible(rankedCandidate.supplierId, order.id);
+    }
+
+    current.rankPosition = rankedCandidate.rankPosition;
+    return current;
   }
 
   private toMatchContext(order: Order): OrderMatchContext {
@@ -710,11 +794,12 @@ export class MatchingService {
 
   private async loadOpenLoads(
     supplierIds: number[],
+    repository: Repository<SupplierAssignment> = this.assignmentRepo,
   ): Promise<Map<number, number>> {
     const map = new Map<number, number>();
     if (supplierIds.length === 0) return map;
 
-    const rows = await this.assignmentRepo
+    const rows = await repository
       .createQueryBuilder('a')
       .select('a.supplier_id', 'supplierId')
       .addSelect('COUNT(*)', 'cnt')
@@ -733,6 +818,7 @@ export class MatchingService {
 
   private async loadAcceptanceStats(
     supplierIds: number[],
+    repository: Repository<SupplierAssignment> = this.assignmentRepo,
   ): Promise<Map<number, SupplierAcceptanceStats>> {
     const map = new Map<number, SupplierAcceptanceStats>();
     for (const id of supplierIds) {
@@ -745,7 +831,7 @@ export class MatchingService {
     }
     if (supplierIds.length === 0) return map;
 
-    const rows = await this.assignmentRepo.find({
+    const rows = await repository.find({
       where: {
         supplierId: In(supplierIds),
         decision: In([

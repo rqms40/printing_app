@@ -27,7 +27,7 @@ export class SupplierCapability {
   @JoinColumn({ name: 'supplier_id' })
   supplier: SupplierProfile;
 
-  /** Product family slug/label (e.g. flyer, tarp, document). */
+  /** Normalized active orderable RFQ leaf slug (for example, flyers). */
   @Column({ name: 'product_family', type: 'varchar', length: 80 })
   productFamily: string;
 
