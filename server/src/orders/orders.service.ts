@@ -640,6 +640,40 @@ export class OrdersService {
         ? await this.issuesService.listSummariesByOrderIds(orderIds)
         : new Map<number, OrderClaimSummary[]>();
 
+    const quotedCodInputsByUser = new Map<
+      number,
+      Array<{ orderId: number; finalTotalMinor: string }>
+    >();
+    for (const order of orders) {
+      const supplierAssignment = supplierByOrderId.get(order.id);
+      if (
+        order.pricingStatus !== PricingStatus.QUOTED ||
+        order.quotedTotalMinor == null ||
+        supplierAssignment?.decision !== SupplierAssignmentDecision.ACCEPTED
+      ) {
+        continue;
+      }
+      const inputs = quotedCodInputsByUser.get(order.userId) ?? [];
+      inputs.push({
+        orderId: order.id,
+        finalTotalMinor: order.quotedTotalMinor,
+      });
+      quotedCodInputsByUser.set(order.userId, inputs);
+    }
+    const quotedCodEligibilityByOrderId = new Map<number, boolean>();
+    // Customer list reads contain one user; keep this sequential for safe
+    // reuse by any future mixed-user caller without unbounded policy queries.
+    for (const [userId, inputs] of quotedCodInputsByUser) {
+      const results =
+        await this.paymentsService.evaluateCodEligibilityForOrders(
+          userId,
+          inputs,
+        );
+      for (const [orderId, result] of results) {
+        quotedCodEligibilityByOrderId.set(orderId, result.eligible);
+      }
+    }
+
     return Promise.all(
       orders.map(async (order) => {
         const {
@@ -692,20 +726,10 @@ export class OrdersService {
           supplierAssignment?.decision === SupplierAssignmentDecision.ACCEPTED
             ? supplierAssignment.id
             : null;
-        let customerCodEligible = customerSafeOrder.codEligible ?? false;
-        if (
-          order.pricingStatus === PricingStatus.QUOTED &&
-          order.quotedTotalMinor != null &&
-          acceptedQuoteAssignmentId != null
-        ) {
-          const advisory =
-            await this.paymentsService.evaluateCodEligibilityForUser({
-              userId: order.userId,
-              finalTotalMinor: order.quotedTotalMinor,
-              excludeOrderId: order.id,
-            });
-          customerCodEligible = advisory.eligible;
-        }
+        const customerCodEligible =
+          order.pricingStatus === PricingStatus.QUOTED
+            ? (quotedCodEligibilityByOrderId.get(order.id) ?? false)
+            : (customerSafeOrder.codEligible ?? false);
         return {
           ...customerSafeOrder,
           // Advisory only. acceptQuote re-evaluates the same policy while the

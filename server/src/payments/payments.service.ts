@@ -54,6 +54,18 @@ export type AssertCodCheckoutInput = {
   addressZoneEligible?: boolean;
 };
 
+export type CodQuoteEligibilityInput = {
+  orderId: number;
+  finalTotalMinor: string | number | null | undefined;
+  addressZoneEligible?: boolean;
+};
+
+type CodEligibilityReadContext = {
+  pilotCodEligible: boolean;
+  opsRiskBlocked: boolean;
+  activeUnpaidCodOrderIds: ReadonlySet<number>;
+};
+
 @Injectable()
 export class PaymentsService {
   constructor(
@@ -209,27 +221,88 @@ export class PaymentsService {
     excludeOrderId?: number,
     manager?: EntityManager,
   ): Promise<number> {
-    const ordersRepo = manager?.getRepository(Order) ?? this.ordersRepo;
-    const qb = ordersRepo
-      .createQueryBuilder('o')
-      .where('o.userId = :userId', { userId })
-      .andWhere('o.paymentStatus != :paid', { paid: 'paid' })
-      .andWhere('o.orderStatus NOT IN (:...inactive)', {
-        inactive: COD_INACTIVE_ORDER_STATUSES,
-      })
-      // COD method labels: cod, cash, cash_on_delivery (normalized in app)
-      .andWhere(
-        `(
-          LOWER(REPLACE(REPLACE(o.paymentMethod, '_', ''), '-', '')) IN
-            ('cod', 'cash', 'cashondelivery')
-        )`,
-      );
+    const qb = this.activeUnpaidCodOrdersQuery(userId, manager);
 
     if (excludeOrderId != null) {
       qb.andWhere('o.id != :excludeOrderId', { excludeOrderId });
     }
 
     return qb.getCount();
+  }
+
+  private activeUnpaidCodOrdersQuery(userId: number, manager?: EntityManager) {
+    const ordersRepo = manager?.getRepository(Order) ?? this.ordersRepo;
+    return (
+      ordersRepo
+        .createQueryBuilder('o')
+        .where('o.userId = :userId', { userId })
+        .andWhere('o.paymentStatus != :paid', { paid: 'paid' })
+        .andWhere('o.orderStatus NOT IN (:...inactive)', {
+          inactive: COD_INACTIVE_ORDER_STATUSES,
+        })
+        // COD method labels: cod, cash, cash_on_delivery (normalized in app)
+        .andWhere(
+          `(
+          LOWER(REPLACE(REPLACE(o.paymentMethod, '_', ''), '-', '')) IN
+            ('cod', 'cash', 'cashondelivery')
+        )`,
+        )
+    );
+  }
+
+  /**
+   * Advisory customer projection for Q quoted orders. Policy inputs and all
+   * active unpaid COD ids are loaded once, then every quote is evaluated in
+   * memory with the same current-order exclusion used by checkout.
+   *
+   * This read helper is intentionally unlocked. acceptQuote continues to use
+   * evaluateCodEligibilityForUser with the transaction manager and customer
+   * lock as the authoritative TOCTOU-safe gate.
+   */
+  async evaluateCodEligibilityForOrders(
+    userId: number,
+    quotes: readonly CodQuoteEligibilityInput[],
+  ): Promise<Map<number, CodEligibilityResult>> {
+    if (quotes.length === 0) return new Map();
+    const context = await this.loadCodEligibilityReadContext(userId);
+    const results = new Map<number, CodEligibilityResult>();
+    for (const quote of quotes) {
+      const activeUnpaidCodCount =
+        context.activeUnpaidCodOrderIds.size -
+        (context.activeUnpaidCodOrderIds.has(quote.orderId) ? 1 : 0);
+      results.set(
+        quote.orderId,
+        evaluateCodEligibility({
+          pilotCodEligible: context.pilotCodEligible,
+          opsRiskBlocked: context.opsRiskBlocked,
+          finalTotalMinor: quote.finalTotalMinor,
+          activeUnpaidCodCount,
+          addressZoneEligible: quote.addressZoneEligible,
+        }),
+      );
+    }
+    return results;
+  }
+
+  private async loadCodEligibilityReadContext(
+    userId: number,
+  ): Promise<CodEligibilityReadContext> {
+    const user = await this.usersRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`User ${userId} not found`);
+
+    const rows = await this.activeUnpaidCodOrdersQuery(userId)
+      .select('o.id', 'id')
+      .getRawMany<{ id: string | number }>();
+    const activeUnpaidCodOrderIds = new Set<number>();
+    for (const row of rows) {
+      const id = Number(row.id);
+      if (Number.isSafeInteger(id) && id > 0) activeUnpaidCodOrderIds.add(id);
+    }
+    return {
+      pilotCodEligible: user.pilotCodEligible === true,
+      opsRiskBlocked: user.codOpsRiskBlocked === true,
+      activeUnpaidCodOrderIds,
+    };
   }
 
   /**

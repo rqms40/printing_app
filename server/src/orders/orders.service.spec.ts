@@ -235,6 +235,7 @@ describe('OrdersService', () => {
   let paymentsService: {
     assertCodEligibleForCheckout: jest.Mock;
     evaluateCodEligibilityForUser: jest.Mock;
+    evaluateCodEligibilityForOrders: jest.Mock;
     ensurePendingCodCollection: jest.Mock;
   };
   let notificationsService: Partial<NotificationsService>;
@@ -420,6 +421,7 @@ describe('OrdersService', () => {
       evaluateCodEligibilityForUser: jest
         .fn()
         .mockResolvedValue({ eligible: false }),
+      evaluateCodEligibilityForOrders: jest.fn().mockResolvedValue(new Map()),
       ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
     };
     notificationsService = {
@@ -2454,74 +2456,99 @@ describe('OrdersService', () => {
       expect(JSON.stringify(result)).not.toContain('finalPriceMinor');
     });
 
-    it('advises COD for a newly quoted RFQ that currently passes policy', async () => {
-      repo.find.mockResolvedValue([
-        {
-          ...mockOrder,
-          id: 41,
-          userId: 1,
-          pricingStatus: PricingStatus.QUOTED,
-          quotedTotalMinor: '12500',
-          codEligible: false,
-        },
-      ] as Order[]);
+    it('projects Q quoted COD advisories with one batched policy call', async () => {
+      repo.find.mockResolvedValue(
+        [
+          { id: 41, quotedTotalMinor: '150000', codEligible: false },
+          { id: 42, quotedTotalMinor: '150000', codEligible: true },
+          { id: 43, quotedTotalMinor: '150100', codEligible: true },
+          { id: 44, quotedTotalMinor: '12500', codEligible: false },
+        ].map(
+          (values) =>
+            ({
+              ...mockOrder,
+              ...values,
+              userId: 1,
+              pricingStatus: PricingStatus.QUOTED,
+            }) as Order,
+        ),
+      );
       assignmentRepo.find.mockResolvedValue([]);
-      supplierAssignmentRepo.find!.mockResolvedValue([
-        {
-          id: 901,
-          orderId: 41,
-          decision: SupplierAssignmentDecision.ACCEPTED,
-        } as SupplierAssignment,
-      ]);
-      paymentsService.evaluateCodEligibilityForUser.mockResolvedValueOnce({
-        eligible: true,
-      });
+      supplierAssignmentRepo.find!.mockResolvedValue(
+        [41, 42, 43, 44].map(
+          (orderId) =>
+            ({
+              id: 900 + orderId,
+              orderId,
+              decision: SupplierAssignmentDecision.ACCEPTED,
+            }) as SupplierAssignment,
+        ),
+      );
+      paymentsService.evaluateCodEligibilityForOrders.mockResolvedValueOnce(
+        new Map([
+          [41, { eligible: true }],
+          [42, { eligible: false }],
+          [43, { eligible: false }],
+          [44, { eligible: true }],
+        ]),
+      );
 
-      const [result] = await service.findByUser(1);
+      const result = await service.findByUser(1);
 
       expect(
+        paymentsService.evaluateCodEligibilityForOrders,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        paymentsService.evaluateCodEligibilityForOrders,
+      ).toHaveBeenCalledWith(1, [
+        { orderId: 41, finalTotalMinor: '150000' },
+        { orderId: 42, finalTotalMinor: '150000' },
+        { orderId: 43, finalTotalMinor: '150100' },
+        { orderId: 44, finalTotalMinor: '12500' },
+      ]);
+      expect(
         paymentsService.evaluateCodEligibilityForUser,
-      ).toHaveBeenCalledWith({
-        userId: 1,
-        finalTotalMinor: '12500',
-        excludeOrderId: 41,
-      });
-      expect(result).toMatchObject({
-        pricingStatus: PricingStatus.QUOTED,
-        quoteAssignmentId: 901,
-        codEligible: true,
-      });
+      ).not.toHaveBeenCalled();
+      expect(result.map((order) => order.codEligible)).toEqual([
+        true,
+        false,
+        false,
+        true,
+      ]);
+      expect(result.map((order) => order.quoteAssignmentId)).toEqual([
+        941, 942, 943, 944,
+      ]);
     });
 
-    it('withholds COD when a newly quoted RFQ currently fails policy', async () => {
-      repo.find.mockResolvedValue([
-        {
-          ...mockOrder,
-          id: 42,
-          userId: 1,
-          pricingStatus: PricingStatus.QUOTED,
-          quotedTotalMinor: '150100',
-          codEligible: true,
-        },
-      ] as Order[]);
+    it('uses the same single batched COD helper for order detail', async () => {
+      repo.findOne!.mockResolvedValue({
+        ...mockOrder,
+        id: 51,
+        userId: 1,
+        pricingStatus: PricingStatus.QUOTED,
+        quotedTotalMinor: '12500',
+        codEligible: false,
+      } as Order);
       assignmentRepo.find.mockResolvedValue([]);
       supplierAssignmentRepo.find!.mockResolvedValue([
         {
-          id: 902,
-          orderId: 42,
+          id: 951,
+          orderId: 51,
           decision: SupplierAssignmentDecision.ACCEPTED,
         } as SupplierAssignment,
       ]);
-      paymentsService.evaluateCodEligibilityForUser.mockResolvedValueOnce({
-        eligible: false,
-      });
+      paymentsService.evaluateCodEligibilityForOrders.mockResolvedValueOnce(
+        new Map([[51, { eligible: true }]]),
+      );
 
-      const [result] = await service.findByUser(1);
+      const result = await service.findById(51);
 
+      expect(
+        paymentsService.evaluateCodEligibilityForOrders,
+      ).toHaveBeenCalledWith(1, [{ orderId: 51, finalTotalMinor: '12500' }]);
       expect(result).toMatchObject({
-        pricingStatus: PricingStatus.QUOTED,
-        quoteAssignmentId: 902,
-        codEligible: false,
+        quoteAssignmentId: 951,
+        codEligible: true,
       });
     });
 
