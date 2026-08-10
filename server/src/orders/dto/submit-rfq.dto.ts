@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  ArrayMaxSize,
   IsArray,
   IsIn,
   IsInt,
@@ -65,6 +66,7 @@ export class SubmitRfqDto {
   @ApiProperty({ type: [SubmitRfqItemDto] })
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(20)
   @ValidateNested({ each: true })
   @Type(() => SubmitRfqItemDto)
   items: SubmitRfqItemDto[];

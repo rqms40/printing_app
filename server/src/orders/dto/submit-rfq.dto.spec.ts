@@ -40,6 +40,21 @@ describe('SubmitRfqDto', () => {
     expect(dto.deliveryAddressId).toBe(9);
   });
 
+  it('accepts 20 items and rejects 21 items', async () => {
+    const payload = validPayload();
+    const twenty = plainToInstance(SubmitRfqDto, {
+      ...payload,
+      items: Array.from({ length: 20 }, () => ({ ...payload.items[0] })),
+    });
+    const twentyOne = plainToInstance(SubmitRfqDto, {
+      ...payload,
+      items: Array.from({ length: 21 }, () => ({ ...payload.items[0] })),
+    });
+
+    await expect(validate(twenty)).resolves.toEqual([]);
+    await expect(validate(twentyOne)).resolves.not.toEqual([]);
+  });
+
   it.each([
     ['empty items', { items: [] }],
     ['zero quantity', { items: [{ ...validPayload().items[0], quantity: 0 }] }],

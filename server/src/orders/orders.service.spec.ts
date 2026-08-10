@@ -5921,23 +5921,48 @@ describe('OrdersService.submitRfq', () => {
           OrderItemSpecValue: repo(staged.specs, 301),
           DeliveryDestination: repo(staged.destinations, 401),
           ProductCategory: {
-            findOne: jest.fn(
-              async ({ where }: any) =>
-                products.find(
-                  (entry) =>
-                    entry.id === Number(where.id) && entry.slug === where.slug,
-                ) ?? null,
+            findBy: jest.fn(async () => products),
+          },
+          ProductSpecDefinition: {
+            findBy: jest.fn(async () =>
+              products.flatMap((entry) =>
+                entry.specs.map((spec) => ({
+                  ...spec,
+                  categoryId: entry.id,
+                })),
+              ),
+            ),
+          },
+          ProductSpecOption: {
+            findBy: jest.fn(async () =>
+              products.flatMap((entry) =>
+                entry.specs.flatMap((spec) => spec.options),
+              ),
             ),
           },
           FileMetadata: {},
         };
         const result = await callback({
-          query: jest
-            .fn()
-            .mockResolvedValueOnce([])
-            .mockResolvedValueOnce([
-              { max_batch_ref: 10020, max_order_ref: 10030 },
-            ]),
+          query: jest.fn(async (sql: string, parameters?: unknown[]) => {
+            if (sql.includes('FROM product_categories')) {
+              const slugs = parameters?.[0] as string[];
+              return products
+                .filter((entry) => slugs.includes(entry.slug))
+                .sort((a, b) => a.slug.localeCompare(b.slug))
+                .map(({ id, slug }) => ({ id, slug }));
+            }
+            if (sql.includes('FROM product_spec_definitions')) {
+              return products.flatMap((entry) =>
+                entry.specs.map((spec) => ({
+                  id: spec.id,
+                  category_id: entry.id,
+                })),
+              );
+            }
+            if (sql.includes('FROM product_spec_options')) return [];
+            if (sql.includes('pg_advisory_xact_lock')) return [];
+            return [{ max_batch_ref: 10020, max_order_ref: 10030 }];
+          }),
           getRepository: (entity: { name: string }) =>
             repositories[entity.name],
         });
@@ -6155,7 +6180,15 @@ describe('OrdersService.submitRfq', () => {
     await expect(
       failing.service.submitRfq(
         1,
-        request([firstItem(), { ...firstItem(), quantity: 200 }]),
+        request([
+          firstItem(),
+          {
+            ...firstItem(),
+            categorySlug: 'custom-apparel',
+            fileMetadataId: 42,
+            specs: { variant: 'M' },
+          },
+        ]),
       ),
     ).rejects.toThrow('Invalid catalog artwork reference');
     expect(failing.durable).toEqual({
@@ -6175,6 +6208,7 @@ describe('OrdersService.submitRfq', () => {
     ).resolves.toMatchObject({
       orders: [{ category: 'flyers' }, { category: 'flyers' }],
     });
+    expect(reusable.files.resolveCatalogArtwork).toHaveBeenCalledTimes(1);
   });
 
   it('rejects inactive products, missing specs, past dates, zero quantity, and delivery without an address', async () => {

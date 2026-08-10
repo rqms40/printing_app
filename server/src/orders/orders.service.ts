@@ -61,6 +61,11 @@ import {
 } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
 import { SubmitRfqDto } from './dto/submit-rfq.dto';
+import {
+  assertUnambiguousArtworkProducts,
+  lockRfqCatalog,
+  resolveArtworkInLockOrder,
+} from './rfq-locking';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { Address } from '../addresses/entities/address.entity';
@@ -1114,6 +1119,7 @@ export class OrdersService {
         ),
       };
     });
+    assertUnambiguousArtworkProducts(normalizedItems);
 
     // This uses the pending branch only: it validates active catalog leaves and
     // server-owned specifications without calculating a monetary catalog sum.
@@ -1279,26 +1285,29 @@ export class OrdersService {
       const itemRepo = manager.getRepository(OrderItem);
       const specRepo = manager.getRepository(OrderItemSpecValue);
       const destinationRepo = manager.getRepository(DeliveryDestination);
-      const productRepo = manager.getRepository(ProductCategory);
       const validationService = new CatalogValidationService();
 
       // Resolve every mutable/owner-bound input before the first insert. Files
       // are locked and storage-verified through the same transaction manager.
-      const resolvedLines = [] as Array<{
+      const validatedLines = [] as Array<{
         item: (typeof normalizedItems)[number];
         quoteItem: (typeof quote.items)[number];
         product: ProductCategory;
-        file: FileMetadata;
         specSnapshots: (typeof quote.items)[number]['specSnapshots'];
       }>;
+      const productsBySlug = await lockRfqCatalog(
+        manager,
+        normalizedItems.map(({ categorySlug }) => categorySlug),
+      );
       for (const [index, item] of normalizedItems.entries()) {
         const quoteItem = quote.items[index];
-        const product = await productRepo.findOne({
-          where: { id: quoteItem.categoryId, slug: quoteItem.categorySlug },
-          relations: { specs: { options: true } },
-          lock: { mode: 'pessimistic_read' },
-        });
-        if (!product || !isActiveOrderableRfqLeaf(product)) {
+        const product = productsBySlug.get(item.categorySlug);
+        if (
+          !product ||
+          product.id !== quoteItem.categoryId ||
+          quoteItem.categorySlug !== item.categorySlug ||
+          !isActiveOrderableRfqLeaf(product)
+        ) {
           throw new BadRequestException({
             code: 'CATEGORY_INACTIVE',
             message: `Category '${item.categorySlug}' is not available`,
@@ -1324,20 +1333,28 @@ export class OrdersService {
             optionId: entry.option?.id ?? null,
             optionLabel: entry.option?.label ?? null,
           }));
-        const file = await this.filesService.resolveCatalogArtwork(
-          item.fileMetadataId,
-          product,
-          userId,
-          manager,
-        );
-        resolvedLines.push({
+        validatedLines.push({
           item,
           quoteItem,
           product,
-          file,
           specSnapshots,
         });
       }
+
+      const filesById = await resolveArtworkInLockOrder(
+        validatedLines.map(({ item }) => item),
+        ({ fileMetadataId, categorySlug }) =>
+          this.filesService.resolveCatalogArtwork(
+            fileMetadataId,
+            productsBySlug.get(categorySlug)!,
+            userId,
+            manager,
+          ),
+      );
+      const resolvedLines = validatedLines.map((line) => ({
+        ...line,
+        file: filesById.get(line.item.fileMetadataId)!,
+      }));
 
       const { batchRef, orderRefs } = await this.nextBatchReferences(
         manager,
