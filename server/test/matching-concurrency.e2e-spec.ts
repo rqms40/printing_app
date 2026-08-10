@@ -54,7 +54,7 @@ describe('supplier matching PostgreSQL concurrency (e2e)', () => {
     await admin.end();
   });
 
-  it('uses the authoritative locked address when the relation changes after preflight', async () => {
+  it('uses the authoritative address when the relation changes before the locked transaction', async () => {
     const dataSource = await initializeDatabase(
       await createDatabase('address'),
     );
@@ -119,6 +119,140 @@ describe('supplier matching PostgreSQL concurrency (e2e)', () => {
         expect.objectContaining({ openLoad: 0 }),
       );
     } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('manual assignment accepts coverage that becomes eligible before the locked transaction', async () => {
+    const dataSource = await initializeDatabase(
+      await createDatabase('newcoverage'),
+    );
+    const gate = transactionGate(dataSource);
+    try {
+      const fixture = await seedMatching(dataSource, {
+        supplierZones: [[]],
+        capacities: [2],
+        ratings: [5],
+        orderCount: 1,
+        capabilitySlugs: [],
+      });
+      const matching = makeMatching(dataSource, gate.dataSource);
+      const attempt = matching.assign(
+        fixture.orderIds[0],
+        fixture.supplierIds[0],
+        fixture.actor,
+      );
+      const outcome = attempt.then(
+        (result) => ({ state: 'resolved' as const, result }),
+        (error: unknown) => ({ state: 'rejected' as const, error }),
+      );
+
+      const phase = await Promise.race([
+        gate.entered.then(() => 'transaction' as const),
+        outcome.then(() => 'settled' as const),
+      ]);
+      expect(phase).toBe('transaction');
+
+      await dataSource.getRepository(SupplierCapability).save({
+        supplierId: fixture.supplierIds[0],
+        productFamily: 'flyers',
+        materials: [],
+        maxCapacity: 2,
+        leadTimeDays: 1,
+        isActive: true,
+      });
+      gate.release();
+
+      const settled = await outcome;
+      expect(settled.state).toBe('resolved');
+      if (settled.state === 'resolved') {
+        expect(settled.result.assignment.supplierId).toBe(
+          fixture.supplierIds[0],
+        );
+      }
+    } finally {
+      gate.release();
+      await dataSource.destroy();
+    }
+  });
+
+  it('auto-match rejects coverage that disappears before the locked transaction', async () => {
+    const dataSource = await initializeDatabase(
+      await createDatabase('lostcoverage'),
+    );
+    const gate = transactionGate(dataSource);
+    try {
+      const fixture = await seedMatching(dataSource, {
+        supplierZones: [[]],
+        capacities: [2],
+        ratings: [5],
+        orderCount: 1,
+      });
+      const matching = makeMatching(dataSource, gate.dataSource);
+      const attempt = matching.autoMatch(fixture.orderIds[0], fixture.actor);
+      await gate.entered;
+      await dataSource
+        .getRepository(SupplierCapability)
+        .update(
+          { supplierId: fixture.supplierIds[0], productFamily: 'flyers' },
+          { isActive: false },
+        );
+      gate.release();
+
+      await expect(attempt).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'no_eligible_supplier' }),
+      });
+    } finally {
+      gate.release();
+      await dataSource.destroy();
+    }
+  });
+
+  it('saves a coherent pre- or post-decline aggregate basis during reranking', async () => {
+    const dataSource = await initializeDatabase(
+      await createDatabase('declinebasis'),
+    );
+    const gate = aggregateReadGate(dataSource);
+    try {
+      const fixture = await seedMatching(dataSource, {
+        supplierZones: [[]],
+        capacities: [2],
+        ratings: [5],
+        orderCount: 2,
+      });
+      const holding = await insertHoldingAssignment(
+        dataSource,
+        fixture.orderIds[1],
+        fixture.supplierIds[0],
+      );
+      const matching = makeMatching(dataSource, gate.dataSource);
+      const attempt = matching.autoMatch(fixture.orderIds[0], fixture.actor);
+      await gate.entered;
+
+      await dataSource.getRepository(SupplierAssignment).update(
+        { id: holding.id },
+        {
+          decision: SupplierAssignmentDecision.DECLINED,
+          decisionReason: 'concurrent decline',
+          decidedAt: new Date(),
+        },
+      );
+      gate.release();
+
+      const result = await attempt;
+      const inputs = result.assignment.rankingInputs as {
+        openLoad: number;
+        acceptanceStats: { declined: number };
+      };
+      expect([
+        { openLoad: 1, declined: 0 },
+        { openLoad: 0, declined: 1 },
+      ]).toContainEqual({
+        openLoad: inputs.openLoad,
+        declined: inputs.acceptanceStats.declined,
+      });
+    } finally {
+      gate.release();
       await dataSource.destroy();
     }
   });
@@ -253,6 +387,48 @@ describe('supplier matching PostgreSQL concurrency (e2e)', () => {
     };
   }
 
+  function aggregateReadGate(dataSource: DataSource) {
+    let enter!: () => void;
+    let release!: () => void;
+    let paused = false;
+    const entered = new Promise<void>((resolve) => (enter = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    return {
+      entered,
+      release,
+      dataSource: {
+        transaction: <T>(work: (manager: EntityManager) => Promise<T>) =>
+          dataSource.transaction(async (manager) => {
+            const originalGetRepository = manager.getRepository.bind(manager);
+            const wrappedManager = Object.create(manager) as EntityManager;
+            wrappedManager.getRepository = ((entity: unknown) => {
+              const repository = originalGetRepository(entity as never);
+              if (entity !== SupplierAssignment) return repository;
+              const wrappedRepository = Object.create(
+                repository,
+              ) as typeof repository;
+              wrappedRepository.createQueryBuilder = (...args: never[]) => {
+                const builder = repository.createQueryBuilder(...args);
+                const getRawMany = builder.getRawMany.bind(builder);
+                builder.getRawMany = async <Row>() => {
+                  const rows = await getRawMany<Row>();
+                  if (!paused) {
+                    paused = true;
+                    enter();
+                    await released;
+                  }
+                  return rows;
+                };
+                return builder;
+              };
+              return wrappedRepository;
+            }) as EntityManager['getRepository'];
+            return work(wrappedManager);
+          }),
+      } as DataSource,
+    };
+  }
+
   async function seedMatching(
     dataSource: DataSource,
     input: {
@@ -354,7 +530,7 @@ describe('supplier matching PostgreSQL concurrency (e2e)', () => {
     orderId: number,
     supplierId: number,
   ) {
-    await dataSource.getRepository(SupplierAssignment).save({
+    return dataSource.getRepository(SupplierAssignment).save({
       orderId,
       supplierId,
       rankingInputs: {},

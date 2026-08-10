@@ -187,9 +187,7 @@ export class MatchingService {
     });
   }
 
-  /**
-   * Ops selects a currently eligible ranked supplier and creates an assignment.
-   */
+  /** Ops selects a supplier; eligibility is decided only under transaction locks. */
   async assign(
     orderId: number,
     supplierId: number,
@@ -204,14 +202,6 @@ export class MatchingService {
     });
     if (!supplier) {
       throw new NotFoundException(`Supplier ${supplierId} not found`);
-    }
-
-    const ranked = await this.getCandidates(orderId);
-    const candidate = ranked.candidates.find(
-      (entry) => entry.supplierId === supplierId,
-    );
-    if (!candidate) {
-      throw this.supplierNotEligible(supplierId, orderId);
     }
 
     return this.createAssignment(
@@ -230,12 +220,6 @@ export class MatchingService {
     actor: MatchingActor,
   ): Promise<AssignResult> {
     assertOpsActor(actor);
-
-    const ranked = await this.getCandidates(orderId);
-    const top = ranked.candidates[0];
-    if (!top) {
-      throw new BadRequestException(this.noEligibleSupplierOutcome(orderId));
-    }
 
     return this.createAssignment(
       orderId,
@@ -785,8 +769,7 @@ export class MatchingService {
       ) as SupplierVerification;
     }
 
-    const openLoads = await this.loadOpenLoads(supplierIds, assignmentRepo);
-    const acceptanceStats = await this.loadAcceptanceStats(
+    const { openLoads, acceptanceStats } = await this.loadAssignmentAggregates(
       supplierIds,
       assignmentRepo,
     );
@@ -825,74 +808,78 @@ export class MatchingService {
     });
 
     const supplierIds = profiles.map((p) => p.id);
-    const openLoads = await this.loadOpenLoads(supplierIds);
-    const acceptanceStats = await this.loadAcceptanceStats(supplierIds);
+    const { openLoads, acceptanceStats } =
+      await this.loadAssignmentAggregates(supplierIds);
 
     return rankSupplierCandidates(ctx, profiles, openLoads, acceptanceStats);
   }
 
-  private async loadOpenLoads(
+  /** One statement keeps capacity and acceptance inputs on one DB snapshot. */
+  private async loadAssignmentAggregates(
     supplierIds: number[],
     repository: Repository<SupplierAssignment> = this.assignmentRepo,
-  ): Promise<Map<number, number>> {
-    const map = new Map<number, number>();
-    if (supplierIds.length === 0) return map;
-
-    const rows = await repository
-      .createQueryBuilder('a')
-      .select('a.supplier_id', 'supplierId')
-      .addSelect('COUNT(*)', 'cnt')
-      .where('a.supplier_id IN (:...ids)', { ids: supplierIds })
-      .andWhere('a.decision IN (:...decisions)', {
-        decisions: CAPACITY_HOLDING_DECISIONS,
-      })
-      .groupBy('a.supplier_id')
-      .getRawMany<{ supplierId: string; cnt: string }>();
-
-    for (const row of rows) {
-      map.set(Number(row.supplierId), Number(row.cnt));
-    }
-    return map;
-  }
-
-  private async loadAcceptanceStats(
-    supplierIds: number[],
-    repository: Repository<SupplierAssignment> = this.assignmentRepo,
-  ): Promise<Map<number, SupplierAcceptanceStats>> {
-    const map = new Map<number, SupplierAcceptanceStats>();
-    for (const id of supplierIds) {
-      map.set(id, {
-        supplierId: id,
+  ): Promise<{
+    openLoads: Map<number, number>;
+    acceptanceStats: Map<number, SupplierAcceptanceStats>;
+  }> {
+    const openLoads = new Map<number, number>();
+    const acceptanceStats = new Map<number, SupplierAcceptanceStats>();
+    for (const supplierId of supplierIds) {
+      openLoads.set(supplierId, 0);
+      acceptanceStats.set(supplierId, {
+        supplierId,
         accepted: 0,
         declined: 0,
         expired: 0,
       });
     }
-    if (supplierIds.length === 0) return map;
+    if (supplierIds.length === 0) return { openLoads, acceptanceStats };
 
-    const rows = await repository.find({
-      where: {
-        supplierId: In(supplierIds),
-        decision: In([
-          SupplierAssignmentDecision.ACCEPTED,
-          SupplierAssignmentDecision.DECLINED,
-          SupplierAssignmentDecision.EXPIRED,
-        ]),
-      },
-      select: ['supplierId', 'decision'],
-    });
+    const rows = await repository
+      .createQueryBuilder('a')
+      .select('a.supplier_id', 'supplierId')
+      .addSelect(
+        'COUNT(*) FILTER (WHERE a.decision IN (:...openDecisions))',
+        'openLoad',
+      )
+      .addSelect(
+        'COUNT(*) FILTER (WHERE a.decision = :acceptedDecision)',
+        'accepted',
+      )
+      .addSelect(
+        'COUNT(*) FILTER (WHERE a.decision = :declinedDecision)',
+        'declined',
+      )
+      .addSelect(
+        'COUNT(*) FILTER (WHERE a.decision = :expiredDecision)',
+        'expired',
+      )
+      .where('a.supplier_id IN (:...ids)', { ids: supplierIds })
+      .setParameters({
+        openDecisions: CAPACITY_HOLDING_DECISIONS,
+        acceptedDecision: SupplierAssignmentDecision.ACCEPTED,
+        declinedDecision: SupplierAssignmentDecision.DECLINED,
+        expiredDecision: SupplierAssignmentDecision.EXPIRED,
+      })
+      .groupBy('a.supplier_id')
+      .getRawMany<{
+        supplierId: string;
+        openLoad: string;
+        accepted: string;
+        declined: string;
+        expired: string;
+      }>();
 
     for (const row of rows) {
-      const stats = map.get(row.supplierId);
-      if (!stats) continue;
-      if (row.decision === SupplierAssignmentDecision.ACCEPTED) {
-        stats.accepted += 1;
-      } else if (row.decision === SupplierAssignmentDecision.DECLINED) {
-        stats.declined += 1;
-      } else if (row.decision === SupplierAssignmentDecision.EXPIRED) {
-        stats.expired += 1;
-      }
+      const supplierId = Number(row.supplierId);
+      openLoads.set(supplierId, Number(row.openLoad));
+      acceptanceStats.set(supplierId, {
+        supplierId,
+        accepted: Number(row.accepted),
+        declined: Number(row.declined),
+        expired: Number(row.expired),
+      });
     }
-    return map;
+    return { openLoads, acceptanceStats };
   }
 }

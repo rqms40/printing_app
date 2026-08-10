@@ -112,6 +112,7 @@ describe('MatchingService', () => {
           set: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
+          setParameters: jest.fn().mockReturnThis(),
           groupBy: jest.fn().mockReturnThis(),
           getRawMany: jest.fn().mockResolvedValue([]),
           execute: jest.fn().mockResolvedValue({ affected: 0 }),
@@ -150,6 +151,7 @@ describe('MatchingService', () => {
           addSelect: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
+          setParameters: jest.fn().mockReturnThis(),
           groupBy: jest.fn().mockReturnThis(),
           getRawMany: jest.fn().mockResolvedValue([]),
         };
@@ -322,6 +324,48 @@ describe('MatchingService', () => {
   });
 
   describe('assign', () => {
+    it('uses only the locked pool when an existing supplier becomes eligible before the transaction', async () => {
+      const order = baseOrder();
+      supplierRepo.findOne!.mockResolvedValue({ id: 11 } as SupplierProfile);
+      ordersRepo.findOne!.mockRejectedValue(
+        new Error('unlocked order eligibility lookup'),
+      );
+      supplierRepo.find!.mockRejectedValue(
+        new Error('unlocked supplier eligibility lookup'),
+      );
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([
+        {
+          id: 11,
+          userId: 55,
+          businessName: 'Newly Eligible',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 4,
+        },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          supplierId: 11,
+          productFamily: 'paper',
+          isActive: true,
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+      ]);
+      txVerificationRepo.find.mockResolvedValue([
+        {
+          supplierId: 11,
+          status: SupplierVerificationStatus.VERIFIED,
+        },
+      ]);
+
+      const result = await service.assign(42, 11, actor);
+
+      expect(result.assignment.supplierId).toBe(11);
+    });
+
     it('creates assignment and transitions order to supplier_assigned', async () => {
       const order = baseOrder();
       ordersRepo.findOne!.mockResolvedValue(order);
@@ -422,9 +466,10 @@ describe('MatchingService', () => {
     });
 
     it('rejects an existing unverified manual supplier while another candidate exists', async () => {
-      ordersRepo.findOne!.mockResolvedValue(baseOrder());
+      const order = baseOrder();
+      ordersRepo.findOne!.mockResolvedValue(order);
       supplierRepo.findOne!.mockResolvedValue({ id: 20 });
-      supplierRepo.find!.mockResolvedValue([
+      const profiles = [
         {
           id: 11,
           userId: 55,
@@ -463,7 +508,22 @@ describe('MatchingService', () => {
           ],
           verification: { status: SupplierVerificationStatus.PENDING },
         },
-      ] as unknown as SupplierProfile[]);
+      ] as unknown as SupplierProfile[];
+      supplierRepo.find!.mockResolvedValue(profiles);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue(
+        profiles.map(
+          ({ capabilities: _caps, verification: _verification, ...profile }) =>
+            profile,
+        ),
+      );
+      txCapabilityRepo.find.mockResolvedValue(
+        profiles.flatMap((profile) => profile.capabilities),
+      );
+      txVerificationRepo.find.mockResolvedValue([
+        { supplierId: 11, status: SupplierVerificationStatus.VERIFIED },
+        { supplierId: 20, status: SupplierVerificationStatus.PENDING },
+      ]);
 
       await expect(service.assign(42, 20, actor)).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'supplier_not_eligible' }),
@@ -473,28 +533,35 @@ describe('MatchingService', () => {
     it('rejects manual assignment of a verified supplier without the exact capability', async () => {
       const order = baseOrder();
       ordersRepo.findOne!.mockResolvedValue(order);
-      supplierRepo.find!.mockResolvedValue([
-        {
-          id: 20,
-          userId: 77,
-          businessName: 'Override Print',
-          serviceZones: [],
-          isActive: true,
-          ratingAverage: 0,
-          capabilities: [
-            {
-              id: 9,
-              supplierId: 20,
-              productFamily: 'shirts',
-              isActive: true,
-              maxCapacity: 0,
-              leadTimeDays: 1,
-            },
-          ],
-          verification: { status: SupplierVerificationStatus.VERIFIED },
-        } as unknown as SupplierProfile,
-      ]);
+      const profile = {
+        id: 20,
+        userId: 77,
+        businessName: 'Override Print',
+        serviceZones: [],
+        isActive: true,
+        ratingAverage: 0,
+        capabilities: [
+          {
+            id: 9,
+            supplierId: 20,
+            productFamily: 'shirts',
+            isActive: true,
+            maxCapacity: 0,
+            leadTimeDays: 1,
+          },
+        ],
+        verification: { status: SupplierVerificationStatus.VERIFIED },
+      } as unknown as SupplierProfile;
+      supplierRepo.find!.mockResolvedValue([profile]);
       supplierRepo.findOne!.mockResolvedValue({ id: 20 } as SupplierProfile);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([
+        { ...profile, capabilities: undefined, verification: undefined },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue(profile.capabilities);
+      txVerificationRepo.find.mockResolvedValue([
+        { supplierId: 20, status: SupplierVerificationStatus.VERIFIED },
+      ]);
 
       await expect(
         service.assign(42, 20, actor, 'manual pick'),
@@ -504,7 +571,7 @@ describe('MatchingService', () => {
       expect(txAssignmentRepo.save).not.toHaveBeenCalled();
     });
 
-    it('rejects a supplier whose active capability changed after ranking', async () => {
+    it('rejects a supplier whose capability is inactive in the locked rerank', async () => {
       const order = baseOrder({
         category: 'flyers',
         pricingStatus: PricingStatus.PENDING_QUOTE,
@@ -580,6 +647,13 @@ describe('MatchingService', () => {
       });
       supplierRepo.find!.mockResolvedValue([]);
       supplierRepo.findOne!.mockResolvedValue({ id: 11 } as SupplierProfile);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txCategoryRepo.findOne.mockResolvedValue({
+        ...flyersCategory,
+        slug: 'paper',
+        isActive: false,
+        pricingModel: PricingModel.PER_PAGE_MODIFIERS,
+      });
 
       await expect(service.assign(42, 11, actor)).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'supplier_not_eligible' }),
@@ -594,6 +668,47 @@ describe('MatchingService', () => {
   });
 
   describe('autoMatch', () => {
+    it('uses only the locked pool when coverage appears before the transaction', async () => {
+      const order = baseOrder();
+      ordersRepo.findOne!.mockRejectedValue(
+        new Error('unlocked order eligibility lookup'),
+      );
+      supplierRepo.find!.mockRejectedValue(
+        new Error('unlocked supplier eligibility lookup'),
+      );
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([
+        {
+          id: 11,
+          userId: 55,
+          businessName: 'Newly Eligible',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 4,
+        },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          supplierId: 11,
+          productFamily: 'paper',
+          isActive: true,
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+      ]);
+      txVerificationRepo.find.mockResolvedValue([
+        {
+          supplierId: 11,
+          status: SupplierVerificationStatus.VERIFIED,
+        },
+      ]);
+
+      const result = await service.autoMatch(42, actor);
+
+      expect(result.assignment.supplierId).toBe(11);
+    });
+
     it('assigns top candidate', async () => {
       const order = baseOrder();
       ordersRepo.findOne!.mockResolvedValue(order);
@@ -653,8 +768,11 @@ describe('MatchingService', () => {
     });
 
     it('returns the stable no-coverage error when no eligible suppliers exist', async () => {
-      ordersRepo.findOne!.mockResolvedValue(baseOrder());
+      const order = baseOrder();
+      ordersRepo.findOne!.mockResolvedValue(order);
       supplierRepo.find!.mockResolvedValue([]);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([]);
 
       await expect(service.autoMatch(42, actor)).rejects.toMatchObject({
         response: {
@@ -664,7 +782,7 @@ describe('MatchingService', () => {
       });
     });
 
-    it('reranks the full locked pool and falls back when the preflight top is full', async () => {
+    it('reranks the full locked pool and falls back when the former top is full', async () => {
       const order = baseOrder();
       const profiles = [
         {
@@ -735,10 +853,17 @@ describe('MatchingService', () => {
           set: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
+          setParameters: jest.fn().mockReturnThis(),
           groupBy: jest.fn().mockReturnThis(),
-          getRawMany: jest
-            .fn()
-            .mockResolvedValue([{ supplierId: '11', cnt: '1' }]),
+          getRawMany: jest.fn().mockResolvedValue([
+            {
+              supplierId: '11',
+              openLoad: '1',
+              accepted: '0',
+              declined: '0',
+              expired: '0',
+            },
+          ]),
           execute: jest.fn().mockResolvedValue({ affected: 0 }),
         };
         return qb;
@@ -754,7 +879,103 @@ describe('MatchingService', () => {
       );
     });
 
-    it('uses the locked delivery address and rejects a stale preflight zone match', async () => {
+    it('derives capacity and acceptance inputs from one aggregate query result', async () => {
+      const order = baseOrder();
+      const profile = {
+        id: 11,
+        userId: 55,
+        businessName: 'Coherent Stats',
+        serviceZones: [],
+        isActive: true,
+        ratingAverage: 4,
+      } as SupplierProfile;
+      ordersRepo.findOne!.mockResolvedValue(order);
+      supplierRepo.find!.mockResolvedValue([
+        {
+          ...profile,
+          capabilities: [
+            {
+              id: 1,
+              supplierId: 11,
+              productFamily: 'paper',
+              isActive: true,
+              maxCapacity: 10,
+              leadTimeDays: 2,
+            },
+          ],
+          verification: { status: SupplierVerificationStatus.VERIFIED },
+        },
+      ] as SupplierProfile[]);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([profile]);
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          supplierId: 11,
+          productFamily: 'paper',
+          isActive: true,
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+      ]);
+      txVerificationRepo.find.mockResolvedValue([
+        {
+          supplierId: 11,
+          status: SupplierVerificationStatus.VERIFIED,
+        },
+      ]);
+      let query = 0;
+      const aggregateBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setParameters: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          {
+            supplierId: '11',
+            openLoad: '1',
+            accepted: '2',
+            declined: '1',
+            expired: '0',
+          },
+        ]),
+        execute: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      const updateBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setParameters: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+        execute: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      txAssignmentRepo.createQueryBuilder.mockImplementation(() => {
+        query += 1;
+        return query === 1 ? aggregateBuilder : updateBuilder;
+      });
+
+      const result = await service.autoMatch(42, actor);
+
+      expect(result.assignment.rankingInputs).toEqual(
+        expect.objectContaining({
+          openLoad: 1,
+          acceptanceStats: { accepted: 2, declined: 1, expired: 0 },
+        }),
+      );
+      expect(aggregateBuilder.getRawMany).toHaveBeenCalledTimes(1);
+      expect(aggregateBuilder.addSelect).toHaveBeenCalledTimes(4);
+      expect(txAssignmentRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('uses the locked delivery address and rejects the former zone match', async () => {
       const order = baseOrder();
       const profile = {
         id: 11,
