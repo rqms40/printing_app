@@ -180,8 +180,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
 
   List<String> get _allowedTypes {
     final state = ref.read(orderFlowProvider);
-    final catalog = ref.read(productCatalogProvider).valueOrNull;
-    final category = catalog?.categoryBySlug(state.category);
+    final catalog = ref.read(productCatalogProvider).catalog;
+    final category = catalog.categoryBySlug(state.category);
     if (category != null && category.allowedExtensions.isNotEmpty) {
       return category.allowedExtensions;
     }
@@ -192,8 +192,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
 
   int get _maxSizeMB {
     final state = ref.read(orderFlowProvider);
-    final catalog = ref.read(productCatalogProvider).valueOrNull;
-    final category = catalog?.categoryBySlug(state.category);
+    final catalog = ref.read(productCatalogProvider).catalog;
+    final category = catalog.categoryBySlug(state.category);
     if (category != null) return category.maxFileSizeMb;
     return state.category == 'paper'
         ? AppConstants.paperMaxSizeMB

@@ -37,6 +37,7 @@ import 'package:printing_app/features/customer/notifications/providers/notificat
 import 'package:printing_app/features/customer/notifications/screens/notifications_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/profile_screen.dart';
 import 'package:printing_app/features/customer/order/screens/category_screen.dart';
+import 'package:printing_app/features/customer/order/screens/product_screen.dart';
 import 'package:printing_app/features/customer/order/screens/paper_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/three_d_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/upload_screen.dart';
@@ -554,6 +555,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/order/new',
         pageBuilder: (_, state) => slideUpTransition(
           CategoryScreen(addMode: state.uri.queryParameters['mode'] == 'add'),
+          state,
+        ),
+      ),
+      GoRoute(
+        path: '/customer/order/groups/:groupSlug',
+        pageBuilder: (_, state) => slideUpTransition(
+          ProductScreen(groupSlug: state.pathParameters['groupSlug'] ?? ''),
+          state,
+        ),
+      ),
+      GoRoute(
+        path: '/customer/order/products/:productSlug/requirements',
+        pageBuilder: (_, state) => slideUpTransition(
+          CatalogRequirementsRouteBoundary(
+            productSlug: state.pathParameters['productSlug'] ?? '',
+          ),
           state,
         ),
       ),

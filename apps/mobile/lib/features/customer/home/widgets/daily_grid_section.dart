@@ -148,10 +148,8 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
 
   void _onCardTap(BuildContext context, DailyGridItem card) {
     final notifier = ref.read(orderFlowProvider.notifier);
-    final catalog =
-        ref.read(productCatalogProvider).valueOrNull ??
-        ProductCatalog.fallback();
-    final fallback = ProductCatalog.fallback();
+    final catalog = ref.read(productCatalogProvider).catalog;
+    final fallback = ProductCatalog.legacyFallback();
     final category =
         catalog.categoryBySlug(card.category) ??
         fallback.categoryBySlug(card.category) ??

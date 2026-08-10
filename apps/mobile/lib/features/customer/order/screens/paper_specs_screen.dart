@@ -153,12 +153,10 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   }
 
   ProductCategory _category() {
-    final catalog =
-        ref.read(productCatalogProvider).valueOrNull ??
-        ProductCatalog.fallback();
+    final catalog = ref.read(productCatalogProvider).catalog;
     final slug = ref.read(orderFlowProvider).category ?? 'paper';
     return catalog.categoryBySlug(slug) ??
-        ProductCatalog.fallback().categoryBySlug('paper')!;
+        ProductCatalog.legacyFallback().categoryBySlug('paper')!;
   }
 
   void _ensureDefaults(ProductCategory category) {
@@ -175,13 +173,11 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
-    final catalog =
-        ref.watch(productCatalogProvider).valueOrNull ??
-        ProductCatalog.fallback();
+    final catalog = ref.watch(productCatalogProvider).catalog;
     final slug = ref.watch(orderFlowProvider).category ?? 'paper';
     final category =
         catalog.categoryBySlug(slug) ??
-        ProductCatalog.fallback().categoryBySlug('paper')!;
+        ProductCatalog.legacyFallback().categoryBySlug('paper')!;
     _ensureDefaults(category);
 
     return Scaffold(

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/screens/paper_specs_screen.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
@@ -32,8 +31,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          productCatalogProvider.overrideWith(
-            (ref) async => ProductCatalog.fallback(),
+          productCatalogLoaderProvider.overrideWithValue(
+            () async => throw StateError('legacy draft test'),
           ),
         ],
         child: const MaterialApp(home: PaperSpecsScreen()),
@@ -56,8 +55,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          productCatalogProvider.overrideWith(
-            (ref) async => ProductCatalog.fallback(),
+          productCatalogLoaderProvider.overrideWithValue(
+            () async => throw StateError('legacy draft test'),
           ),
         ],
         child: const MaterialApp(home: PaperSpecsScreen()),
@@ -75,8 +74,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final container = ProviderContainer(
       overrides: [
-        productCatalogProvider.overrideWith(
-          (ref) async => ProductCatalog.fallback(),
+        productCatalogLoaderProvider.overrideWithValue(
+          () async => throw StateError('legacy draft test'),
         ),
       ],
     );
