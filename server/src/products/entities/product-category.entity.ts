@@ -2,6 +2,8 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -55,6 +57,35 @@ export class ProductCategory {
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   icon: string | null;
+
+  @Column({
+    name: 'audience_label',
+    type: 'varchar',
+    length: 160,
+    nullable: true,
+  })
+  audienceLabel: string | null;
+
+  /** Self-referential parent for Category → Subgroup → Variant. */
+  @Column({ name: 'parent_id', type: 'int', nullable: true })
+  parentId: number | null;
+
+  @ManyToOne(() => ProductCategory, (category) => category.children, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'parent_id' })
+  parent: ProductCategory | null;
+
+  @OneToMany(() => ProductCategory, (category) => category.parent)
+  children: ProductCategory[];
+
+  @Column({ name: 'catalog_level', type: 'int', default: 0 })
+  catalogLevel: number;
+
+  /** Hierarchy parents (categories & subgroups) are browse-only. */
+  @Column({ name: 'is_orderable', default: true })
+  isOrderable: boolean;
 
   @Column({
     name: 'file_processing_type',
