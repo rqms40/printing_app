@@ -18,6 +18,8 @@ const category = (group: number, leaf: number): ServiceCategory => ({
   quantity_unit: 'piece',
   max_file_size_mb: 100,
   allowed_extensions: ['pdf'],
+  catalog_level: 1,
+  is_orderable: true,
   is_active: true,
   sort_order: leaf,
   created_at: '',
@@ -52,7 +54,9 @@ describe('groupCatalogCategories', () => {
       group_sort_order: 8, examples: 'One, Two', description: 'Leaf',
       mobile_description: 'Leaf mobile', file_processing_type: 'generic_file',
       pricing_model: 'quote_required', base_rate: 0, quantity_unit: 'piece',
-      max_file_size_mb: 200, allowed_extensions: 'PDF, ai', is_active: false,
+      max_file_size_mb: 200, allowed_extensions: 'PDF, ai', catalog_level: 1,
+  is_orderable: true,
+  is_active: false,
       sort_order: 9,
     })).toEqual({
       name: 'Future Leaf', slug: 'future-leaf', groupSlug: 'future-group',
@@ -66,7 +70,9 @@ describe('groupCatalogCategories', () => {
   });
 
   it('excludes only exact inactive legacy leaves from the four RFQ sections', () => {
-    const paper = { ...category(1, 1), slug: 'paper', group_slug: undefined, group_name: undefined, is_active: false };
+    const paper = { ...category(1, 1), slug: 'paper', group_slug: undefined, group_name: undefined, catalog_level: 1,
+  is_orderable: true,
+  is_active: false };
     const threeD = { ...paper, id: 'legacy-3d', slug: '3d' };
     const future = { ...paper, id: 'future', slug: 'future-leaf' };
     expect(catalogAdminCategories([paper, threeD, future]).map((item) => item.slug)).toEqual(['future-leaf']);

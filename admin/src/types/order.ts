@@ -151,6 +151,12 @@ export interface Order {
   assigned_supplier_contact?: AssignedSupplierContact | null;
   current_supplier_assignment?: CurrentSupplierAssignment | null;
   delivery_proof?: DeliveryProof | null;
+  pickup_proof?: DeliveryProof | null;
+  production_milestones?: Array<{
+    milestone: string;
+    reached_at?: string | null;
+    notes?: string | null;
+  }> | null;
   estimated_completion_at?: string;
   admin_notes?: string;
   adminStatusNote?: string | null;

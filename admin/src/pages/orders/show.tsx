@@ -1146,7 +1146,7 @@ export function OrderShow() {
                         {reachedAt ? (
                           <div>
                             <Text type="secondary" style={{ fontSize: 12 }}>
-                              {formatDateTime(reachedAt)}
+                              {formatDateTime(String(reachedAt))}
                             </Text>
                           </div>
                         ) : null}
