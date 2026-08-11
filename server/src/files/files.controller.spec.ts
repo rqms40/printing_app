@@ -2,6 +2,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   INestApplication,
+  ValidationPipe,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { readdir, unlink } from 'node:fs/promises';
@@ -114,29 +115,48 @@ describe('FilesController', () => {
     const request = makeRequest(42, 'client', true);
 
     await expect(
-      controller.uploadFile({} as Express.Multer.File, request, 'general'),
+      controller.uploadFile({} as Express.Multer.File, request, {
+        purpose: 'general',
+      }),
     ).rejects.toThrow(ForbiddenException);
 
     await controller.uploadFile(
       { buffer: Buffer.alloc(0) } as Express.Multer.File,
       request,
-      'beta_testimonial',
+      { purpose: 'beta_testimonial' },
     );
     expect(filesService.storeMetadata).toHaveBeenCalledWith(
       expect.anything(),
       42,
       'beta_testimonial',
+      undefined,
     );
   });
 
-  it('keeps the held-user rejection when no multipart file is present', async () => {
+  it('binds catalog artwork uploads to the requested product slug', async () => {
+    const file = {} as Express.Multer.File;
+
+    await controller.uploadFile(file, makeRequest(42), {
+      purpose: 'catalog_artwork',
+      productSlug: 'flyers',
+    });
+
+    expect(filesService.storeMetadata).toHaveBeenCalledWith(
+      file,
+      42,
+      'catalog_artwork',
+      'flyers',
+    );
+  });
+
+  it('returns a stable bad request when no multipart file is present', async () => {
     await expect(
       controller.uploadFile(
         undefined as unknown as Express.Multer.File,
         makeRequest(42, 'client', true),
-        'general',
+        { purpose: 'general' },
       ),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow('Multipart file is required');
   });
 });
 
@@ -164,7 +184,8 @@ describe('FilesController upload HTTP cleanup', () => {
             sub: 42,
             email: 'held@example.test',
             role: 'client',
-            betaTestimonialPending: true,
+            betaTestimonialPending:
+              httpRequest.headers['x-beta-held'] === 'true',
           };
           return true;
         },
@@ -172,6 +193,13 @@ describe('FilesController upload HTTP cleanup', () => {
       .compile();
 
     app = moduleRef.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
     await app.init();
   });
 
@@ -185,6 +213,7 @@ describe('FilesController upload HTTP cleanup', () => {
 
     await request(app.getHttpServer())
       .post('/files/upload')
+      .set('x-beta-held', 'true')
       .field('purpose', 'general')
       .attach('file', Buffer.from('held upload cleanup'), {
         filename: `rejected${suffix}`,
@@ -201,6 +230,40 @@ describe('FilesController upload HTTP cleanup', () => {
 
     expect(leaked).toEqual([]);
     expect(filesService.storeMetadata).not.toHaveBeenCalled();
+  });
+
+  it('removes the Multer disk file when catalog DTO validation fails', async () => {
+    const suffix = `.catalog-dto-cleanup-${process.pid}-${Date.now()}`;
+    const before = new Set(await readUploadTmpDir());
+
+    await request(app.getHttpServer())
+      .post('/files/upload')
+      .field('purpose', 'catalog_artwork')
+      .attach('file', Buffer.from('%PDF-1.7\n'), {
+        filename: `missing-product${suffix}`,
+        contentType: 'application/pdf',
+      })
+      .expect(400);
+
+    const leaked = (await readUploadTmpDir()).filter(
+      (fileName) => fileName.endsWith(suffix) && !before.has(fileName),
+    );
+    await Promise.all(
+      leaked.map((fileName) => unlink(join(uploadTmpDir, fileName))),
+    );
+
+    expect(leaked).toEqual([]);
+    expect(filesService.storeMetadata).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when the multipart file field is missing', async () => {
+    await request(app.getHttpServer())
+      .post('/files/upload')
+      .field('purpose', 'general')
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toBe('Multipart file is required');
+      });
   });
 
   async function readUploadTmpDir(): Promise<string[]> {

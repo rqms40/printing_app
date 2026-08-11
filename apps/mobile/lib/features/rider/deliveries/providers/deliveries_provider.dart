@@ -445,8 +445,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     final current = state.viewById(assignmentId)?.assignment;
     if (current == null || current.status != DeliveryStatus.arrived) {
       state = state.copyWith(
-        errorMessage: () =>
-            'Mark arrived before submitting proof of delivery',
+        errorMessage: () => 'Mark arrived before submitting proof of delivery',
       );
       return false;
     }
@@ -556,7 +555,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         '/payments/cod/$orderInternalId/fail',
         data: {
           'returnReason': returnReason.trim(),
-          if (photoFileId != null) 'photoFileId': photoFileId,
+          'photoFileId': ?photoFileId,
         },
       );
       if (!mounted) return true;
@@ -655,10 +654,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
           );
         case DeliveryStatus.onTheWay:
           if (nextStatus == DeliveryStatus.failed) {
-            return a.copyWith(
-              status: DeliveryStatus.failed,
-              updatedAt: now,
-            );
+            return a.copyWith(status: DeliveryStatus.failed, updatedAt: now);
           }
           return a.copyWith(
             status: DeliveryStatus.arrived,
@@ -667,10 +663,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
           );
         case DeliveryStatus.arrived:
           if (nextStatus == DeliveryStatus.failed) {
-            return a.copyWith(
-              status: DeliveryStatus.failed,
-              updatedAt: now,
-            );
+            return a.copyWith(status: DeliveryStatus.failed, updatedAt: now);
           }
           final capturedAt = now;
           return a.copyWith(

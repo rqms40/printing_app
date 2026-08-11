@@ -31,9 +31,7 @@ class BookedSlotInfo {
   final String orderId;
 }
 
-final bookedDeliverySlotProvider = Provider.autoDispose<BookedSlotInfo?>((
-  ref,
-) {
+final bookedDeliverySlotProvider = Provider.autoDispose<BookedSlotInfo?>((ref) {
   final orders = ref.watch(activeOrdersProvider);
   for (final order in orders) {
     final slot = order.assignedSlot;
@@ -335,7 +333,6 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
   }
 }
 
-
 class _DeliveryStatusAndMapLayout extends StatelessWidget {
   const _DeliveryStatusAndMapLayout({
     required this.colors,
@@ -612,10 +609,7 @@ class _BatchStatusTile extends StatelessWidget {
               style: TextButton.styleFrom(
                 foregroundColor: colors.brand,
                 minimumSize: Size.zero,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 2,
-                  vertical: 0,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text(
@@ -703,6 +697,7 @@ Future<void> _showDeliverySlotsSheet(
   List<DeliverySlot> slots,
 ) {
   return showModalBottomSheet<void>(
+    barrierLabel: 'Dismiss delivery slots',
     context: context,
     backgroundColor: colors.surface,
     barrierColor: Colors.black.withValues(alpha: 0.55),
@@ -1248,6 +1243,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
         : '${meters.round()} m';
     return '$distance · ~$minutes min away';
   }
+
   final _BookedSlotView? bookedSlot;
 
   @override
@@ -1484,9 +1480,7 @@ class _OpenTrackingButton extends StatelessWidget {
             style: TextButton.styleFrom(
               foregroundColor: Colors.black,
               backgroundColor: colors.brand,
-              shape: RoundedRectangleBorder(
-                borderRadius: AppRadius.borderFull,
-              ),
+              shape: RoundedRectangleBorder(borderRadius: AppRadius.borderFull),
             ),
             child: Text(
               'Open live tracking',
@@ -1669,8 +1663,18 @@ String _shortDateLabel(String isoDate) {
   final date = DateTime.tryParse(isoDate);
   if (date == null) return isoDate;
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   return '${days[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';

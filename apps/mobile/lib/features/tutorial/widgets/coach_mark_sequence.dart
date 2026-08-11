@@ -111,6 +111,7 @@ void showCoachMark(
     opacityShadow: 0.75,
     pulseEnable: false,
     hideSkip: true,
+    backgroundSemanticLabel: 'Tutorial spotlight',
     onFinish: onFinish,
     onSkip: () {
       (onSkip ?? onFinish).call();

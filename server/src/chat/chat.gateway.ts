@@ -19,6 +19,8 @@ import {
   reauthorizeRealtimeSocket,
 } from '../common/realtime/realtime-socket-auth';
 import { isAdminRole, UserRole } from '../users/entities/user.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { FirebaseService } from '../firebase/firebase.service';
 
 /** Map account roles → chat actor labels (message/conversation domain). */
 const CHAT_ACTOR_ROLE_BY_USER_ROLE: Record<UserRole, ChatActorRole> = {
@@ -56,11 +58,19 @@ export class ChatGateway implements OnGatewayConnection {
 
   private readonly botInFlight = new Set<number>();
 
+  /**
+   * Most recent best-effort rider-message fan-out. Exposed so tests can await
+   * the notification work that deliberately does not block the message ack.
+   */
+  riderNotificationTask: Promise<void> = Promise.resolve();
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly chatService: ChatService,
     private readonly usersService: UsersService,
     private readonly realtimeSessions: RealtimeSessionRegistry,
+    private readonly notificationsService: NotificationsService,
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   async handleConnection(client: ChatSocket) {
@@ -140,6 +150,17 @@ export class ChatGateway implements OnGatewayConnection {
       .to(`conversation:${data.conversationId}`)
       .emit('message-received', msg);
 
+    if (senderRole === SenderRole.RIDER) {
+      // Best-effort fan-out: the message is already persisted and broadcast, so
+      // a slow or unreachable FCM must never delay the sender's ack.
+      this.riderNotificationTask = this.notifyCustomerOfRiderMessage(
+        data.conversationId,
+        trimmedContent || 'Sent an attachment',
+      ).catch((err) => {
+        console.error('[ChatGateway] rider notification error', err);
+      });
+    }
+
     if (senderRole === SenderRole.CUSTOMER && trimmedContent) {
       this.triggerBotIfNeeded(data.conversationId, trimmedContent).catch(
         (err) => {
@@ -149,6 +170,58 @@ export class ChatGateway implements OnGatewayConnection {
     }
 
     return { status: 'ok', messageId: msg.id };
+  }
+
+  private async notifyCustomerOfRiderMessage(
+    conversationId: number,
+    message: string,
+  ): Promise<void> {
+    const context = await this.chatService
+      .getRiderMessageNotificationContext(conversationId)
+      .catch((error) => {
+        console.warn('Rider message notification context failed:', error);
+        return null;
+      });
+    if (!context) return;
+
+    const title = 'New message from your rider';
+    const metadata = {
+      conversationId,
+      conversationType: 'rider',
+      orderId: context.orderId,
+      orderRef: context.orderRef,
+    };
+    try {
+      await this.notificationsService.create({
+        userId: context.customerId,
+        title,
+        message,
+        type: 'rider_message',
+        orderRef: context.orderRef,
+        metadata,
+      });
+    } catch (error) {
+      console.warn('Rider message persistent notification failed:', error);
+    }
+
+    if (context.customerFcmToken) {
+      try {
+        await this.firebaseService.sendToDevice(
+          context.customerFcmToken,
+          title,
+          message,
+          {
+            type: 'rider_message',
+            conversationId: String(conversationId),
+            conversationType: 'rider',
+            orderId: String(context.orderId),
+            orderRef: context.orderRef,
+          },
+        );
+      } catch (error) {
+        console.warn('Rider message push notification failed:', error);
+      }
+    }
   }
 
   private async triggerBotIfNeeded(

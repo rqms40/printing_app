@@ -6,8 +6,10 @@ import { SupplierVerification } from './entities/supplier-verification.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 import { Order } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
+import { BatchOrder } from '../orders/entities/batch-order.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
+import { ProductCategory } from '../products/entities/product-category.entity';
 import { AuditModule } from '../audit/audit.module';
 import { FilesModule } from '../files/files.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -25,8 +27,10 @@ import { SupplierJobsController } from './supplier-jobs.controller';
       SupplierAssignment,
       Order,
       OrderStatusHistory,
+      BatchOrder,
       OrderItem,
       FileMetadata,
+      ProductCategory,
     ]),
     AuditModule,
     FilesModule,

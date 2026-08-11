@@ -13,6 +13,8 @@ import { BatchOrder } from '../src/orders/entities/batch-order.entity';
 import { DeliveryDestination } from '../src/orders/entities/delivery-destination.entity';
 import { OrdersService } from '../src/orders/orders.service';
 import { DeliveryAssignment } from '../src/riders/entities/delivery-assignment.entity';
+import { DispatchPlan } from '../src/riders/entities/dispatch-plan.entity';
+import { SupplierAssignment } from '../src/matching/entities/supplier-assignment.entity';
 import { Address } from '../src/addresses/entities/address.entity';
 import { FileMetadata } from '../src/files/entities/file-metadata.entity';
 import { UsersService } from '../src/users/users.service';
@@ -30,6 +32,9 @@ import { DeliverySlotTemplate } from '../src/delivery-slots/entities/delivery-sl
 import { DeliverySlotBooking } from '../src/delivery-slots/entities/delivery-slot-booking.entity';
 import { PrinterProfileService } from '../src/printer-profile/printer-profile.service';
 import { CatalogPricingService } from '../src/products/catalog-pricing.service';
+import { PaymentsService } from '../src/payments/payments.service';
+import { AuditService } from '../src/audit/audit.service';
+import { AuditEvent } from '../src/audit/entities/audit-event.entity';
 
 describe('atomic credit accounting (e2e)', () => {
   jest.setTimeout(120_000);
@@ -429,6 +434,15 @@ describe('atomic credit accounting (e2e)', () => {
       );
       await service.updateStatus(
         order.id,
+        OrderStatus.NEEDS_QA,
+        {},
+        {
+          actorUserId: fixture.userId,
+          reason: 'Prepare QA status race',
+        },
+      );
+      await service.updateStatus(
+        order.id,
         OrderStatus.APPROVED_FOR_MATCHING,
         {},
         {
@@ -444,7 +458,7 @@ describe('atomic credit accounting (e2e)', () => {
       ]);
       const statusAttempt = service.updateStatus(
         order.id,
-        OrderStatus.PAYMENT_AUTHORIZED,
+        OrderStatus.AWAITING_PAYMENT,
         {},
         {
           actorUserId: fixture.userId,
@@ -478,7 +492,7 @@ describe('atomic credit accounting (e2e)', () => {
           [order.id],
         ),
       ).resolves.toEqual([
-        { order_status: 'payment_authorized', payment_status: 'paid' },
+        { order_status: 'awaiting_payment', payment_status: 'paid' },
       ]);
       await expect(
         dataSource.query(
@@ -506,6 +520,15 @@ describe('atomic credit accounting (e2e)', () => {
       );
       await service.updateStatus(
         order.id,
+        OrderStatus.NEEDS_QA,
+        {},
+        {
+          actorUserId: fixture.userId,
+          reason: 'Prepare QA status race',
+        },
+      );
+      await service.updateStatus(
+        order.id,
         OrderStatus.APPROVED_FOR_MATCHING,
         {},
         {
@@ -526,7 +549,7 @@ describe('atomic credit accounting (e2e)', () => {
       await waitForOrderLockWaiters(dataSource, 1);
       const statusAttempt = service.updateStatus(
         order.id,
-        OrderStatus.PAYMENT_AUTHORIZED,
+        OrderStatus.AWAITING_PAYMENT,
         {},
         {
           actorUserId: fixture.userId,
@@ -766,6 +789,7 @@ describe('atomic credit accounting (e2e)', () => {
       dataSource.getRepository(OrderItem),
       dataSource.getRepository(OrderItemSpecValue),
       dataSource.getRepository(DeliveryAssignment),
+      dataSource.getRepository(SupplierAssignment),
       dataSource.getRepository(Address),
       dataSource.getRepository(DeliveryDestination),
       dataSource.getRepository(BatchOrder),
@@ -776,6 +800,7 @@ describe('atomic credit accounting (e2e)', () => {
       {} as FirebaseService,
       usersService,
       creditsService,
+      {} as PaymentsService,
       {
         create: jest.fn().mockResolvedValue(undefined),
         createForAllAdmins: jest.fn().mockResolvedValue(undefined),
@@ -796,6 +821,8 @@ describe('atomic credit accounting (e2e)', () => {
       {} as PrinterProfileService,
       catalogPricingService,
       dataSource.getRepository(FileMetadata),
+      dataSource.getRepository(DispatchPlan),
+      new AuditService(dataSource.getRepository(AuditEvent)),
     );
   }
 

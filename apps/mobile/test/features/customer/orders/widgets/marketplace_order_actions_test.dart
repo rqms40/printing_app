@@ -10,6 +10,7 @@ Order _order({
   required OrderStatus status,
   String? adminNotes,
   String? adminStatusNote,
+  PricingStatus pricingStatus = PricingStatus.accepted,
 }) {
   return Order(
     id: '42',
@@ -20,6 +21,7 @@ Order _order({
     quantity: 1,
     totalPrice: 200,
     deliveryFee: 0,
+    pricingStatus: pricingStatus,
     paymentMethod: PaymentMethod.gridCredits,
     paymentStatus: PaymentStatus.pending,
     orderStatus: status,
@@ -107,7 +109,23 @@ void main() {
     expect(find.text('Authorize payment'), findsNothing);
   });
 
-  testWidgets('hides when order is not in a client action gate', (tester) async {
+  testWidgets(
+    'quoted supplier state does not claim ops authorization is next',
+    (tester) async {
+      final order = _order(
+        status: OrderStatus.supplierAccepted,
+        pricingStatus: PricingStatus.quoted,
+      );
+      await tester.pumpWidget(_wrap(order));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Waiting for payment authorization'), findsNothing);
+    },
+  );
+
+  testWidgets('hides when order is not in a client action gate', (
+    tester,
+  ) async {
     final order = _order(status: OrderStatus.production);
     await tester.pumpWidget(_wrap(order));
     await tester.pumpAndSettle();
@@ -118,13 +136,16 @@ void main() {
     expect(find.text('Report a Concern'), findsNothing);
   });
 
-  testWidgets('collected order shows Report a Concern', (tester) async {
+  testWidgets('collected order keeps the receipt and return actions', (
+    tester,
+  ) async {
     final order = _order(status: OrderStatus.collectedByCustomer);
     await tester.pumpWidget(_wrap(order));
     await tester.pumpAndSettle();
 
     expect(find.text('Check your order'), findsOneWidget);
-    expect(find.text('Report a Concern'), findsOneWidget);
+    expect(find.text('Order received'), findsOneWidget);
+    expect(find.text('Return / Refund'), findsOneWidget);
     expect(find.textContaining('24 hours'), findsWidgets);
     expect(canReportConcern(OrderStatus.collectedByCustomer), isTrue);
     expect(canReportConcern(OrderStatus.issueWindowOpen), isTrue);
@@ -132,12 +153,14 @@ void main() {
     expect(canReportConcern(OrderStatus.production), isFalse);
   });
 
-  testWidgets('issue window open shows Report a Concern', (tester) async {
+  testWidgets('issue window keeps the receipt and return actions', (
+    tester,
+  ) async {
     final order = _order(status: OrderStatus.issueWindowOpen);
     await tester.pumpWidget(_wrap(order));
     await tester.pumpAndSettle();
 
-    expect(find.text('Report a Concern'), findsOneWidget);
-    expect(find.text('Print quality defect'), findsOneWidget);
+    expect(find.text('Order received'), findsOneWidget);
+    expect(find.text('Return / Refund'), findsOneWidget);
   });
 }

@@ -10,7 +10,7 @@ describe('DailyGridGateway', () => {
 
   it('notifyUpdated emits dailyGridUpdated with empty payload', () => {
     gateway.notifyUpdated();
-    // eslint-disable-next-line @typescript-eslint/unbound-method
+
     expect(gateway.server.emit).toHaveBeenCalledWith('dailyGridUpdated', {});
   });
 

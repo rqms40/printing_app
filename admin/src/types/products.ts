@@ -6,7 +6,8 @@ export type ProductFileProcessingType =
   | "generic_file";
 export type ProductPricingModel =
   | "per_page_modifiers"
-  | "base_plus_material_estimate";
+  | "base_plus_material_estimate"
+  | "quote_required";
 export type ProductInputType = "select" | "number" | "boolean" | "text";
 export type ProductValueType = "string" | "number" | "boolean";
 export type ProductPricingRole =
@@ -20,6 +21,11 @@ export interface ServiceCategory {
   id: string;
   name: string;
   slug: string;
+  group_slug?: string;
+  group_name?: string;
+  group_description?: string;
+  group_sort_order?: number;
+  examples?: string[];
   description?: string;
   mobile_description?: string;
   audience_label?: string;

@@ -4,15 +4,24 @@ import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart'
 
 enum PipelineStep {
   startPrintingTile,
-  paperCategoryCard,
-  paperSpecsForm,
-  paperSpecsContinue,
+  catalogGroup,
+  catalogProduct,
+  catalogRequirements,
   uploadCard,
   checkoutItems,
   checkoutDelivery,
   checkoutPayment,
   placeOrderButton,
-  done,
+  done;
+
+  // Historical screens remain compilable while the live tutorial uses the
+  // catalog vocabulary above.
+  @Deprecated('Use catalogGroup')
+  static const paperCategoryCard = catalogGroup;
+  @Deprecated('Use catalogProduct')
+  static const paperSpecsForm = catalogProduct;
+  @Deprecated('Use catalogRequirements')
+  static const paperSpecsContinue = catalogRequirements;
 }
 
 class PipelineState {
@@ -25,10 +34,7 @@ class PipelineState {
   final PipelineStep step;
 
   PipelineState copyWith({bool? active, PipelineStep? step}) =>
-      PipelineState(
-        active: active ?? this.active,
-        step: step ?? this.step,
-      );
+      PipelineState(active: active ?? this.active, step: step ?? this.step);
 }
 
 class PipelineTutorialNotifier extends StateNotifier<PipelineState> {
@@ -64,6 +70,9 @@ class PipelineTutorialNotifier extends StateNotifier<PipelineState> {
   }
 
   void abandon() {
+    // May be invoked from a deferred callback after teardown (e.g. a screen
+    // disposed while the app is shutting down).
+    if (!mounted) return;
     _ref.read(tutorialProvider.notifier).markSeen(TutorialKey.pipeline);
     state = const PipelineState();
   }
@@ -75,5 +84,5 @@ class PipelineTutorialNotifier extends StateNotifier<PipelineState> {
 
 final pipelineTutorialProvider =
     StateNotifierProvider<PipelineTutorialNotifier, PipelineState>(
-  (ref) => PipelineTutorialNotifier(ref),
-);
+      (ref) => PipelineTutorialNotifier(ref),
+    );

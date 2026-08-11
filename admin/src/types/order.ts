@@ -75,6 +75,34 @@ export interface AssignedSupplierContact {
   self_qc_evidence_file_ids?: number[];
 }
 
+export interface CurrentSupplierAssignment {
+  id: number | null;
+  supplier_id: number | null;
+  decision: string | null;
+  rank_position: number | null;
+  acceptance_deadline: string | null;
+  final_price_minor: string | null;
+  promised_date: string | null;
+  decided_at: string | null;
+}
+
+export type PricingStatus = "pending_quote" | "quoted" | "accepted";
+
+export interface OrderSpecSnapshot {
+  key: string;
+  label: string;
+  input_type?: string | null;
+  value: string;
+  display_value: string;
+  option_id?: number | null;
+  option_label?: string | null;
+}
+
+export interface MatchingOutcome {
+  code: string;
+  message?: string | null;
+}
+
 export interface DeliveryProof {
   type?: "photo" | "signature" | string | null;
   file_id?: number | null;
@@ -84,13 +112,6 @@ export interface DeliveryProof {
   captured_by_rider_id?: number | string | null;
 }
 
-/** Supplier production milestone reached while order status is `production`. */
-export interface ProductionMilestone {
-  milestone: string;
-  reached_at?: string | null;
-  notes?: string | null;
-}
-
 export interface Order {
   id: string;
   order_id: string;
@@ -98,15 +119,23 @@ export interface Order {
   customer_id?: number;
   customer_name?: string | null;
   customer_email?: string | null;
-  category: "paper" | "3d" | "batch";
+  category: string;
   file_url?: string;
   file_name?: string;
   file_metadata_id?: number | null;
   paper_specs?: PaperSpecs;
   three_d_specs?: ThreeDSpecs;
   quantity: number;
-  total_price: number;
-  delivery_fee: number;
+  total_price: number | null;
+  delivery_fee: number | null;
+  pricing_status?: PricingStatus;
+  quoted_total_minor?: string | null;
+  quoted_at?: string | null;
+  quote_accepted_at?: string | null;
+  quoted_by_user_id?: string | null;
+  promised_completion_at?: string | null;
+  unmet_coverage?: boolean;
+  matching_outcome?: MatchingOutcome | null;
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   order_status: OrderStatus;
@@ -120,11 +149,8 @@ export interface Order {
   assigned_rider_id?: string;
   assigned_rider_contact?: AssignedRiderContact | null;
   assigned_supplier_contact?: AssignedSupplierContact | null;
-  /** Rider photo at supplier/shop pickup. */
-  pickup_proof?: DeliveryProof | null;
+  current_supplier_assignment?: CurrentSupplierAssignment | null;
   delivery_proof?: DeliveryProof | null;
-  /** Supplier production sub-milestones (materials → in production → complete). */
-  production_milestones?: ProductionMilestone[] | null;
   estimated_completion_at?: string;
   admin_notes?: string;
   adminStatusNote?: string | null;
@@ -147,14 +173,25 @@ export interface Order {
 export interface OrderItem {
   id: string;
   order_id?: string;
-  category: "paper" | "3d";
+  category: string;
+  category_id?: number | null;
+  category_slug?: string | null;
+  category_name?: string | null;
+  group_slug?: string | null;
+  group_name?: string | null;
+  group_description?: string | null;
+  examples?: string[];
+  pricing_model?: string | null;
+  required_at?: string | null;
+  special_instructions?: string | null;
+  specs?: OrderSpecSnapshot[];
   file_url?: string;
   file_name?: string;
   file_metadata_id?: number;
   paper_specs?: PaperSpecs;
   three_d_specs?: ThreeDSpecs;
   quantity: number;
-  total_price: number;
+  total_price: number | null;
   delivery_address?: OrderDestination | null;
 }
 

@@ -12,17 +12,21 @@ import {
   Order,
   OrderStatus,
   PaymentAuthorizationStatus,
+  PricingStatus,
 } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
+import { BatchOrder } from '../orders/entities/batch-order.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
 import {
   assertTransition,
   type TransitionActor,
 } from '../orders/order-status-transition';
 import {
-  normalizeMinor,
-  pesosToMinor,
-} from '../orders/order-authorization-snapshot';
+  addSafeMinor,
+  decimalPesosToMinor,
+  normalizePositiveSafeMinor,
+  normalizeSafeMinor,
+} from '../orders/order-quote-money';
 import { AuditService } from '../audit/audit.service';
 import { FilesService } from '../files/files.service';
 import {
@@ -146,9 +150,11 @@ export type SupplierJobDetail = {
     orderStatus: OrderStatus;
     category: string;
     quantity: number;
-    totalPrice: number;
-    deliveryFee: number;
+    pricingStatus: PricingStatus;
+    totalPrice: number | null;
+    deliveryFee: number | null;
     finalTotalMinor: string | null;
+    quotedTotalMinor: string | null;
     deliveryFeeMinor: string | null;
     paymentMethod: string;
     paymentAuthorizationStatus: PaymentAuthorizationStatus;
@@ -198,6 +204,7 @@ export type SupplierJobActionResult = {
     id: number;
     orderId: string;
     orderStatus: OrderStatus;
+    pricingStatus?: PricingStatus;
   };
   fromStatus: OrderStatus;
   toStatus: OrderStatus;
@@ -396,9 +403,17 @@ export class SupplierJobsService {
         orderStatus: order.orderStatus,
         category: order.category,
         quantity: order.quantity,
-        totalPrice: Number(order.totalPrice),
-        deliveryFee: Number(order.deliveryFee),
+        pricingStatus: order.pricingStatus,
+        totalPrice:
+          order.pricingStatus === PricingStatus.PENDING_QUOTE
+            ? null
+            : Number(order.totalPrice),
+        deliveryFee:
+          order.pricingStatus === PricingStatus.PENDING_QUOTE
+            ? null
+            : Number(order.deliveryFee),
         finalTotalMinor: order.finalTotalMinor,
+        quotedTotalMinor: order.quotedTotalMinor,
         deliveryFeeMinor: order.deliveryFeeMinor,
         paymentMethod: order.paymentMethod,
         paymentAuthorizationStatus:
@@ -454,7 +469,7 @@ export class SupplierJobsService {
         message: 'promisedDate must be a valid ISO-8601 date',
       });
     }
-    if (promisedDate.getTime() < now.getTime() - 60_000) {
+    if (promisedDate.getTime() <= now.getTime()) {
       throw new BadRequestException({
         code: 'promised_date_in_past',
         message: 'promisedDate must be now or in the future',
@@ -463,30 +478,83 @@ export class SupplierJobsService {
 
     let finalPriceMinor: string;
     try {
-      finalPriceMinor = normalizeMinor(dto.finalPriceMinor, 'finalPriceMinor');
+      finalPriceMinor = normalizePositiveSafeMinor(
+        dto.finalPriceMinor,
+        'finalPriceMinor',
+      );
     } catch {
       throw new BadRequestException({
         code: 'invalid_final_price',
         message: 'finalPriceMinor must be a positive integer (centavos)',
       });
     }
-    if (Number(finalPriceMinor) <= 0) {
-      throw new BadRequestException({
-        code: 'invalid_final_price',
-        message: 'finalPriceMinor must be a positive integer (centavos)',
-      });
+    const assignmentPreflight = await this.assignmentRepo.findOne({
+      where: { id: jobId },
+    });
+    if (!assignmentPreflight) {
+      throw new NotFoundException(`Job ${jobId} not found`);
     }
+    const orderPreflight = await this.ordersRepo.findOne({
+      where: { id: assignmentPreflight.orderId },
+    });
+    if (!orderPreflight) throw new NotFoundException('Order not found');
 
     const result = await this.dataSource.transaction(async (manager) => {
       const assignmentRepo = manager.getRepository(SupplierAssignment);
       const ordersRepo = manager.getRepository(Order);
+      const batchRepo = manager.getRepository(BatchOrder);
       const historyRepo = manager.getRepository(OrderStatusHistory);
 
-      const locked = await assignmentRepo.findOne({
-        where: { id: jobId },
+      let order: Order | null;
+      let batch: BatchOrder | null = null;
+      let batchOrders: Order[] = [];
+      if (orderPreflight.batchOrderId != null) {
+        batch = await batchRepo.findOne({
+          where: { id: orderPreflight.batchOrderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!batch) throw new NotFoundException('Batch order not found');
+        batchOrders = await ordersRepo.find({
+          where: { batchOrderId: batch.id },
+          order: { id: 'ASC' },
+          lock: { mode: 'pessimistic_write' },
+        });
+        order = batchOrders.find(({ id }) => id === orderPreflight.id) ?? null;
+      } else {
+        order = await ordersRepo.findOne({
+          where: { id: orderPreflight.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+      }
+      if (!order) throw new NotFoundException('Order not found');
+      if (order.batchOrderId !== orderPreflight.batchOrderId) {
+        throw new BadRequestException({
+          code: 'order_changed_during_quote',
+          message: 'Order batch changed while accepting the supplier quote',
+        });
+      }
+
+      const assignments = await assignmentRepo.find({
+        where: { orderId: order.id },
+        order: { id: 'ASC' },
         lock: { mode: 'pessimistic_write' },
       });
+      const locked = assignments.find(({ id }) => id === jobId);
       if (!locked) throw new NotFoundException(`Job ${jobId} not found`);
+      const current = [...assignments]
+        .reverse()
+        .find(({ decision }) =>
+          [
+            SupplierAssignmentDecision.PENDING,
+            SupplierAssignmentDecision.ACCEPTED,
+          ].includes(decision),
+        );
+      if (current?.id !== locked.id) {
+        throw new BadRequestException({
+          code: 'stale_assignment',
+          message: 'This supplier assignment has been superseded',
+        });
+      }
       if (locked.supplierId !== profile.id) {
         throw new ForbiddenException({
           code: 'not_own_assignment',
@@ -506,11 +574,18 @@ export class SupplierJobsService {
         });
       }
 
-      const order = await ordersRepo.findOne({
-        where: { id: locked.orderId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!order) throw new NotFoundException('Order not found');
+      if (locked.orderId !== order.id) {
+        throw new BadRequestException({
+          code: 'stale_assignment',
+          message: 'This supplier assignment no longer belongs to the order',
+        });
+      }
+      if (order.pricingStatus === PricingStatus.ACCEPTED) {
+        throw new BadRequestException({
+          code: 'quote_already_accepted',
+          message: 'The customer-accepted quote is immutable',
+        });
+      }
       if (order.orderStatus !== OrderStatus.SUPPLIER_ASSIGNED) {
         throw new BadRequestException({
           code: 'order_not_supplier_assigned',
@@ -524,6 +599,43 @@ export class SupplierJobsService {
         actor.role,
       );
 
+      // The preflight can wait behind commerce locks. Do not freeze a promise
+      // which has become historical while this transaction was blocked.
+      if (promisedDate.getTime() <= Date.now()) {
+        throw new BadRequestException({
+          code: 'promised_date_in_past',
+          message: 'promisedDate must still be in the future when quoted',
+        });
+      }
+
+      let deliveryFeeMinor: string;
+      let quotedTotalMinor: string;
+      try {
+        if (batch) {
+          const deliveryFeeOwner = batchOrders[0];
+          deliveryFeeMinor =
+            deliveryFeeOwner?.id === order.id
+              ? decimalPesosToMinor(batch.deliveryFee, 'batch delivery fee')
+              : '0';
+        } else {
+          deliveryFeeMinor =
+            order.deliveryFeeMinor != null && order.deliveryFeeMinor !== ''
+              ? normalizeSafeMinor(order.deliveryFeeMinor, 'deliveryFeeMinor')
+              : decimalPesosToMinor(order.deliveryFee ?? 0, 'delivery fee');
+        }
+        quotedTotalMinor = addSafeMinor(
+          finalPriceMinor,
+          deliveryFeeMinor,
+          'quotedTotalMinor',
+        );
+      } catch {
+        throw new BadRequestException({
+          code: 'quote_total_overflow',
+          message:
+            'Goods price plus delivery fee is outside the supported range',
+        });
+      }
+
       locked.decision = SupplierAssignmentDecision.ACCEPTED;
       locked.finalPriceMinor = finalPriceMinor;
       locked.promisedDate = promisedDate;
@@ -531,22 +643,17 @@ export class SupplierJobsService {
       locked.decisionReason = null;
       const savedAssignment = await assignmentRepo.save(locked);
 
-      const deliveryFeeMinor =
-        order.deliveryFeeMinor != null && order.deliveryFeeMinor !== ''
-          ? normalizeMinor(order.deliveryFeeMinor, 'deliveryFeeMinor')
-          : pesosToMinor(order.deliveryFee ?? 0);
-      // finalTotalMinor = goods (supplier quote) + delivery fee
-      const finalTotalMinor = String(
-        Number(finalPriceMinor) + Number(deliveryFeeMinor),
-      );
-
       const fromStatus = OrderStatus.SUPPLIER_ASSIGNED;
       const toStatus = OrderStatus.SUPPLIER_ACCEPTED;
       const updateResult = await ordersRepo.update(
         { id: order.id, orderStatus: fromStatus },
         {
           orderStatus: toStatus,
-          finalTotalMinor,
+          pricingStatus: PricingStatus.QUOTED,
+          quotedTotalMinor,
+          quotedAt: now,
+          quotedByUserId: actor.userId,
+          promisedCompletionAt: promisedDate,
           deliveryFeeMinor,
           estimatedCompletionAt: promisedDate,
         },
@@ -597,7 +704,8 @@ export class SupplierJobsService {
           metadata: {
             finalPriceMinor,
             promisedDate: promisedDate.toISOString(),
-            finalTotalMinor,
+            quotedTotalMinor,
+            deliveryFeeMinor,
           },
         },
         manager,
@@ -631,6 +739,7 @@ export class SupplierJobsService {
         id: result.order.id,
         orderId: result.order.orderId,
         orderStatus: result.order.orderStatus,
+        pricingStatus: PricingStatus.QUOTED,
       },
       fromStatus: result.fromStatus,
       toStatus: result.toStatus,

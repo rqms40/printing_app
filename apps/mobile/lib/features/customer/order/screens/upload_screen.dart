@@ -9,7 +9,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import 'package:uuid/uuid.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
@@ -20,6 +19,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/beta_demo_3d_upload.dart';
+import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/file_upload_card.dart';
@@ -47,6 +47,101 @@ bool isUploadedFileReady({
       !isUploading &&
       errorText == null;
 }
+
+Map<String, String> catalogUploadFields({
+  required String? productSlug,
+  required bool catalogServerBacked,
+}) {
+  if (productSlug == null || productSlug.trim().isEmpty) {
+    return const {};
+  }
+  return {'purpose': 'catalog_artwork', 'productSlug': productSlug.trim()};
+}
+
+bool canContinueCatalogUpload({
+  required String? productSlug,
+  required bool catalogServerBacked,
+  required String? fileName,
+  required int? fileMetadataId,
+  required bool isUploading,
+  required String? errorText,
+}) {
+  if (productSlug != null && !catalogServerBacked) return false;
+  return isUploadedFileReady(
+    fileName: fileName,
+    fileMetadataId: fileMetadataId,
+    isUploading: isUploading,
+    errorText: errorText,
+  );
+}
+
+class UploadPolicy {
+  const UploadPolicy({
+    required this.allowedExtensions,
+    required this.maxSizeMb,
+  });
+  final List<String> allowedExtensions;
+  final int maxSizeMb;
+}
+
+UploadPolicy? resolveUploadPolicy({
+  required String? category,
+  required String? productSlug,
+  required ProductCatalog catalog,
+}) {
+  if (productSlug != null) {
+    final product = catalog.productBySlug(productSlug);
+    if (product == null || !product.isActive) return null;
+    return UploadPolicy(
+      allowedExtensions: product.allowedExtensions,
+      maxSizeMb: product.maxFileSizeMb,
+    );
+  }
+  if (category == 'paper') {
+    return const UploadPolicy(
+      allowedExtensions: AppConstants.paperTypes,
+      maxSizeMb: AppConstants.paperMaxSizeMB,
+    );
+  }
+  if (category == '3d') {
+    return const UploadPolicy(
+      allowedExtensions: AppConstants.threeDTypes,
+      maxSizeMb: AppConstants.threeDMaxSizeMB,
+    );
+  }
+  return null;
+}
+
+class UploadFailureRetention {
+  const UploadFailureRetention({
+    required this.fileName,
+    required this.filePath,
+    required this.fileBytes,
+    required this.mimeType,
+    required this.fileSize,
+    this.fileMetadataId,
+  });
+  final String? fileName;
+  final String? filePath;
+  final Uint8List? fileBytes;
+  final String? mimeType;
+  final int? fileSize;
+  final int? fileMetadataId;
+}
+
+UploadFailureRetention retainUploadSelectionAfterFailure({
+  required String? fileName,
+  required String? filePath,
+  required Uint8List? fileBytes,
+  required String? mimeType,
+  required int? fileSize,
+}) => UploadFailureRetention(
+  fileName: fileName,
+  filePath: filePath,
+  fileBytes: fileBytes,
+  mimeType: mimeType,
+  fileSize: fileSize,
+);
 
 /// Step 3/6 -- File upload with real Dio progress.
 class UploadScreen extends ConsumerStatefulWidget {
@@ -178,27 +273,19 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         : AppColors.light;
   }
 
-  List<String> get _allowedTypes {
+  UploadPolicy? get _uploadPolicy {
     final state = ref.read(orderFlowProvider);
-    final catalog = ref.read(productCatalogProvider).valueOrNull;
-    final category = catalog?.categoryBySlug(state.category);
-    if (category != null && category.allowedExtensions.isNotEmpty) {
-      return category.allowedExtensions;
-    }
-    return state.category == 'paper'
-        ? AppConstants.paperTypes
-        : AppConstants.threeDTypes;
+    final catalog = ref.read(productCatalogProvider).catalog;
+    return resolveUploadPolicy(
+      category: state.category,
+      productSlug: state.productSlug,
+      catalog: catalog,
+    );
   }
 
-  int get _maxSizeMB {
-    final state = ref.read(orderFlowProvider);
-    final catalog = ref.read(productCatalogProvider).valueOrNull;
-    final category = catalog?.categoryBySlug(state.category);
-    if (category != null) return category.maxFileSizeMb;
-    return state.category == 'paper'
-        ? AppConstants.paperMaxSizeMB
-        : AppConstants.threeDMaxSizeMB;
-  }
+  List<String> get _allowedTypes =>
+      _uploadPolicy?.allowedExtensions ?? const [];
+  int get _maxSizeMB => _uploadPolicy?.maxSizeMb ?? 0;
 
   bool get _isBetaDemo3dUploadActive {
     final state = ref.read(orderFlowProvider);
@@ -220,6 +307,13 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   }
 
   Future<void> _pickFile() async {
+    if (_uploadPolicy == null) {
+      setState(() {
+        _errorText =
+            'Upload policy unavailable. Return to the catalog and choose the product again.';
+      });
+      return;
+    }
     if (_isBetaDemo3dUploadActive) {
       await _loadBetaDemo3dFile();
       return;
@@ -383,7 +477,15 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         return;
       }
 
-      final formData = FormData.fromMap({'file': multipartFile});
+      final flow = ref.read(orderFlowProvider);
+      final catalogState = ref.read(productCatalogProvider);
+      final formData = FormData.fromMap({
+        'file': multipartFile,
+        ...catalogUploadFields(
+          productSlug: flow.productSlug,
+          catalogServerBacked: catalogState.canSubmit,
+        ),
+      });
       final response = await ApiClient.instance.dio.post(
         '/files/upload',
         data: formData,
@@ -475,30 +577,51 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       }
       debugPrint('[upload_screen] upload failed: $e');
       if (mounted) {
+        final retained = retainUploadSelectionAfterFailure(
+          fileName: _fileName,
+          filePath: _filePath,
+          fileBytes: _fileBytes,
+          mimeType: _fileMimeType,
+          fileSize: _fileSize,
+        );
         setState(() {
           _isUploading = false;
           _uploadProgress = 0;
           _errorText = message;
-          _fileName = null;
-          _fileSize = null;
-          _fileBytes = null;
-          _fileMetadataId = null;
+          _fileName = retained.fileName;
+          _filePath = retained.filePath;
+          _fileBytes = retained.fileBytes;
+          _fileMimeType = retained.mimeType;
+          _fileSize = retained.fileSize;
+          _fileMetadataId = retained.fileMetadataId;
         });
       }
     }
   }
 
-  bool get _canContinue =>
-      !_isBetaDemo3dUploadActive &&
-      isUploadedFileReady(
-        fileName: _fileName,
-        fileMetadataId: _fileMetadataId,
-        isUploading: _isUploading,
-        errorText: _errorText,
-      );
+  bool get _canContinue {
+    final flow = ref.read(orderFlowProvider);
+    final catalogState = ref.read(productCatalogProvider);
+    final currentProduct = catalogState.catalog.productBySlug(flow.productSlug);
+    return _uploadPolicy != null &&
+        !_isBetaDemo3dUploadActive &&
+        canContinueCatalogUpload(
+          productSlug: flow.productSlug,
+          catalogServerBacked:
+              flow.productSlug == null ||
+              (flow.catalogServerBacked &&
+                  catalogState.canSubmit &&
+                  currentProduct?.isActive == true),
+          fileName: _fileName,
+          fileMetadataId: _fileMetadataId,
+          isUploading: _isUploading,
+          errorText: _errorText,
+        );
+  }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(productCatalogProvider);
     final colors = _colors(context);
     final category = ref.watch(orderFlowProvider).category;
     final betaStatus = ref.watch(betaStatusProvider).valueOrNull;
@@ -563,7 +686,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                         ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Accepted: ${_allowedTypes.map((e) => '.$e').join(', ')} (max $_maxSizeMB MB)',
+                      _uploadPolicy == null
+                          ? 'Upload policy unavailable for this product.'
+                          : 'Accepted: ${_allowedTypes.map((e) => '.$e').join(', ')} (max $_maxSizeMB MB)',
                       style: AppTypography.caption.copyWith(
                         color: colors.onSurfaceDim,
                       ),
@@ -802,24 +927,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
 
   void _appendToCheckoutAndNavigate() {
     final flow = ref.read(orderFlowProvider);
-    final item = CartItem(
-      id: const Uuid().v4(),
-      category: flow.category!,
-      categoryName: flow.categoryName,
-      fileName: flow.fileName!,
-      filePath: flow.filePath,
-      fileSize: flow.fileSize,
-      fileMetadataId: flow.fileMetadataId!,
-      specs: flow.specs,
-      specDisplayValues: flow.specDisplayValues,
-      paperSpecs: flow.category == 'paper' ? flow.paperSpecs : null,
-      threeDSpecs: flow.category == '3d' ? flow.threeDSpecs : null,
-      quantity: flow.quantity,
-      pageCount: flow.pageCount,
-      printSubtotal: flow.totalPrice,
-      specialInstructions: flow.specialInstructions,
-      createdAt: DateTime.now(),
-    );
+    final item = CartItem.fromOrderFlow(flow);
     ref.read(checkoutProvider.notifier).addItem(item);
     // Reset the in-flight order draft so navigating back to Upload
     // does not re-add the same item on a second Continue tap.
@@ -852,6 +960,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     }
 
     showModalBottomSheet<void>(
+      barrierLabel: 'Dismiss upload options',
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

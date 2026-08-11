@@ -68,6 +68,13 @@ export enum PaymentAuthorizationStatus {
   EXPIRED = 'expired',
 }
 
+/** RFQ pricing state, independent of production payment authorization. */
+export enum PricingStatus {
+  PENDING_QUOTE = 'pending_quote',
+  QUOTED = 'quoted',
+  ACCEPTED = 'accepted',
+}
+
 /**
  * Immutable commercial snapshot frozen at `payment_authorized`.
  * Money fields are PHP minor units (centavos) as decimal strings.
@@ -92,6 +99,7 @@ export type OrderAuthorizationSnapshot = {
 @Entity('orders')
 @Index('idx_orders_user_id', ['userId'])
 @Index('idx_orders_status', ['orderStatus'])
+@Index('idx_orders_pricing_status', ['pricingStatus'])
 export class Order {
   @PrimaryGeneratedColumn()
   id: number;
@@ -160,6 +168,42 @@ export class Order {
   /** Delivery fee in PHP minor units (centavos). */
   @Column({ name: 'delivery_fee_minor', type: 'bigint', nullable: true })
   deliveryFeeMinor: string | null;
+
+  /**
+   * Final customer quote in PHP minor units, including authoritative delivery.
+   * SupplierAssignment.finalPriceMinor remains the goods-only supplier quote.
+   */
+  @Column({ name: 'quoted_total_minor', type: 'bigint', nullable: true })
+  quotedTotalMinor: string | null;
+
+  @Column({ name: 'quoted_at', type: 'timestamptz', nullable: true })
+  quotedAt: Date | null;
+
+  @Column({ name: 'quote_accepted_at', type: 'timestamptz', nullable: true })
+  quoteAcceptedAt: Date | null;
+
+  @Column({ name: 'quoted_by_user_id', type: 'int', nullable: true })
+  quotedByUserId: number | null;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'quoted_by_user_id' })
+  quotedByUser: User | null;
+
+  @Column({
+    name: 'promised_completion_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  promisedCompletionAt: Date | null;
+
+  @Column({
+    name: 'pricing_status',
+    type: 'enum',
+    enum: PricingStatus,
+    enumName: 'orders_pricing_status_enum',
+    default: PricingStatus.ACCEPTED,
+  })
+  pricingStatus: PricingStatus;
 
   /**
    * Payment rail label. Legacy: gridCredits / gcash / maya / cash / cod.

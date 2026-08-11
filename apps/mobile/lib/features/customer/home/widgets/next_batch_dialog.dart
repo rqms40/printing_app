@@ -203,6 +203,9 @@ class NextBatchDialog extends StatefulWidget {
       useRootNavigator: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.55),
+      // The scrim is tappable, so it needs a name — otherwise it reaches the
+      // web semantics tree as a full-viewport button with nothing to announce.
+      barrierLabel: 'Dismiss batch information',
       builder: (_) => NextBatchDialog(info: info),
     );
   }

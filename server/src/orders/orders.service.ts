@@ -21,7 +21,9 @@ import {
 import {
   Order,
   OrderStatus,
+  MarketplacePaymentMethod,
   PaymentAuthorizationStatus,
+  PricingStatus,
 } from './entities/order.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { BatchOrder } from './entities/batch-order.entity';
@@ -59,6 +61,18 @@ import {
   TemporaryDeliveryAddressDto,
 } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
+import { SubmitRfqDto } from './dto/submit-rfq.dto';
+import { AcceptQuoteDto, QuotePaymentMethod } from './dto/accept-quote.dto';
+import {
+  minorToCredits,
+  normalizePositiveSafeMinor,
+  subtractSafeMinor,
+} from './order-quote-money';
+import {
+  assertUnambiguousArtworkProducts,
+  lockRfqCatalog,
+  resolveArtworkInLockOrder,
+} from './rfq-locking';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { Address } from '../addresses/entities/address.entity';
@@ -75,7 +89,15 @@ import { GeoZonesService } from '../geo-zones/geo-zones.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
-import { CatalogPricingService } from '../products/catalog-pricing.service';
+import {
+  CatalogPricingService,
+  PricedQuoteResult,
+  QuoteResult,
+} from '../products/catalog-pricing.service';
+import {
+  CatalogCategory,
+  CatalogReadService,
+} from '../products/catalog-read.service';
 import {
   DispatchPlan,
   DispatchPlanStatus,
@@ -83,12 +105,23 @@ import {
 import { DispatchStopStatus } from '../riders/entities/dispatch-plan-stop.entity';
 import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
 import {
+  assertTransition,
   assertOrderStatusTransition,
   parseOrderStatus,
 } from './order-status-transition';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
-import { IssuesService } from '../issues/issues.service';
+import {
+  IssuesService,
+  type OrderClaimSummary,
+} from '../issues/issues.service';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import { isActiveOrderableRfqLeaf } from '../products/catalog-v1-10.definition';
+import { CatalogValidationService } from '../products/catalog-validation.service';
+import {
+  assertRfqAuthorizationReady,
+  isRfqQuoteOrder,
+} from './rfq-authorization-gate';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -120,6 +153,30 @@ function addDaysToDateString(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/** Parse a future Philippines calendar date at the start of that local day. */
+export function parseFutureRequiredDate(
+  value: string,
+  now: Date = new Date(),
+): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new BadRequestException('Required date must use YYYY-MM-DD');
+  }
+  const [year, month, day] = value.split('-').map(Number);
+  const requiredAt = new Date(
+    Date.UTC(year, month - 1, day) - PH_OFFSET_MINUTES * 60_000,
+  );
+  const roundTrip = new Date(requiredAt.getTime() + PH_OFFSET_MINUTES * 60_000)
+    .toISOString()
+    .slice(0, 10);
+  if (roundTrip !== value) {
+    throw new BadRequestException('Required date is invalid');
+  }
+  if (value <= phTodayDateString(now)) {
+    throw new BadRequestException('Required date must be in the future');
+  }
+  return requiredAt;
 }
 
 type NormalizedTemporaryDeliveryAddress = {
@@ -184,9 +241,41 @@ type AssignedRiderContact = {
   } | null;
 };
 
-type CreateBatchResult = {
+export type PendingRfqSpecValue = Pick<
+  OrderItemSpecValue,
+  | 'id'
+  | 'orderItemId'
+  | 'specDefinitionId'
+  | 'specKey'
+  | 'specLabel'
+  | 'inputType'
+  | 'value'
+  | 'displayValue'
+  | 'optionId'
+  | 'optionLabel'
+>;
+
+export type PendingRfqOrderItem = Omit<
+  OrderItem,
+  'totalPrice' | 'specValues'
+> & {
+  totalPrice: null;
+  specValues: PendingRfqSpecValue[];
+};
+
+export type PendingRfqOrder = Omit<
+  Order,
+  'totalPrice' | 'deliveryFee' | 'deliveryFeeMinor' | 'items'
+> & {
+  totalPrice: null;
+  deliveryFee: null;
+  deliveryFeeMinor: null;
+  items: PendingRfqOrderItem[];
+};
+
+export type CreateBatchResult<TOrder = Order> = {
   batchId: string;
-  orders: Order[];
+  orders: TOrder[];
   assignedSlot?: AssignedSlot;
 };
 
@@ -273,6 +362,16 @@ export function applyMarketplacePaymentDefaults(
   };
 }
 
+export type PaymentWaitExpiryOutcome =
+  | 'expired'
+  | 'not_waiting'
+  | 'operations_resolution_required';
+
+export interface PaymentWaitExpiryResult {
+  outcome: PaymentWaitExpiryOutcome;
+  order: Order;
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -324,6 +423,7 @@ export class OrdersService {
     @Optional() private readonly geoZonesService?: GeoZonesService,
     @Optional() private readonly payoutsService?: PayoutsService,
     @Optional() private readonly issuesService?: IssuesService,
+    @Optional() private readonly catalogReadService?: CatalogReadService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -332,7 +432,10 @@ export class OrdersService {
       relations: OrdersService.ORDER_RELATIONS,
       order: { createdAt: 'DESC' },
     });
-    return this.attachDeliveryAssignmentIds(orders);
+    const withCatalog = await this.attachCatalogSnapshots(orders);
+    return (await this.attachDeliveryAssignmentIds(withCatalog)).map((order) =>
+      this.maskPendingRfqMoney(order),
+    );
   }
 
   async findById(id: number): Promise<Order | null> {
@@ -341,8 +444,110 @@ export class OrdersService {
       relations: OrdersService.ORDER_RELATIONS,
     });
     if (!order) return null;
-    const [withTracking] = await this.attachDeliveryAssignmentIds([order]);
-    return withTracking;
+    const [withCatalog] = await this.attachCatalogSnapshots([order]);
+    const [withTracking] = await this.attachDeliveryAssignmentIds([
+      withCatalog,
+    ]);
+    return this.maskPendingRfqMoney(withTracking);
+  }
+
+  async attachCatalogSnapshots(orders: Order[]): Promise<Order[]> {
+    let categoryById = new Map<number, CatalogCategory>();
+    let categoryBySlug = new Map<string, CatalogCategory>();
+    if (this.catalogReadService) {
+      try {
+        const catalog = await this.catalogReadService.getPublicCatalog(true);
+        categoryById = new Map(
+          catalog.categories.map((category) => [category.id, category]),
+        );
+        categoryBySlug = new Map(
+          catalog.categories.map((category) => [category.slug, category]),
+        );
+      } catch (error) {
+        this.logger.warn(`Order catalog projection failed: ${String(error)}`);
+      }
+    }
+
+    return orders.map((order) => {
+      const items = (order.items ?? []).map((item) => {
+        const product =
+          (item.categoryId == null
+            ? undefined
+            : categoryById.get(item.categoryId)) ??
+          categoryBySlug.get(item.categorySlug ?? item.category);
+        const specs = (item.specValues ?? []).map((spec) => ({
+          key: spec.specKey,
+          label: spec.specLabel,
+          inputType: spec.inputType,
+          value: spec.value,
+          displayValue: spec.displayValue,
+          optionId: spec.optionId,
+          optionLabel: spec.optionLabel,
+        }));
+        return {
+          ...item,
+          categorySlug: item.categorySlug ?? item.category,
+          categoryName: item.categoryName ?? product?.name ?? null,
+          groupSlug: product?.groupSlug ?? null,
+          groupName: product?.groupName ?? null,
+          groupDescription: product?.groupDescription ?? null,
+          examples: product?.examples ?? [],
+          pricingModel: item.pricingModel ?? product?.pricingModel ?? null,
+          catalogProduct: product
+            ? {
+                slug: product.slug,
+                name: product.name,
+                groupSlug: product.groupSlug,
+                groupName: product.groupName,
+                groupDescription: product.groupDescription,
+                examples: product.examples ?? [],
+              }
+            : null,
+          specs,
+        };
+      });
+      return { ...order, items } as Order;
+    });
+  }
+
+  private maskPendingRfqMoney(order: Order): Order {
+    if (order.pricingStatus !== PricingStatus.PENDING_QUOTE) return order;
+    const batchOrder = order.batchOrder
+      ? {
+          ...order.batchOrder,
+          subtotal: null,
+          deliveryFee: null,
+          totalPrice: null,
+          priorityFee: null,
+          extraDestinationFee: null,
+        }
+      : order.batchOrder;
+    const items = (order.items ?? []).map((item) => ({
+      ...item,
+      totalPrice: null,
+      specValues: (item.specValues ?? []).map((spec) => ({
+        id: spec.id,
+        orderItemId: spec.orderItemId,
+        specDefinitionId: spec.specDefinitionId,
+        specKey: spec.specKey,
+        specLabel: spec.specLabel,
+        inputType: spec.inputType,
+        value: spec.value,
+        displayValue: spec.displayValue,
+        optionId: spec.optionId,
+        optionLabel: spec.optionLabel,
+      })),
+    }));
+    return {
+      ...order,
+      totalPrice: null,
+      deliveryFee: null,
+      deliveryFeeMinor: null,
+      finalTotalMinor: null,
+      quotedTotalMinor: null,
+      batchOrder,
+      items,
+    } as unknown as Order;
   }
 
   private async attachDeliveryAssignmentIds(orders: Order[]): Promise<Order[]> {
@@ -434,13 +639,52 @@ export class OrdersService {
           });
     const planByRiderId = new Map(plans.map((plan) => [plan.riderId, plan]));
 
-    const claimsByOrderId =
+    const claimsByOrderId: Map<number, OrderClaimSummary[]> =
       this.issuesService != null
         ? await this.issuesService.listSummariesByOrderIds(orderIds)
-        : new Map();
+        : new Map<number, OrderClaimSummary[]>();
+
+    const quotedCodInputsByUser = new Map<
+      number,
+      Array<{ orderId: number; finalTotalMinor: string }>
+    >();
+    for (const order of orders) {
+      const supplierAssignment = supplierByOrderId.get(order.id);
+      if (
+        order.pricingStatus !== PricingStatus.QUOTED ||
+        order.quotedTotalMinor == null ||
+        supplierAssignment?.decision !== SupplierAssignmentDecision.ACCEPTED
+      ) {
+        continue;
+      }
+      const inputs = quotedCodInputsByUser.get(order.userId) ?? [];
+      inputs.push({
+        orderId: order.id,
+        finalTotalMinor: order.quotedTotalMinor,
+      });
+      quotedCodInputsByUser.set(order.userId, inputs);
+    }
+    const quotedCodEligibilityByOrderId = new Map<number, boolean>();
+    // Customer list reads contain one user; keep this sequential for safe
+    // reuse by any future mixed-user caller without unbounded policy queries.
+    for (const [userId, inputs] of quotedCodInputsByUser) {
+      const results =
+        await this.paymentsService.evaluateCodEligibilityForOrders(
+          userId,
+          inputs,
+        );
+      for (const [orderId, result] of results) {
+        quotedCodEligibilityByOrderId.set(orderId, result.eligible);
+      }
+    }
 
     return Promise.all(
       orders.map(async (order) => {
+        const {
+          quotedByUserId: _quotedByUserId,
+          quotedByUser: _quotedByUser,
+          ...customerSafeOrder
+        } = order;
         const assignment = assignmentByOrderId.get(order.id);
         const supplierAssignment = supplierByOrderId.get(order.id);
         const plan = assignment?.riderId
@@ -484,7 +728,21 @@ export class OrdersService {
             ? (assignment.deliveryOtpCode ?? null)
             : null;
 
-        return Object.assign(order, {
+        const supplierContact =
+          await this.assignedSupplierContactFromAssignment(supplierAssignment);
+        const acceptedQuoteAssignmentId =
+          supplierAssignment?.decision === SupplierAssignmentDecision.ACCEPTED
+            ? supplierAssignment.id
+            : null;
+        const customerCodEligible =
+          order.pricingStatus === PricingStatus.QUOTED
+            ? (quotedCodEligibilityByOrderId.get(order.id) ?? false)
+            : (customerSafeOrder.codEligible ?? false);
+        return {
+          ...customerSafeOrder,
+          // Advisory only. acceptQuote re-evaluates the same policy while the
+          // customer and order rows are locked, closing the TOCTOU window.
+          codEligible: customerCodEligible,
           deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
           deliveryQueuePosition: queuePosition,
           deliveryQueueSize:
@@ -509,16 +767,15 @@ export class OrdersService {
             assignment,
             canTrackDelivery,
           ),
-          assignedSupplierContact:
-            await this.assignedSupplierContactFromAssignment(
-              supplierAssignment,
-            ),
+          assignedSupplierContact: supplierContact,
+          quoteAssignmentId: acceptedQuoteAssignmentId,
+          quote_assignment_id: acceptedQuoteAssignmentId,
           assignedSlot:
             order.batchOrderId == null
               ? undefined
               : assignedSlotByBatchOrderId.get(order.batchOrderId),
           claims: claimsByOrderId.get(order.id) ?? [],
-        });
+        } as unknown as Order;
       }),
     );
   }
@@ -526,16 +783,10 @@ export class OrdersService {
   private assignedSupplierContactFromAssignment(
     assignment: SupplierAssignment | undefined,
   ): Promise<{
-    supplierId: number;
     businessName: string;
-    decision: string;
-    acceptanceDeadline: Date | null;
-    assignmentId: number;
     logoUrl: string | null;
-    address: string | null;
     broadAddress: string | null;
     selfQcEvidenceUrls: string[];
-    selfQcEvidenceFileIds: number[];
   } | null> {
     return this.buildAssignedSupplierContact(assignment);
   }
@@ -543,16 +794,10 @@ export class OrdersService {
   private async buildAssignedSupplierContact(
     assignment: SupplierAssignment | undefined,
   ): Promise<{
-    supplierId: number;
     businessName: string;
-    decision: string;
-    acceptanceDeadline: Date | null;
-    assignmentId: number;
     logoUrl: string | null;
-    address: string | null;
     broadAddress: string | null;
     selfQcEvidenceUrls: string[];
-    selfQcEvidenceFileIds: number[];
   } | null> {
     if (!assignment) return null;
     const supplier = assignment.supplier;
@@ -576,17 +821,11 @@ export class OrdersService {
     }
 
     return {
-      supplierId: assignment.supplierId,
       businessName:
         supplier?.businessName?.trim() || `Supplier #${assignment.supplierId}`,
-      decision: assignment.decision,
-      acceptanceDeadline: assignment.acceptanceDeadline ?? null,
-      assignmentId: assignment.id,
       logoUrl,
-      address,
       broadAddress,
       selfQcEvidenceUrls,
-      selfQcEvidenceFileIds: evidenceIds,
     };
   }
 
@@ -612,7 +851,7 @@ export class OrdersService {
     assignmentId: number,
   ): Promise<number[]> {
     try {
-      const rows = await this.dataSource.query(
+      const rows = await this.dataSource.query<Array<{ evidence: unknown }>>(
         `
         SELECT metadata->'evidenceFileIds' AS evidence
         FROM audit_events
@@ -624,7 +863,7 @@ export class OrdersService {
         `,
         [String(assignmentId)],
       );
-      const evidence = rows?.[0]?.evidence;
+      const evidence = rows[0]?.evidence;
       return this.normalizeFileIdList(evidence);
     } catch {
       return [];
@@ -812,17 +1051,19 @@ export class OrdersService {
       paperSpecs,
       threeDSpecs,
     });
-    const quote = await this.catalogPricingService.quote({
-      items: [
-        {
-          categorySlug: String(orderData.category ?? ''),
-          quantity: Number(orderData.quantity ?? 1),
-          specs: selectedSpecs,
-          addonIds: addonIds ?? [],
-        },
-      ],
-      deliveryOption: orderData.deliveryOption,
-    });
+    const quote = this.requireLegacyPricedQuote(
+      await this.catalogPricingService.quote({
+        items: [
+          {
+            categorySlug: String(orderData.category ?? ''),
+            quantity: Number(orderData.quantity ?? 1),
+            specs: selectedSpecs,
+            addonIds: addonIds ?? [],
+          },
+        ],
+        deliveryOption: orderData.deliveryOption,
+      }),
+    );
     const quoteItem = quote.items[0];
     orderData.totalPrice = quote.subtotal;
     orderData.category = quoteItem.categorySlug;
@@ -876,7 +1117,8 @@ export class OrdersService {
           isBetaModeEnabled,
         );
       }
-      const { orderRef } = await this.nextBatchReferences(manager);
+      const { orderRefs } = await this.nextBatchReferences(manager, 1);
+      const orderRef = orderRefs[0];
       const order = transactionOrdersRepo.create({
         ...orderData,
         orderId: orderRef,
@@ -887,12 +1129,15 @@ export class OrdersService {
         isCodPaymentMethod(String(persistedOrder.paymentMethod ?? '')) &&
         persistedOrder.codEligible
       ) {
-        await this.paymentsService.ensurePendingCodCollection({
-          orderId: persistedOrder.id,
-          amountMinor: String(persistedOrder.finalTotalMinor ?? '0'),
-          eligible: true,
-          eligibilityReason: null,
-        });
+        await this.paymentsService.ensurePendingCodCollection(
+          {
+            orderId: persistedOrder.id,
+            amountMinor: String(persistedOrder.finalTotalMinor ?? '0'),
+            eligible: true,
+            eligibilityReason: null,
+          },
+          manager,
+        );
       }
       const savedItem = await transactionItemsRepo.save(
         transactionItemsRepo.create({
@@ -946,6 +1191,438 @@ export class OrdersService {
     return this.catalogPricingService.quote(dto);
   }
 
+  private requireLegacyPricedQuote(quote: QuoteResult): PricedQuoteResult {
+    if ('pricingStatus' in quote) {
+      throw new BadRequestException({
+        code: 'RFQ_ENDPOINT_REQUIRED',
+        message:
+          'Quote-required products must be submitted through the RFQ endpoint',
+      });
+    }
+    return quote;
+  }
+
+  async submitRfq(
+    userId: number,
+    dto: SubmitRfqDto,
+  ): Promise<CreateBatchResult<PendingRfqOrder>> {
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw new BadRequestException('Invalid RFQ owner');
+    }
+    if (!Array.isArray(dto.items) || dto.items.length === 0) {
+      throw new BadRequestException('RFQ batch requires at least one item');
+    }
+    if (dto.deliveryOption !== 'pickup' && dto.deliveryOption !== 'delivery') {
+      throw new BadRequestException('Invalid delivery option');
+    }
+
+    const normalizedItems = dto.items.map((item) => {
+      const quantity = Number(item.quantity);
+      const fileMetadataId = Number(item.fileMetadataId);
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new BadRequestException(
+          'RFQ quantity must be a positive integer',
+        );
+      }
+      if (!Number.isInteger(fileMetadataId) || fileMetadataId <= 0) {
+        throw new BadRequestException('Invalid catalog artwork reference');
+      }
+      if (
+        !item.specs ||
+        typeof item.specs !== 'object' ||
+        Array.isArray(item.specs)
+      ) {
+        throw new BadRequestException('RFQ specifications are required');
+      }
+      if (
+        typeof item.categorySlug !== 'string' ||
+        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.categorySlug)
+      ) {
+        throw new BadRequestException('Invalid RFQ product');
+      }
+      return {
+        ...item,
+        quantity,
+        fileMetadataId,
+        requiredAt: parseFutureRequiredDate(item.requiredDate),
+        specialInstructions: this.normalizeSpecialInstructions(
+          item.specialInstructions,
+        ),
+      };
+    });
+    assertUnambiguousArtworkProducts(normalizedItems);
+
+    // This uses the pending branch only: it validates active catalog leaves and
+    // server-owned specifications without calculating a monetary catalog sum.
+    const quote = await this.catalogPricingService.quote({
+      items: normalizedItems.map((item) => ({
+        categorySlug: item.categorySlug,
+        quantity: item.quantity,
+        specs: item.specs,
+      })),
+      deliveryOption: dto.deliveryOption,
+    });
+    if (
+      !('pricingStatus' in quote) ||
+      quote.pricingStatus !== 'pending_quote'
+    ) {
+      throw new BadRequestException({
+        code: 'RFQ_PRODUCT_REQUIRED',
+        message: 'Only active quote-required products can be submitted',
+      });
+    }
+
+    const deliveryAddressId =
+      dto.deliveryAddressId == null ? undefined : Number(dto.deliveryAddressId);
+    const validatedDeliveryAddress =
+      deliveryAddressId == null
+        ? null
+        : await this.findOwnedDeliveryAddress(deliveryAddressId, userId);
+    const temporaryAddress = this.normalizeTemporaryAddress(
+      dto.temporaryAddress,
+    );
+    const inputDestinations = dto.destinations ?? [];
+    if (
+      dto.deliveryOption !== 'delivery' &&
+      (temporaryAddress != null || inputDestinations.length > 0)
+    ) {
+      throw new BadRequestException(
+        'Delivery destinations are only allowed for delivery',
+      );
+    }
+    if (
+      dto.deliveryOption === 'delivery' &&
+      validatedDeliveryAddress == null &&
+      temporaryAddress == null &&
+      inputDestinations.length === 0
+    ) {
+      throw new BadRequestException('Delivery address is required');
+    }
+    if (validatedDeliveryAddress != null && temporaryAddress != null) {
+      throw new BadRequestException(
+        'Choose either a saved address or a temporary address',
+      );
+    }
+    if (temporaryAddress != null && inputDestinations.length > 0) {
+      throw new BadRequestException(
+        'Choose either a temporary address or delivery destinations',
+      );
+    }
+
+    const resolvedDestinations: NormalizedDeliveryDestination[] = [];
+    for (const destination of inputDestinations) {
+      if (destination.addressId != null && destination.address != null) {
+        throw new BadRequestException(
+          'Choose either a saved address or a temporary address for each destination',
+        );
+      }
+      if (destination.address != null) {
+        const normalized = this.normalizeTemporaryAddress(destination.address);
+        if (!normalized) {
+          throw new BadRequestException('Invalid temporary address');
+        }
+        resolvedDestinations.push(
+          this.destinationFromTemporaryAddress(normalized, destination.label),
+        );
+        continue;
+      }
+      if (destination.addressId == null) {
+        throw new BadRequestException('Invalid delivery address');
+      }
+      const address = await this.findOwnedDeliveryAddress(
+        Number(destination.addressId),
+        userId,
+      );
+      resolvedDestinations.push(
+        this.destinationFromSavedAddress(address, destination.label),
+      );
+    }
+    if (temporaryAddress != null && resolvedDestinations.length === 0) {
+      resolvedDestinations.push(
+        this.destinationFromTemporaryAddress(temporaryAddress),
+      );
+    }
+    if (validatedDeliveryAddress != null && resolvedDestinations.length === 0) {
+      resolvedDestinations.push(
+        this.destinationFromSavedAddress(validatedDeliveryAddress),
+      );
+    }
+    for (const item of normalizedItems) {
+      const destinationIndex = item.destinationIndex ?? 0;
+      if (
+        !Number.isInteger(destinationIndex) ||
+        destinationIndex < 0 ||
+        (resolvedDestinations.length === 0
+          ? destinationIndex !== 0
+          : destinationIndex >= resolvedDestinations.length)
+      ) {
+        throw new BadRequestException('Invalid destination index');
+      }
+    }
+
+    let deliveryType: 'local' | 'external' = 'local';
+    let zoneDeliveryFeePesos: number | null = null;
+    for (const destination of resolvedDestinations) {
+      const inside = await this.settingsService.isInsideServiceArea(
+        destination.latitude,
+        destination.longitude,
+      );
+      if (!inside) {
+        if (this.geoZonesService) {
+          try {
+            const [hasZones, commerce] = await Promise.all([
+              this.geoZonesService.hasActiveZones(),
+              this.geoZonesService.getCommerceSettings(),
+            ]);
+            if (hasZones && commerce.rejectOutsideZones) {
+              throw new ServiceAreaMismatchException();
+            }
+          } catch (error) {
+            if (error instanceof ServiceAreaMismatchException) throw error;
+          }
+        }
+        deliveryType = 'external';
+        break;
+      }
+      if (this.geoZonesService && zoneDeliveryFeePesos == null) {
+        try {
+          const match = await this.geoZonesService.matchPoint(
+            destination.latitude,
+            destination.longitude,
+          );
+          if (match.inside && match.zone) {
+            zoneDeliveryFeePesos = Number(match.deliveryFeeMinor) / 100;
+          }
+        } catch {
+          // Geo-zone fees are optional; the standard delivery fee remains.
+        }
+      }
+    }
+    let authoritativeDeliveryFee =
+      dto.deliveryOption === 'delivery'
+        ? STANDARD_DELIVERY_FEE + SERVICE_FEE
+        : 0;
+    if (
+      deliveryType === 'local' &&
+      dto.deliveryOption === 'delivery' &&
+      zoneDeliveryFeePesos != null
+    ) {
+      authoritativeDeliveryFee = zoneDeliveryFeePesos + SERVICE_FEE;
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const batchRepo = manager.getRepository(BatchOrder);
+      const orderRepo = manager.getRepository(Order);
+      const itemRepo = manager.getRepository(OrderItem);
+      const specRepo = manager.getRepository(OrderItemSpecValue);
+      const destinationRepo = manager.getRepository(DeliveryDestination);
+      const validationService = new CatalogValidationService();
+
+      // Resolve every mutable/owner-bound input before the first insert. Files
+      // are locked and storage-verified through the same transaction manager.
+      const validatedLines = [] as Array<{
+        item: (typeof normalizedItems)[number];
+        quoteItem: (typeof quote.items)[number];
+        product: ProductCategory;
+        specSnapshots: (typeof quote.items)[number]['specSnapshots'];
+      }>;
+      const productsBySlug = await lockRfqCatalog(
+        manager,
+        normalizedItems.map(({ categorySlug }) => categorySlug),
+      );
+      for (const [index, item] of normalizedItems.entries()) {
+        const quoteItem = quote.items[index];
+        const product = productsBySlug.get(item.categorySlug);
+        if (
+          !product ||
+          product.id !== quoteItem.categoryId ||
+          quoteItem.categorySlug !== item.categorySlug ||
+          !isActiveOrderableRfqLeaf(product)
+        ) {
+          throw new BadRequestException({
+            code: 'CATEGORY_INACTIVE',
+            message: `Category '${item.categorySlug}' is not available`,
+          });
+        }
+        const specSnapshots = validationService
+          .validateSpecs(
+            product as Parameters<CatalogValidationService['validateSpecs']>[0],
+            item.specs,
+          )
+          .map((entry) => ({
+            specDefinitionId: entry.spec.id,
+            specKey: entry.spec.key,
+            specLabel: entry.spec.label,
+            inputType: entry.spec.inputType,
+            value:
+              entry.value == null
+                ? ''
+                : typeof entry.value === 'object'
+                  ? JSON.stringify(entry.value)
+                  : String(entry.value as string | number | boolean),
+            displayValue: entry.displayValue,
+            optionId: entry.option?.id ?? null,
+            optionLabel: entry.option?.label ?? null,
+          }));
+        validatedLines.push({
+          item,
+          quoteItem,
+          product,
+          specSnapshots,
+        });
+      }
+
+      const filesById = await resolveArtworkInLockOrder(
+        validatedLines.map(({ item }) => item),
+        ({ fileMetadataId, categorySlug }) =>
+          this.filesService.resolveCatalogArtwork(
+            fileMetadataId,
+            productsBySlug.get(categorySlug)!,
+            userId,
+            manager,
+          ),
+      );
+      const resolvedLines = validatedLines.map((line) => ({
+        ...line,
+        file: filesById.get(line.item.fileMetadataId)!,
+      }));
+
+      const { batchRef, orderRefs } = await this.nextBatchReferences(
+        manager,
+        resolvedLines.length,
+      );
+      const batch = await batchRepo.save(
+        batchRepo.create({
+          batchRef,
+          userId,
+          subtotal: 0,
+          // The shared authoritative delivery fee lives only on the batch.
+          // Per-line compatibility order columns stay zero to avoid counting it
+          // once per independently matched supplier order. Task 8 adds it once
+          // when the final customer quote is assembled.
+          deliveryFee: authoritativeDeliveryFee,
+          totalPrice: 0,
+          paymentMethod: 'unselected',
+          paymentStatus: 'pending',
+          deliveryOption: dto.deliveryOption,
+          deliveryAddressId: validatedDeliveryAddress?.id,
+          deliveryType,
+          slotBookingId: null,
+          priorityFee: 0,
+          speedTier: DeliverySpeedTier.STANDARD,
+          extraDestinationFee: 0,
+          externalDeliveryStatus:
+            deliveryType === 'external' ? 'pending_admin' : null,
+        }),
+      );
+
+      const savedDestinations: DeliveryDestination[] = [];
+      for (const [index, destination] of resolvedDestinations.entries()) {
+        savedDestinations.push(
+          await destinationRepo.save(
+            destinationRepo.create({
+              batchOrderId: batch.id,
+              ...destination,
+              sortOrder: index,
+            }),
+          ),
+        );
+      }
+
+      const orders: PendingRfqOrder[] = [];
+      for (const [index, line] of resolvedLines.entries()) {
+        const destinationId =
+          savedDestinations[line.item.destinationIndex ?? 0]?.id ?? null;
+        const savedOrder = await orderRepo.save(
+          orderRepo.create({
+            userId,
+            orderId: orderRefs[index],
+            batchOrderId: batch.id,
+            destinationId,
+            category: line.quoteItem.categorySlug,
+            quantity: line.item.quantity,
+            totalPrice: 0,
+            deliveryFee: 0,
+            finalTotalMinor: null,
+            deliveryFeeMinor: null,
+            quotedTotalMinor: null,
+            quotedAt: null,
+            quoteAcceptedAt: null,
+            quotedByUserId: null,
+            promisedCompletionAt: null,
+            pricingStatus: PricingStatus.PENDING_QUOTE,
+            paymentMethod: 'unselected',
+            paymentStatus: 'pending',
+            paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+            codEligible: false,
+            authorizationSnapshot: null,
+            orderStatus: OrderStatus.SUBMITTED,
+            deliveryOption: dto.deliveryOption,
+            deliveryAddressId: validatedDeliveryAddress?.id,
+            fileMetadataId: line.file.id,
+            fileUrl: line.file.url,
+            fileName: line.file.originalName,
+            estimatedCompletionAt: null,
+          }),
+        );
+        const savedItem = await itemRepo.save(
+          itemRepo.create({
+            orderId: savedOrder.id,
+            category: line.quoteItem.categorySlug,
+            categoryId: line.quoteItem.categoryId,
+            categorySlug: line.quoteItem.categorySlug,
+            categoryName: line.quoteItem.categoryName,
+            pricingModel: line.quoteItem.pricingModel,
+            quantity: line.item.quantity,
+            totalPrice: 0,
+            fileMetadataId: line.file.id,
+            fileUrl: line.file.url,
+            fileName: line.file.originalName,
+            specialInstructions: line.item.specialInstructions,
+            requiredAt: line.item.requiredAt,
+            destinationId,
+          }),
+        );
+        const specValues: PendingRfqSpecValue[] = [];
+        for (const snapshot of line.specSnapshots) {
+          const savedSpec = await specRepo.save(
+            specRepo.create({
+              orderItemId: savedItem.id,
+              ...snapshot,
+            }),
+          );
+          specValues.push({
+            id: savedSpec.id,
+            orderItemId: savedSpec.orderItemId,
+            specDefinitionId: savedSpec.specDefinitionId,
+            specKey: savedSpec.specKey,
+            specLabel: savedSpec.specLabel,
+            inputType: savedSpec.inputType,
+            value: savedSpec.value,
+            displayValue: savedSpec.displayValue,
+            optionId: savedSpec.optionId,
+            optionLabel: savedSpec.optionLabel,
+          });
+        }
+        orders.push({
+          ...savedOrder,
+          totalPrice: null,
+          deliveryFee: null,
+          deliveryFeeMinor: null,
+          items: [
+            {
+              ...savedItem,
+              totalPrice: null,
+              specValues,
+            },
+          ],
+        } as PendingRfqOrder);
+      }
+
+      return { batchId: batch.batchRef, orders };
+    });
+  }
+
   async createBatch(
     userId: number,
     dto: CreateBatchOrderDto,
@@ -984,16 +1661,18 @@ export class OrdersService {
       fileMetadataById.set(file.id, file);
     }
 
-    const quote = await this.catalogPricingService.quote({
-      items: normalizedItems.map((item) => ({
-        categorySlug: item.category,
-        quantity: item.quantity,
-        specs: this.selectedSpecsFromLegacy(item),
-        addonIds: item.addonIds ?? [],
-      })),
-      deliveryOption: dto.deliveryOption,
-      speedTier: dto.speedTier,
-    });
+    const quote = this.requireLegacyPricedQuote(
+      await this.catalogPricingService.quote({
+        items: normalizedItems.map((item) => ({
+          categorySlug: item.category,
+          quantity: item.quantity,
+          specs: this.selectedSpecsFromLegacy(item),
+          addonIds: item.addonIds ?? [],
+        })),
+        deliveryOption: dto.deliveryOption,
+        speedTier: dto.speedTier,
+      }),
+    );
     const subtotal = quote.subtotal;
     // Client totals are display hints only. Checkout charges are authoritative
     // on the server so a direct request cannot underpay a credit order.
@@ -1241,7 +1920,11 @@ export class OrdersService {
         codEligibleForBatch = codResult?.eligible === true;
       }
 
-      const { batchRef, orderRef } = await this.nextBatchReferences(manager);
+      const { batchRef, orderRefs } = await this.nextBatchReferences(
+        manager,
+        1,
+      );
+      const orderRef = orderRefs[0];
       const creditPayment = OrdersService.isCreditPaymentMethod(
         dto.paymentMethod,
       );
@@ -1375,12 +2058,15 @@ export class OrdersService {
       const savedOrder = await txOrdersRepo.save(aggregateOrder);
 
       if (codEligibleForBatch && isCodPaymentMethod(dto.paymentMethod)) {
-        await this.paymentsService.ensurePendingCodCollection({
-          orderId: savedOrder.id,
-          amountMinor: String(savedOrder.finalTotalMinor ?? '0'),
-          eligible: true,
-          eligibilityReason: null,
-        });
+        await this.paymentsService.ensurePendingCodCollection(
+          {
+            orderId: savedOrder.id,
+            amountMinor: String(savedOrder.finalTotalMinor ?? '0'),
+            eligible: true,
+            eligibilityReason: null,
+          },
+          manager,
+        );
       }
 
       for (const [index, item] of normalizedItems.entries()) {
@@ -1597,6 +2283,215 @@ export class OrdersService {
   }
 
   /**
+   * Customer acceptance freezes the chosen rail, but performs no payment
+   * authorization, ledger mutation, or COD collection creation.
+   */
+  async acceptQuote(
+    orderId: number,
+    userId: number,
+    dto: AcceptQuoteDto,
+  ): Promise<Order> {
+    const precheck = await this.ordersRepo.findOne({ where: { id: orderId } });
+    if (!precheck) throw new NotFoundException(`Order ${orderId} not found`);
+
+    return this.dataSource.transaction(async (manager) => {
+      // Commerce lock order: owner -> batch -> order -> assignments by id.
+      const owner = await manager.getRepository(User).findOne({
+        where: { id: precheck.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!owner) throw new NotFoundException('Order owner not found');
+
+      if (precheck.batchOrderId != null) {
+        const batch = await manager.getRepository(BatchOrder).findOne({
+          where: { id: precheck.batchOrderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!batch) throw new NotFoundException('Batch order not found');
+      }
+
+      const ordersRepo = manager.getRepository(Order);
+      const locked = await ordersRepo.findOneOrFail({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (locked.userId !== userId) {
+        throw new ForbiddenException({
+          code: 'not_order_owner',
+          message: 'You can only accept a quote for your own order',
+        });
+      }
+      if (
+        locked.userId !== precheck.userId ||
+        locked.batchOrderId !== precheck.batchOrderId
+      ) {
+        throw new BadRequestException({
+          code: 'order_changed_during_quote_acceptance',
+          message: 'Order commerce ownership changed during quote acceptance',
+        });
+      }
+
+      const assignments = await manager.getRepository(SupplierAssignment).find({
+        where: { orderId: locked.id },
+        order: { id: 'ASC' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const current = [...assignments]
+        .reverse()
+        .find(({ decision }) =>
+          [
+            SupplierAssignmentDecision.PENDING,
+            SupplierAssignmentDecision.ACCEPTED,
+          ].includes(decision),
+        );
+      if (current?.id !== dto.supplierAssignmentId) {
+        throw new BadRequestException({
+          code: 'stale_quote',
+          message: 'The selected supplier quote is stale or superseded',
+        });
+      }
+      if (current.decision !== SupplierAssignmentDecision.ACCEPTED) {
+        throw new BadRequestException({
+          code: 'quote_not_supplier_accepted',
+          message: 'The current supplier assignment has not been accepted',
+        });
+      }
+
+      const paymentMethod =
+        dto.paymentMethod === QuotePaymentMethod.PILOT_CREDIT
+          ? MarketplacePaymentMethod.PILOT_CREDIT
+          : MarketplacePaymentMethod.COD;
+
+      if (locked.pricingStatus === PricingStatus.ACCEPTED) {
+        if (
+          locked.quoteAcceptedAt != null &&
+          locked.paymentMethod === String(paymentMethod)
+        ) {
+          return locked;
+        }
+        throw new BadRequestException({
+          code: 'quote_acceptance_conflict',
+          message: 'This quote was already accepted with different terms',
+        });
+      }
+
+      if (
+        locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED ||
+        locked.pricingStatus !== PricingStatus.QUOTED
+      ) {
+        throw new BadRequestException({
+          code: 'quote_not_ready',
+          message: 'The order does not have a current supplier quote',
+        });
+      }
+
+      let goodsMinor: string;
+      let quotedTotalMinor: string;
+      try {
+        goodsMinor = normalizePositiveSafeMinor(
+          current.finalPriceMinor,
+          'finalPriceMinor',
+        );
+        quotedTotalMinor = normalizePositiveSafeMinor(
+          locked.quotedTotalMinor,
+          'quotedTotalMinor',
+        );
+        subtractSafeMinor(quotedTotalMinor, goodsMinor, 'quoted delivery fee');
+      } catch {
+        throw new BadRequestException({
+          code: 'quote_terms_missing',
+          message: 'The supplier quote price is missing or invalid',
+        });
+      }
+      if (
+        current.promisedDate == null ||
+        locked.promisedCompletionAt == null ||
+        locked.quotedAt == null ||
+        locked.quotedByUserId == null
+      ) {
+        throw new BadRequestException({
+          code: 'quote_terms_missing',
+          message: 'The supplier quote turnaround is missing',
+        });
+      }
+
+      if (paymentMethod === MarketplacePaymentMethod.COD) {
+        const codResult =
+          await this.paymentsService.assertCodEligibleForCheckout(
+            {
+              userId: locked.userId,
+              paymentMethod,
+              finalTotalMinor: quotedTotalMinor,
+              excludeOrderId: locked.id,
+            },
+            manager,
+          );
+        locked.codEligible = codResult?.eligible === true;
+      } else {
+        locked.codEligible = false;
+      }
+
+      assertTransition(
+        locked.orderStatus,
+        OrderStatus.AWAITING_PAYMENT,
+        'client',
+      );
+      const acceptedAt = new Date();
+      const fromStatus = locked.orderStatus;
+      locked.pricingStatus = PricingStatus.ACCEPTED;
+      locked.quoteAcceptedAt = acceptedAt;
+      locked.paymentMethod = paymentMethod;
+      locked.orderStatus = OrderStatus.AWAITING_PAYMENT;
+      const saved = await ordersRepo.save(locked);
+
+      const reason = `Customer accepted supplier quote ${current.id} using ${paymentMethod}`;
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: locked.id,
+        fromStatus,
+        toStatus: OrderStatus.AWAITING_PAYMENT,
+        changedByUserId: userId,
+        notes: reason,
+      });
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: locked.id,
+          fromStatus,
+          toStatus: OrderStatus.AWAITING_PAYMENT,
+          actorUserId: userId,
+          actorRole: 'client',
+          reason,
+          metadata: {
+            source: 'orders.acceptQuote',
+            supplierAssignmentId: current.id,
+            paymentMethod,
+          },
+        },
+        manager,
+      );
+      await this.auditService.append(
+        {
+          actorId: userId,
+          actorRole: 'client',
+          action: 'customer_quote_accepted',
+          entityType: 'order',
+          entityId: String(locked.id),
+          orderId: locked.id,
+          fromState: PricingStatus.QUOTED,
+          toState: PricingStatus.ACCEPTED,
+          reason,
+          metadata: {
+            supplierAssignmentId: current.id,
+            paymentMethod,
+            quotedTotalMinor,
+          },
+        },
+        manager,
+      );
+      return saved;
+    });
+  }
+
+  /**
    * Authorize payment for production (Task 3.3).
    *
    * Ops/super only — clients cannot authorize. Allowed from
@@ -1642,7 +2537,11 @@ export class OrdersService {
       return (await this.findById(orderId)) ?? precheck;
     }
 
+    const precheckIsRfq = this.isRfqQuoteOrder(precheck);
+    assertRfqAuthorizationReady(precheck);
+
     if (
+      !precheckIsRfq &&
       precheck.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
       precheck.orderStatus !== OrderStatus.AWAITING_PAYMENT
     ) {
@@ -1656,10 +2555,31 @@ export class OrdersService {
 
     const result = await this.dataSource.transaction(async (manager) => {
       const ordersRepo = manager.getRepository(Order);
+      const owner = await manager.getRepository(User).findOne({
+        where: { id: precheck.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!owner) throw new NotFoundException('Order owner not found');
+      if (precheck.batchOrderId != null) {
+        const batch = await manager.getRepository(BatchOrder).findOne({
+          where: { id: precheck.batchOrderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!batch) throw new NotFoundException('Batch order not found');
+      }
       const locked = await ordersRepo.findOneOrFail({
         where: { id: orderId },
         lock: { mode: 'pessimistic_write' },
       });
+      if (
+        locked.userId !== precheck.userId ||
+        locked.batchOrderId !== precheck.batchOrderId
+      ) {
+        throw new BadRequestException({
+          code: 'order_changed_during_authorization',
+          message: 'Order commerce ownership changed during authorization',
+        });
+      }
 
       if (
         locked.orderStatus === OrderStatus.PAYMENT_AUTHORIZED &&
@@ -1669,7 +2589,10 @@ export class OrdersService {
         return { previous: null as Order | null, order: locked };
       }
 
+      assertRfqAuthorizationReady(locked);
+
       if (
+        !this.isRfqQuoteOrder(locked) &&
         locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
         locked.orderStatus !== OrderStatus.AWAITING_PAYMENT
       ) {
@@ -1695,35 +2618,102 @@ export class OrdersService {
         });
       }
 
+      let rfqSnapshot: FreezeAuthorizationInput | null = null;
+      let authorizationTotalMinor = locked.finalTotalMinor;
+      if (this.isRfqQuoteOrder(locked)) {
+        const assignments = await manager
+          .getRepository(SupplierAssignment)
+          .find({
+            where: { orderId: locked.id },
+            order: { id: 'ASC' },
+            lock: { mode: 'pessimistic_write' },
+          });
+        const current = [...assignments]
+          .reverse()
+          .find(({ decision }) =>
+            [
+              SupplierAssignmentDecision.PENDING,
+              SupplierAssignmentDecision.ACCEPTED,
+            ].includes(decision),
+          );
+        if (
+          current?.decision !== SupplierAssignmentDecision.ACCEPTED ||
+          current.promisedDate == null
+        ) {
+          throw new BadRequestException({
+            code: 'current_quote_missing',
+            message: 'The accepted RFQ no longer has current supplier terms',
+          });
+        }
+        let goodsMinor: string;
+        let quoteMinor: string;
+        let deliveryFeeMinor: string;
+        try {
+          goodsMinor = normalizePositiveSafeMinor(
+            current.finalPriceMinor,
+            'finalPriceMinor',
+          );
+          quoteMinor = normalizePositiveSafeMinor(
+            locked.quotedTotalMinor,
+            'quotedTotalMinor',
+          );
+          deliveryFeeMinor = subtractSafeMinor(
+            quoteMinor,
+            goodsMinor,
+            'quoted delivery fee',
+          );
+        } catch {
+          throw new BadRequestException({
+            code: 'current_quote_missing',
+            message: 'The accepted RFQ money is missing or inconsistent',
+          });
+        }
+        authorizationTotalMinor = quoteMinor;
+        rfqSnapshot = {
+          priceMinor: goodsMinor,
+          deliveryFeeMinor,
+          promisedDate: locked.promisedCompletionAt ?? current.promisedDate,
+          paymentMethod,
+        };
+      }
+
       if (isCredit) {
         creditMutation = await this.settlePilotCreditsForAuthorization(
           locked,
           context.actorUserId,
           manager,
+          authorizationTotalMinor,
         );
         locked.paymentStatus = 'paid';
       } else {
         // COD: authorize for collection — cash remains pending until rider collect.
         const codResult =
-          await this.paymentsService.assertCodEligibleForCheckout({
-            userId: locked.userId,
-            paymentMethod,
-            finalTotalMinor: locked.finalTotalMinor,
-            excludeOrderId: locked.id,
-          });
+          await this.paymentsService.assertCodEligibleForCheckout(
+            {
+              userId: locked.userId,
+              paymentMethod,
+              finalTotalMinor: authorizationTotalMinor,
+              excludeOrderId: locked.id,
+            },
+            manager,
+          );
         locked.codEligible = codResult?.eligible === true;
-        await this.paymentsService.ensurePendingCodCollection({
-          orderId: locked.id,
-          amountMinor: String(locked.finalTotalMinor ?? '0'),
-          eligible: locked.codEligible,
-          eligibilityReason: codResult?.message ?? null,
-        });
+        await this.paymentsService.ensurePendingCodCollection(
+          {
+            orderId: locked.id,
+            amountMinor: String(authorizationTotalMinor ?? '0'),
+            eligible: locked.codEligible,
+            eligibilityReason: codResult?.message ?? null,
+          },
+          manager,
+        );
         // paymentStatus stays pending until cash_collected.
       }
 
-      this.freezeAuthorizationSnapshot(locked, {
-        paymentMethod,
-      });
+      this.freezeAuthorizationSnapshot(
+        locked,
+        rfqSnapshot ?? { paymentMethod },
+      );
 
       const fromStatus = locked.orderStatus;
       locked.orderStatus = OrderStatus.PAYMENT_AUTHORIZED;
@@ -1784,11 +2774,15 @@ export class OrdersService {
     order: Order,
     actorUserId: number,
     manager: EntityManager,
+    finalTotalMinor?: string | null,
   ): Promise<CreditMutationResult | null> {
-    const amountCredits = calculateChargeTotal({
-      totalPrice: order.totalPrice,
-      deliveryFee: order.deliveryFee,
-    });
+    const amountCredits =
+      finalTotalMinor != null
+        ? minorToCredits(finalTotalMinor)
+        : calculateChargeTotal({
+            totalPrice: order.totalPrice,
+            deliveryFee: order.deliveryFee,
+          });
 
     if (amountCredits <= 0) {
       return null;
@@ -1829,6 +2823,10 @@ export class OrdersService {
     );
   }
 
+  private isRfqQuoteOrder(order: Partial<Order>): boolean {
+    return isRfqQuoteOrder(order);
+  }
+
   /**
    * Expire orders still waiting for ops payment authorization after supplier
    * accept (24h). Releases supplier assignment (stub when matching service
@@ -1836,9 +2834,11 @@ export class OrdersService {
    *
    * Invoked by PaymentTimeoutSchedulerService; also unit-testable with `now`.
    */
-  async expireStalePaymentAuthorizations(
-    now: Date = new Date(),
-  ): Promise<{ expiredOrderIds: number[]; scanned: number }> {
+  async expireStalePaymentAuthorizations(now: Date = new Date()): Promise<{
+    expiredOrderIds: number[];
+    operationsResolutionOrderIds: number[];
+    scanned: number;
+  }> {
     const waitingStatuses = [
       OrderStatus.SUPPLIER_ACCEPTED,
       OrderStatus.AWAITING_PAYMENT,
@@ -1849,6 +2849,7 @@ export class OrdersService {
     });
 
     const expiredOrderIds: number[] = [];
+    const operationsResolutionOrderIds: number[] = [];
     const cutoff = now.getTime() - OrdersService.PAYMENT_AUTH_TIMEOUT_MS;
 
     for (const candidate of candidates) {
@@ -1858,8 +2859,12 @@ export class OrdersService {
       }
 
       try {
-        await this.expirePaymentWait(candidate.id, now);
-        expiredOrderIds.push(candidate.id);
+        const result = await this.expirePaymentWait(candidate.id, now);
+        if (result.outcome === 'expired') {
+          expiredOrderIds.push(candidate.id);
+        } else if (result.outcome === 'operations_resolution_required') {
+          operationsResolutionOrderIds.push(candidate.id);
+        }
       } catch (err) {
         this.logger.warn(
           `Payment timeout expiry failed for order ${candidate.id}: ${err}`,
@@ -1867,7 +2872,11 @@ export class OrdersService {
       }
     }
 
-    return { expiredOrderIds, scanned: candidates.length };
+    return {
+      expiredOrderIds,
+      operationsResolutionOrderIds,
+      scanned: candidates.length,
+    };
   }
 
   /**
@@ -1902,7 +2911,7 @@ export class OrdersService {
   async expirePaymentWait(
     orderId: number,
     now: Date = new Date(),
-  ): Promise<Order> {
+  ): Promise<PaymentWaitExpiryResult> {
     const systemActorId = 0;
     const reason = `Payment authorization timed out after 24h (${now.toISOString()})`;
 
@@ -1914,10 +2923,25 @@ export class OrdersService {
       });
 
       if (
+        locked.pricingStatus === PricingStatus.ACCEPTED &&
+        locked.quoteAcceptedAt != null
+      ) {
+        return {
+          outcome: 'operations_resolution_required' as const,
+          previous: null as Order | null,
+          order: locked,
+        };
+      }
+
+      if (
         locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
         locked.orderStatus !== OrderStatus.AWAITING_PAYMENT
       ) {
-        return { previous: null as Order | null, order: locked };
+        return {
+          outcome: 'not_waiting' as const,
+          previous: null as Order | null,
+          order: locked,
+        };
       }
 
       assertOrderStatusTransition(
@@ -1961,23 +2985,28 @@ export class OrdersService {
       );
 
       return {
+        outcome: 'expired' as const,
         previous: { ...locked, orderStatus: fromStatus } as Order,
         order: saved,
       };
     });
 
     if (!result.previous) {
-      return result.order;
+      return { outcome: result.outcome, order: result.order };
     }
     try {
-      return await this.publishStatusUpdate(
+      const order = await this.publishStatusUpdate(
         result.previous,
         orderId,
         OrderStatus.APPROVED_FOR_MATCHING,
         null,
       );
+      return { outcome: result.outcome, order };
     } catch {
-      return (await this.findById(orderId)) ?? result.order;
+      return {
+        outcome: result.outcome,
+        order: (await this.findById(orderId)) ?? result.order,
+      };
     }
   }
 
@@ -2069,10 +3098,16 @@ export class OrdersService {
     return settings?.isEnabled ?? false;
   }
 
-  private async nextBatchReferences(manager: EntityManager): Promise<{
+  private async nextBatchReferences(
+    manager: EntityManager,
+    orderCount: number,
+  ): Promise<{
     batchRef: string;
-    orderRef: string;
+    orderRefs: string[];
   }> {
+    if (!Number.isInteger(orderCount) || orderCount <= 0) {
+      throw new BadRequestException('Reference allocation requires an order');
+    }
     await manager.query('SELECT pg_advisory_xact_lock(1196573522)');
     const rows = await manager.query<
       Array<{ max_batch_ref: string | number; max_order_ref: string | number }>
@@ -2100,7 +3135,11 @@ export class OrdersService {
 
     return {
       batchRef: `BATCH-${(maxBatchRef + 1).toString().padStart(5, '0')}`,
-      orderRef: `ORD-${(maxOrderRef + 1).toString().padStart(5, '0')}`,
+      orderRefs: Array.from(
+        { length: orderCount },
+        (_, index) =>
+          `ORD-${(maxOrderRef + index + 1).toString().padStart(5, '0')}`,
+      ),
     };
   }
 

@@ -26,7 +26,6 @@ import type { OrderStatus, PaymentStatus } from "@/types/enums";
 import { ORDER_STATUS_LABELS } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
 import {
-  formatCurrency,
   formatRelativeTime,
   formatDate,
   statusLabel,
@@ -38,6 +37,8 @@ import {
   normalizeOrder,
 } from "@/utils/api-normalizers";
 import { subscribeToOrderUpdates } from "@/providers/live-provider";
+import { OrderPrice } from "./components/order-price";
+import { OrderProductLabel, productDisplayName } from "./components/order-product-label";
 
 type TabFilter = "new" | "production" | "done" | "all";
 type OrderTypeMeta = {
@@ -88,7 +89,7 @@ function getOrderLineItems(order: Order): OrderItem[] {
   return [
     {
       id: order.id,
-      category: order.category === "3d" ? "3d" : "paper",
+      category: order.category === "batch" ? "paper" : order.category,
       file_name: order.file_name,
       quantity: order.quantity,
       total_price: order.total_price,
@@ -148,9 +149,9 @@ function exportDeliveredCSV(orders: Order[]) {
     o.user_id,
     getOrderCategoryLabel(o),
     ORDER_STATUS_LABELS[o.order_status] ?? o.order_status,
-    o.total_price,
-    o.delivery_fee,
-    o.total_price + o.delivery_fee,
+    o.total_price ?? "",
+    o.delivery_fee ?? "",
+    o.total_price == null || o.delivery_fee == null ? "" : o.total_price + o.delivery_fee,
     o.payment_method,
     o.payment_status,
     o.delivery_option,
@@ -450,8 +451,8 @@ export function OrderList() {
             title="Type"
             width={110}
             render={(_v: string, record: Order) => {
-              const type = getOrderTypeMeta(record);
-              return <Tag color={type.color}>{type.label}</Tag>;
+              const items = getOrderLineItems(record);
+              return <OrderProductLabel item={items[0]} />;
             }}
           />
           <Table.Column
@@ -469,8 +470,7 @@ export function OrderList() {
                       .slice(0, 2)
                       .map(
                         (item) =>
-                          item.file_name ??
-                          (item.category === "3d" ? "3D print" : "Paper"),
+                          productDisplayName(item),
                       )
                       .join(" + ")}
                   </span>
@@ -479,6 +479,9 @@ export function OrderList() {
                       +{items.length - 2} more
                     </span>
                   )}
+                  {record.unmet_coverage ? (
+                    <Tag color="error">Unmet supplier coverage</Tag>
+                  ) : null}
                 </Space>
               );
             }}
@@ -494,10 +497,10 @@ export function OrderList() {
             title="Amount"
             width={110}
             align="right"
-            render={(v: number) => (
-              <span style={{ fontWeight: 500 }}>{formatCurrency(v)}</span>
+            render={(_v: number | null, record: Order) => (
+              <OrderPrice pricingStatus={record.pricing_status} minor={record.quoted_total_minor} legacyAmount={record.total_price} />
             )}
-            sorter={(a: Order, b: Order) => a.total_price - b.total_price}
+            sorter={(a: Order, b: Order) => (a.total_price ?? -1) - (b.total_price ?? -1)}
           />
           <Table.Column
             dataIndex="payment_status"

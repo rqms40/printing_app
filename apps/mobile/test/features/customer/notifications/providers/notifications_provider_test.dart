@@ -11,6 +11,7 @@ class _FakeNotificationsApi implements NotificationsApi {
 
   final List<Map<String, dynamic>> notifications;
   var markAllAsReadCalls = 0;
+  final markedReadIds = <String>[];
 
   @override
   Future<List<Map<String, dynamic>>> fetchNotifications() async {
@@ -23,7 +24,9 @@ class _FakeNotificationsApi implements NotificationsApi {
   }
 
   @override
-  Future<void> markAsRead(String id) async {}
+  Future<void> markAsRead(String id) async {
+    markedReadIds.add(id);
+  }
 }
 
 class _DeferredNotificationsApi implements NotificationsApi {
@@ -171,6 +174,40 @@ void main() {
         expect(serverNotifier.state.single.userId, '1');
         expect(serverNotifier.state.single.orderId, 'ORD-10009');
         expect(serverNotifier.state.single.isRead, isFalse);
+      },
+    );
+
+    test(
+      'foreground rider message is inserted once and increments unread count',
+      () async {
+        final api = _FakeNotificationsApi([]);
+        final serverNotifier = NotificationsNotifier(api: api);
+        addTearDown(serverNotifier.dispose);
+        await Future.delayed(Duration.zero);
+
+        const payload = {
+          'id': 301,
+          'userId': 7,
+          'orderRef': 'ORD-10042',
+          'title': 'New message from your rider',
+          'message': 'At the gate',
+          'type': 'rider_message',
+          'isRead': false,
+          'createdAt': '2026-07-27T10:00:00.000Z',
+          'metadata': {
+            'conversationId': 5,
+            'conversationType': 'rider',
+            'orderId': 42,
+            'orderRef': 'ORD-10042',
+          },
+        };
+
+        serverNotifier.handleRealtimeNotification(payload);
+        serverNotifier.handleRealtimeNotification(payload);
+
+        expect(serverNotifier.state, hasLength(1));
+        expect(serverNotifier.unreadCount, 1);
+        expect(serverNotifier.state.single.metadata?['conversationId'], 5);
       },
     );
 

@@ -1,4 +1,42 @@
 import { apiClient } from '@/providers/api-client';
+import type { OrderItem } from '@/types/order';
+
+export interface QaProjectedItem {
+  id: number;
+  category: string;
+  categoryName?: string | null;
+  groupName?: string | null;
+  quantity: number;
+  totalPrice: number | null;
+  specs?: Array<{ key: string; label: string; value: string; displayValue: string }>;
+}
+
+export interface QaRenderableOrder {
+  id: number;
+  category: string;
+  quantity: number;
+  totalPrice: number | null;
+  items?: QaProjectedItem[];
+}
+
+export function qaOrderItems(order: QaRenderableOrder): OrderItem[] {
+  const source = order.items?.length ? order.items : [{
+    id: order.id, category: order.category, quantity: order.quantity,
+    totalPrice: order.totalPrice,
+  }];
+  return source.map((item) => ({
+    id: String(item.id),
+    category: item.category,
+    category_name: item.categoryName ?? null,
+    group_name: item.groupName ?? null,
+    quantity: item.quantity,
+    total_price: item.totalPrice,
+    specs: item.specs?.map((spec) => ({
+      key: spec.key, label: spec.label, value: spec.value,
+      display_value: spec.displayValue,
+    })) ?? [],
+  }));
+}
 
 export type QaDecision =
   | 'needs_correction'
@@ -15,7 +53,12 @@ export interface QaQueueItem {
   orderStatus: string;
   category: string;
   quantity: number;
-  totalPrice: number;
+  totalPrice: number | null;
+  pricingStatus?: 'pending_quote' | 'quoted' | 'accepted';
+  quotedTotalMinor?: string | null;
+  items?: QaProjectedItem[];
+  unmetCoverage?: boolean;
+  matchingOutcome?: { code: string; message?: string | null } | null;
   fileName: string | null;
   fileMetadataId: number | null;
   userId: number;
@@ -38,8 +81,13 @@ export interface QaWorkspaceDetail {
     orderStatus: string;
     category: string;
     quantity: number;
-    totalPrice: number;
-    deliveryFee: number;
+    totalPrice: number | null;
+    deliveryFee: number | null;
+    pricingStatus?: 'pending_quote' | 'quoted' | 'accepted';
+    quotedTotalMinor?: string | null;
+    items?: QaProjectedItem[];
+    unmetCoverage?: boolean;
+    matchingOutcome?: { code: string; message?: string | null } | null;
     paymentMethod: string;
     deliveryOption: string;
     fileName: string | null;
@@ -101,15 +149,15 @@ export interface QaDecisionResult {
 }
 
 export async function fetchQaQueue(): Promise<QaQueueItem[]> {
-  const res = await apiClient.get<QaQueueItem[]>('/ops/qa/queue');
-  return res.data;
+  const response = await apiClient.get<QaQueueItem[]>('/ops/qa/queue');
+  return response.data;
 }
 
 export async function fetchQaWorkspace(
   orderId: number,
 ): Promise<QaWorkspaceDetail> {
-  const res = await apiClient.get<QaWorkspaceDetail>(`/ops/qa/${orderId}`);
-  return res.data;
+  const response = await apiClient.get<QaWorkspaceDetail>(`/ops/qa/${orderId}`);
+  return response.data;
 }
 
 export async function submitQaDecision(

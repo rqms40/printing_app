@@ -18,6 +18,8 @@ import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
 import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
+import { SubmitRfqDto } from './dto/submit-rfq.dto';
+import { AcceptQuoteDto } from './dto/accept-quote.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { OrderStatus } from './entities/order.entity';
@@ -26,6 +28,7 @@ import type { TransitionActor } from './order-status-transition';
 import { QualityService } from '../quality/quality.service';
 import { ResubmitCorrectionDto } from '../quality/dto/resubmit-correction.dto';
 import { RejectProofDto } from '../quality/dto/reject-proof.dto';
+import { isAdminRole } from '../users/entities/user.entity';
 
 @ApiTags('orders')
 @ApiBearerAuth()
@@ -46,11 +49,7 @@ export class OrdersController {
   async getOrder(@Request() req: RequestWithUser, @Param('id') id: number) {
     const order = await this.ordersService.findById(id);
     if (!order) throw new NotFoundException('Order not found');
-    if (
-      order.userId !== req.user.sub &&
-      req.user.role !== 'ops_admin' &&
-      req.user.role !== 'super_admin'
-    ) {
+    if (order.userId !== req.user.sub && !isAdminRole(req.user.role)) {
       throw new ForbiddenException('You can only view your own orders');
     }
     return order;
@@ -91,6 +90,22 @@ export class OrdersController {
     @Body() dto: CreateBatchOrderDto,
   ) {
     return this.ordersService.createBatch(req.user.sub, dto);
+  }
+
+  @Post('requests/batch')
+  submitRfq(@Request() req: RequestWithUser, @Body() dto: SubmitRfqDto) {
+    return this.ordersService.submitRfq(req.user.sub, dto);
+  }
+
+  @Post(':id/accept-quote')
+  @UseGuards(RolesGuard)
+  @Roles('client')
+  acceptQuote(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AcceptQuoteDto,
+  ) {
+    return this.ordersService.acceptQuote(id, req.user.sub, dto);
   }
 
   @Post('quote')

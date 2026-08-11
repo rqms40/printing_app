@@ -69,6 +69,9 @@ export class OrderItem {
   @Column({ name: 'special_instructions', type: 'text', nullable: true })
   specialInstructions: string | null;
 
+  @Column({ name: 'required_at', type: 'timestamptz', nullable: true })
+  requiredAt: Date | null;
+
   @Column({ name: 'destination_id', type: 'int', nullable: true })
   destinationId: number | null;
 

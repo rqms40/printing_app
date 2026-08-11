@@ -8,12 +8,11 @@ import {
   IsOptional,
   IsBoolean,
   IsEnum,
+  IsArray,
+  Min,
   MaxLength,
   Matches,
   IsNotEmpty,
-  Min,
-  Max,
-  ValidateIf,
 } from 'class-validator';
 
 import { FileProcessingType, PricingModel } from '../enums/catalog.enums';
@@ -42,51 +41,48 @@ export class CreateCategoryDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ example: 'marketing-promo' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  @Matches(/^[a-z0-9-]+$/, {
+    message: 'groupSlug must be lowercase alphanumeric with hyphens',
+  })
+  groupSlug?: string;
+
+  @ApiPropertyOptional({ example: 'Marketing & Promotional Collateral' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  groupName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  groupDescription?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  groupSortOrder?: number;
+
   @ApiPropertyOptional({ example: 'Print documents, handouts, and posters.' })
   @IsOptional()
   @IsString()
   @MaxLength(160)
   mobileDescription?: string;
 
-  @ApiPropertyOptional({
-    example: 'Best for: Businesses, startups, and events',
-  })
+  @ApiPropertyOptional({ type: [String] })
   @IsOptional()
-  @IsString()
-  @MaxLength(240)
-  audienceLabel?: string;
+  @IsArray()
+  @IsString({ each: true })
+  examples?: string[];
 
   @ApiPropertyOptional({ example: 'FileTextOutlined' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   icon?: string;
-
-  @ApiPropertyOptional({
-    description: 'Parent category id for subgroup / variant nesting',
-  })
-  @IsOptional()
-  @IsInt()
-  @IsPositive()
-  parentId?: number | null;
-
-  @ApiPropertyOptional({
-    example: 1,
-    description: '1 = category, 2 = subgroup, 3 = variant/leaf',
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(3)
-  catalogLevel?: number;
-
-  @ApiPropertyOptional({
-    default: true,
-    description: 'Whether this node can be ordered (leaves only)',
-  })
-  @IsOptional()
-  @IsBoolean()
-  isOrderable?: boolean;
 
   @ApiPropertyOptional({ enum: FileProcessingType })
   @IsOptional()
@@ -98,11 +94,10 @@ export class CreateCategoryDto {
   @IsEnum(PricingModel)
   pricingModel?: PricingModel;
 
-  @ApiPropertyOptional({ example: 2.0 })
-  @ValidateIf((dto: CreateCategoryDto) => dto.isOrderable !== false)
+  @ApiProperty({ example: 2.0 })
   @IsNumber()
   @Min(0)
-  baseRate?: number;
+  baseRate: number;
 
   @ApiPropertyOptional({ example: 'page' })
   @IsOptional()
@@ -110,19 +105,18 @@ export class CreateCategoryDto {
   @MaxLength(30)
   quantityUnit?: string;
 
-  @ApiPropertyOptional({ example: 50 })
-  @IsOptional()
+  @ApiProperty({ example: 50 })
   @IsInt()
   @IsPositive()
-  maxFileSizeMb?: number;
+  maxFileSizeMb: number;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '["pdf","png","jpg"]',
     description: 'JSON array string of allowed file extensions',
   })
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  allowedExtensions?: string;
+  allowedExtensions: string;
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()

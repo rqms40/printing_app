@@ -27,7 +27,7 @@ export enum CodCollectionStatus {
  * Money: PHP minor units (centavos) as bigint.
  */
 @Entity('cod_collections')
-@Index('idx_cod_collections_order_id', ['orderId'])
+@Index('uq_cod_collections_order_id', ['orderId'], { unique: true })
 @Index('idx_cod_collections_rider_id', ['riderId'])
 @Index('idx_cod_collections_status', ['status'])
 export class CodCollection {

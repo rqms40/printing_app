@@ -21,15 +21,24 @@ void main() {
       final repo = TutorialRepository();
       await repo.syncFromServer(['onboarding', 'pipeline']);
       final result = await repo.loadLocal();
-      expect(result, containsAll([TutorialKey.onboarding, TutorialKey.pipeline]));
+      expect(
+        result,
+        containsAll([TutorialKey.onboarding, TutorialKey.pipeline]),
+      );
     });
 
     test('markSeen adds key to existing set', () async {
       final repo = TutorialRepository();
       await repo.syncFromServer(['onboarding']);
-      await repo.markSeen(TutorialKey.pipeline, currentKeys: {TutorialKey.onboarding});
+      await repo.markSeen(
+        TutorialKey.pipeline,
+        currentKeys: {TutorialKey.onboarding},
+      );
       final result = await repo.loadLocal();
-      expect(result, containsAll([TutorialKey.onboarding, TutorialKey.pipeline]));
+      expect(
+        result,
+        containsAll([TutorialKey.onboarding, TutorialKey.pipeline]),
+      );
     });
 
     test('resetAll clears all keys from prefs', () async {
@@ -48,6 +57,19 @@ void main() {
       final result = await repo.loadLocal();
       expect(result, contains(TutorialKey.onboarding));
       expect(result.length, 1); // unknown key silently dropped
+    });
+
+    test('tutorial keys are isolated between accounts on one device', () async {
+      final repo = TutorialRepository();
+      await repo.syncFromServer(['pipeline'], accountId: 'customer-one');
+      await repo.syncFromServer(['homeFeatures'], accountId: 'customer-two');
+
+      expect(await repo.loadLocal(accountId: 'customer-one'), {
+        TutorialKey.pipeline,
+      });
+      expect(await repo.loadLocal(accountId: 'customer-two'), {
+        TutorialKey.homeFeatures,
+      });
     });
   });
 }

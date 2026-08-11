@@ -1,25 +1,67 @@
 class ProductCatalog {
-  const ProductCatalog({required this.categories});
+  const ProductCatalog({
+    this.version = '1.10',
+    this.groups = const [],
+    required this.categories,
+  });
 
+  final String version;
+  final List<ProductGroup> groups;
   final List<ProductCategory> categories;
 
   factory ProductCatalog.fromJson(Map<String, dynamic> json) {
     final rawCategories = json['categories'];
-    return ProductCatalog(
-      categories: rawCategories is List
-          ? rawCategories
-                .whereType<Map>()
-                .map(
-                  (entry) => ProductCategory.fromJson(
-                    Map<String, dynamic>.from(entry),
-                  ),
-                )
-                .toList()
-          : const [],
+    final categories = rawCategories is List
+        ? rawCategories
+              .whereType<Map>()
+              .map(
+                (entry) =>
+                    ProductCategory.fromJson(Map<String, dynamic>.from(entry)),
+              )
+              .toList()
+        : <ProductCategory>[];
+    final rawGroups = json['groups'];
+    var groups = rawGroups is List
+        ? rawGroups
+              .whereType<Map>()
+              .map(
+                (entry) =>
+                    ProductGroup.fromJson(Map<String, dynamic>.from(entry)),
+              )
+              .toList()
+        : <ProductGroup>[];
+
+    if (groups.isEmpty) {
+      groups = _groupsFromFlatCategories(categories);
+    }
+    final groupedProducts = groups.expand((group) => group.products);
+    final knownSlugs = categories.map((category) => category.slug).toSet();
+    categories.addAll(
+      groupedProducts.where((product) => knownSlugs.add(product.slug)),
     );
+
+    final catalog = ProductCatalog(
+      version: json['version']?.toString() ?? '',
+      groups: groups,
+      categories: categories,
+    );
+    if (catalog.activeGroups.isEmpty) {
+      throw const FormatException(
+        'Catalog response contains no active orderable groups',
+      );
+    }
+    return catalog;
   }
 
-  factory ProductCatalog.fallback() => const ProductCatalog(
+  /// Exact v1.10 browse snapshot. It is never submission authority.
+  factory ProductCatalog.v110Snapshot() =>
+      ProductCatalog.fromJson(_v110SnapshotJson());
+
+  factory ProductCatalog.fallback() => ProductCatalog.v110Snapshot();
+
+  /// Historical Paper/3D definitions retained only for saved draft routes.
+  factory ProductCatalog.legacyFallback() => const ProductCatalog(
+    version: 'legacy',
     categories: [
       ProductCategory(
         id: 1,
@@ -340,25 +382,37 @@ class ProductCatalog {
 
   List<ProductCategory> get activeCategories =>
       categories.where((category) => category.isActive).toList()
-        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+        ..sort(_compareProductOrder);
 
-  /// Top-level browse nodes (Category L1 + legacy orderable roots).
-  List<ProductCategory> get rootCategories => activeCategories
-      .where((category) => category.parentId == null)
-      .toList()
-    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  List<ProductGroup> get activeGroups {
+    final active = groups
+        .map((group) => group.withActiveProducts())
+        .where((group) => group.products.isNotEmpty)
+        .toList();
+    active.sort(
+      (left, right) => left.sortOrder.compareTo(right.sortOrder) != 0
+          ? left.sortOrder.compareTo(right.sortOrder)
+          : left.slug.compareTo(right.slug),
+    );
+    return active;
+  }
 
-  /// Orderable leaves only (checkout-eligible products).
-  List<ProductCategory> get orderableCategories => activeCategories
-      .where((category) => category.isOrderable)
-      .toList()
-    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  ProductGroup? groupBySlug(String? slug) {
+    if (slug == null) return null;
+    for (final group in activeGroups) {
+      if (group.slug == slug) return group;
+    }
+    return null;
+  }
 
-  List<ProductCategory> childrenOf(int? parentId) {
-    return activeCategories
-        .where((category) => category.parentId == parentId)
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  ProductCategory? productBySlug(String? slug) {
+    if (slug == null) return null;
+    for (final group in activeGroups) {
+      for (final product in group.products) {
+        if (product.slug == slug) return product;
+      }
+    }
+    return null;
   }
 
   ProductCategory? categoryBySlug(String? slug) {
@@ -368,14 +422,622 @@ class ProductCatalog {
     }
     return null;
   }
-
-  ProductCategory? categoryById(int id) {
-    for (final category in categories) {
-      if (category.id == id) return category;
-    }
-    return null;
-  }
 }
+
+class ProductGroup {
+  const ProductGroup({
+    required this.slug,
+    required this.name,
+    required this.description,
+    required this.sortOrder,
+    required this.products,
+  });
+
+  final String slug;
+  final String name;
+  final String description;
+  final int sortOrder;
+  final List<ProductCategory> products;
+
+  factory ProductGroup.fromJson(Map<String, dynamic> json) {
+    final slug = (json['slug'] ?? json['group_slug'])?.toString() ?? '';
+    final name = (json['name'] ?? json['group_name'])?.toString() ?? '';
+    final description =
+        (json['description'] ?? json['group_description'])?.toString() ?? '';
+    final sortOrder = _readInt(
+      json['sortOrder'] ?? json['sort_order'] ?? json['group_sort_order'],
+      0,
+    );
+    final rawProducts = json['products'];
+    final products = rawProducts is List
+        ? rawProducts
+              .whereType<Map>()
+              .map(
+                (entry) => ProductCategory.fromJson(
+                  Map<String, dynamic>.from(entry),
+                  groupSlug: slug,
+                  groupName: name,
+                  groupDescription: description,
+                  groupSortOrder: sortOrder,
+                ),
+              )
+              .toList()
+        : <ProductCategory>[];
+    products.sort(_compareProductOrder);
+    return ProductGroup(
+      slug: slug,
+      name: name,
+      description: description,
+      sortOrder: sortOrder,
+      products: products,
+    );
+  }
+
+  ProductGroup withActiveProducts() => ProductGroup(
+    slug: slug,
+    name: name,
+    description: description,
+    sortOrder: sortOrder,
+    products: products.where((product) => product.isActive).toList(),
+  );
+}
+
+List<ProductGroup> _groupsFromFlatCategories(List<ProductCategory> categories) {
+  final grouped = <String, List<ProductCategory>>{};
+  for (final category in categories) {
+    final slug = category.groupSlug;
+    if (slug == null || slug.isEmpty) continue;
+    grouped.putIfAbsent(slug, () => []).add(category);
+  }
+  return grouped.entries.map((entry) {
+    final products = entry.value.toList()..sort(_compareProductOrder);
+    final first = products.first;
+    return ProductGroup(
+      slug: entry.key,
+      name: first.groupName ?? '',
+      description: first.groupDescription ?? '',
+      sortOrder: first.groupSortOrder ?? 0,
+      products: products,
+    );
+  }).toList();
+}
+
+int _compareProductOrder(ProductCategory left, ProductCategory right) {
+  final bySortOrder = left.sortOrder.compareTo(right.sortOrder);
+  if (bySortOrder != 0) return bySortOrder;
+  final byId = left.id.compareTo(right.id);
+  if (byId != 0) return byId;
+  return left.slug.compareTo(right.slug);
+}
+
+const _generalArtworkExtensions = [
+  'pdf',
+  'png',
+  'jpg',
+  'jpeg',
+  'tif',
+  'tiff',
+  'ai',
+  'psd',
+];
+
+Map<String, dynamic> _v110SnapshotJson() => {
+  'version': '1.10',
+  'groups': [
+    {
+      'slug': 'marketing-promo',
+      'name': 'Marketing & Promotional Collateral',
+      'description':
+          'Best for businesses, startups, and events looking to promote services or distribute physical marketing material.',
+      'sortOrder': 1,
+      'products': [
+        _snapshotProduct(
+          id: 1,
+          slug: 'flyers',
+          name: 'Flyers',
+          description:
+              'Single sheets, event promos, and product announcements.',
+          examples: const [
+            'Single sheets',
+            'Event promos',
+            'Product announcements',
+          ],
+          sortOrder: 1,
+          fileProcessingType: 'document',
+          quantityUnit: 'copy',
+          specs: _printCollateralSpecs(),
+        ),
+        _snapshotProduct(
+          id: 2,
+          slug: 'brochures',
+          name: 'Brochures',
+          description: 'Bi-fold, tri-fold, and company profile brochures.',
+          examples: const ['Bi-fold', 'Tri-fold', 'Company profiles'],
+          sortOrder: 2,
+          fileProcessingType: 'document',
+          quantityUnit: 'copy',
+          specs: _printCollateralSpecs(),
+        ),
+        _snapshotProduct(
+          id: 3,
+          slug: 'posters-standees',
+          name: 'Posters & Standees',
+          description: 'Indoor event posters, pull-up banners, and x-stands.',
+          examples: const [
+            'Indoor event posters',
+            'Pull-up banners',
+            'X-stands',
+          ],
+          sortOrder: 3,
+          fileProcessingType: 'document',
+          quantityUnit: 'piece',
+          specs: _printCollateralSpecs(),
+        ),
+        _snapshotProduct(
+          id: 4,
+          slug: 'business-cards',
+          name: 'Business Cards',
+          description:
+              'Standard, matte, glossy, textured, and QR-code-enabled business cards.',
+          examples: const [
+            'Standard',
+            'Matte',
+            'Glossy',
+            'Textured',
+            'QR-code enabled',
+          ],
+          sortOrder: 4,
+          fileProcessingType: 'document',
+          quantityUnit: 'card',
+          specs: _printCollateralSpecs(),
+        ),
+        _snapshotProduct(
+          id: 5,
+          slug: 'stickers-packaging-labels',
+          name: 'Stickers & Packaging Labels',
+          description:
+              'Die-cut product labels, vinyl stickers, and sheet stickers.',
+          examples: const [
+            'Die-cut product labels',
+            'Vinyl stickers',
+            'Sheet stickers',
+          ],
+          sortOrder: 5,
+          fileProcessingType: 'document',
+          quantityUnit: 'piece',
+          specs: _printCollateralSpecs(),
+        ),
+        _snapshotProduct(
+          id: 6,
+          slug: 'tarpaulins-outdoor-banners',
+          name: 'Tarpaulins & Outdoor Banners',
+          description:
+              'Event banners, billboards, and temporary roadside signs.',
+          examples: const [
+            'Event banners',
+            'Billboards',
+            'Temporary roadside signs',
+          ],
+          sortOrder: 6,
+          fileProcessingType: 'document',
+          quantityUnit: 'piece',
+          specs: _printCollateralSpecs(),
+        ),
+      ],
+    },
+    {
+      'slug': 'corporate-merch',
+      'name': 'Corporate & Event Merchandise',
+      'description':
+          'Best for student organizations, HR teams, event organizers, and corporate branding.',
+      'sortOrder': 2,
+      'products': [
+        _snapshotProduct(
+          id: 7,
+          slug: 'lanyards-id-accessories',
+          name: 'Lanyards & ID Accessories',
+          description:
+              'Sublimation lanyards, custom ID laces, and badge holders.',
+          examples: const [
+            'Sublimation lanyards',
+            'Custom ID laces',
+            'Badge holders',
+          ],
+          sortOrder: 1,
+          fileProcessingType: 'generic_file',
+          quantityUnit: 'piece',
+          specs: _merchandiseSpecs(),
+        ),
+        _snapshotProduct(
+          id: 8,
+          slug: 'custom-apparel',
+          name: 'Custom Apparel',
+          description: 'T-shirts, hoodies, polo shirts, and tote bags.',
+          examples: const ['T-shirts', 'Hoodies', 'Polo shirts', 'Tote bags'],
+          sortOrder: 2,
+          fileProcessingType: 'generic_file',
+          quantityUnit: 'piece',
+          specs: _merchandiseSpecs(),
+        ),
+        _snapshotProduct(
+          id: 9,
+          slug: 'drinkware',
+          name: 'Drinkware',
+          description:
+              'Sublimation mugs, laser-engraved tumblers, and water bottles.',
+          examples: const [
+            'Sublimation mugs',
+            'Laser-engraved tumblers',
+            'Water bottles',
+          ],
+          sortOrder: 3,
+          fileProcessingType: 'generic_file',
+          quantityUnit: 'piece',
+          specs: _merchandiseSpecs(),
+        ),
+        _snapshotProduct(
+          id: 10,
+          slug: 'corporate-giveaways',
+          name: 'Corporate Giveaways',
+          description:
+              'Eco-bags, umbrellas, customized pens, keychains, and notebooks.',
+          examples: const [
+            'Eco-bags',
+            'Umbrellas',
+            'Customized pens',
+            'Keychains',
+            'Notebooks',
+          ],
+          sortOrder: 4,
+          fileProcessingType: 'generic_file',
+          quantityUnit: 'piece',
+          specs: _merchandiseSpecs(),
+        ),
+      ],
+    },
+    {
+      'slug': 'awards-signages',
+      'name': 'Recognition, Awards & Signage',
+      'description':
+          'Best for competitions, graduations, guest speakers, store branding, and office spaces.',
+      'sortOrder': 3,
+      'products': [
+        _snapshotProduct(
+          id: 11,
+          slug: 'certificates-diplomas',
+          name: 'Certificates & Diplomas',
+          description:
+              'Specialty-paper, foil-stamped, and embossed certificates and diplomas.',
+          examples: const ['Specialty paper', 'Foil-stamped', 'Embossed'],
+          sortOrder: 1,
+          fileProcessingType: 'generic_file',
+          quantityUnit: 'copy',
+          specs: _awardsAndSignageSpecs(),
+        ),
+        _snapshotProduct(
+          id: 12,
+          slug: 'plaques-trophies',
+          name: 'Plaques & Trophies',
+          description:
+              'Custom acrylic cuts, wooden plaques, and 3D-printed awards.',
+          examples: const [
+            'Custom acrylic cuts',
+            'Wooden plaques',
+            '3D-printed awards',
+          ],
+          sortOrder: 2,
+          fileProcessingType: 'generic_file',
+          quantityUnit: 'piece',
+          specs: _awardsAndSignageSpecs(),
+        ),
+        _snapshotProduct(
+          id: 13,
+          slug: 'medals-ribbons',
+          name: 'Medals & Ribbons',
+          description:
+              'Metal or acrylic medals with custom sublimation ribbons.',
+          examples: const [
+            'Metal medals',
+            'Acrylic medals',
+            'Custom sublimation ribbons',
+          ],
+          sortOrder: 3,
+          fileProcessingType: 'generic_file',
+          quantityUnit: 'piece',
+          specs: _awardsAndSignageSpecs(),
+        ),
+        _snapshotProduct(
+          id: 14,
+          slug: 'business-store-signages',
+          name: 'Business & Store Signages',
+          description:
+              'Acrylic build-up letters, Panaflex lightboxes, and LED neon flex.',
+          examples: const [
+            'Acrylic build-up letters',
+            'Panaflex lightboxes',
+            'LED neon flex',
+          ],
+          sortOrder: 4,
+          fileProcessingType: 'generic_file',
+          quantityUnit: 'piece',
+          specs: _awardsAndSignageSpecs(),
+        ),
+      ],
+    },
+    {
+      'slug': 'specialized-prototyping',
+      'name': 'Specialized & Prototyping Services',
+      'description':
+          'Best for architecture students, engineers, industrial designers, and specialized builds.',
+      'sortOrder': 4,
+      'products': [
+        _snapshotProduct(
+          id: 15,
+          slug: '3d-printing-scale-models',
+          name: '3D Printing & Scale Models',
+          description:
+              'Rapid prototyping, architectural scale models, and custom parts.',
+          examples: const [
+            'Rapid prototyping',
+            'Architectural scale models',
+            'Custom parts',
+          ],
+          sortOrder: 1,
+          fileProcessingType: 'model_3d',
+          quantityUnit: 'model',
+          maxFileSizeMb: 200,
+          allowedExtensions: const ['stl', 'obj', '3mf'],
+          specs: _fabrication3dSpecs(),
+        ),
+        _snapshotProduct(
+          id: 16,
+          slug: 'blueprint-cad-plotting',
+          name: 'Blueprint & CAD Plotting',
+          description: 'Large-format architectural and engineering plans.',
+          examples: const [
+            'Large-format architectural plans',
+            'Engineering plans',
+          ],
+          sortOrder: 2,
+          fileProcessingType: 'document',
+          quantityUnit: 'copy',
+          allowedExtensions: const ['pdf', 'dwg', 'dxf'],
+          specs: _cadPlottingSpecs(),
+        ),
+        _snapshotProduct(
+          id: 17,
+          slug: 'packaging-box-production',
+          name: 'Packaging & Box Production',
+          description:
+              'Custom product boxes, mailer boxes, and food-grade packaging.',
+          examples: const [
+            'Custom product boxes',
+            'Mailer boxes',
+            'Food-grade packaging',
+          ],
+          sortOrder: 3,
+          fileProcessingType: 'generic_file',
+          quantityUnit: 'box',
+          specs: _packagingSpecs(),
+        ),
+      ],
+    },
+  ],
+};
+
+Map<String, dynamic> _snapshotProduct({
+  required int id,
+  required String slug,
+  required String name,
+  required String description,
+  required List<String> examples,
+  required int sortOrder,
+  required String fileProcessingType,
+  required String quantityUnit,
+  required List<Map<String, dynamic>> specs,
+  int maxFileSizeMb = 100,
+  List<String> allowedExtensions = _generalArtworkExtensions,
+}) => {
+  'id': id,
+  'slug': slug,
+  'name': name,
+  'description': description,
+  'mobileDescription': description,
+  'examples': examples,
+  'sortOrder': sortOrder,
+  'fileProcessingType': fileProcessingType,
+  'pricingModel': 'quote_required',
+  'pricingStatus': 'pending_quote',
+  'baseRate': null,
+  'quantityUnit': quantityUnit,
+  'maxFileSizeMb': maxFileSizeMb,
+  'allowedExtensions': allowedExtensions,
+  'isActive': true,
+  'specs': specs,
+};
+
+Map<String, dynamic> _requiredText(
+  String key,
+  String label,
+  int sortOrder,
+  String placeholder, {
+  bool isRequired = true,
+}) => {
+  'id': 0,
+  'categoryId': 0,
+  'key': key,
+  'label': label,
+  'helpText': null,
+  'inputType': 'text',
+  'valueType': 'string',
+  'isRequired': isRequired,
+  'isActive': true,
+  'pricingRole': 'none',
+  'placeholder': placeholder,
+  'sortOrder': sortOrder,
+  'options': const [],
+};
+
+List<Map<String, dynamic>> _printCollateralSpecs() => [
+  _requiredText(
+    'dimensions_or_standard_size',
+    'Dimensions or standard size',
+    10,
+    'Enter dimensions or a standard size',
+  ),
+  _requiredText(
+    'stock_or_material',
+    'Stock or material',
+    20,
+    'Describe the requested stock or material',
+  ),
+  _requiredText('color', 'Color', 30, 'Describe the requested color'),
+  {
+    'id': 0,
+    'categoryId': 0,
+    'key': 'sides',
+    'label': 'Sides',
+    'helpText': 'Enter 1 for single-sided or 2 for double-sided printing.',
+    'inputType': 'number',
+    'valueType': 'number',
+    'isRequired': true,
+    'isActive': true,
+    'pricingRole': 'none',
+    'minValue': 1,
+    'maxValue': 2,
+    'stepValue': 1,
+    'sortOrder': 40,
+    'options': const [],
+  },
+  _requiredText('finish', 'Finish', 50, 'Describe the requested finish'),
+];
+
+List<Map<String, dynamic>> _merchandiseSpecs() => [
+  _requiredText(
+    'item_subtype',
+    'Item subtype',
+    10,
+    'Describe the item subtype',
+  ),
+  _requiredText(
+    'variant_or_size',
+    'Variant or size',
+    20,
+    'Enter the requested variant or size',
+  ),
+  _requiredText('color', 'Color', 30, 'Describe the requested color'),
+  _requiredText(
+    'branding_method',
+    'Branding method',
+    40,
+    'Describe the requested branding method',
+  ),
+  _requiredText(
+    'artwork_placement',
+    'Artwork placement',
+    50,
+    'Describe where the artwork should appear',
+  ),
+];
+
+List<Map<String, dynamic>> _awardsAndSignageSpecs() => [
+  _requiredText(
+    'dimensions',
+    'Dimensions',
+    10,
+    'Enter the required dimensions',
+  ),
+  _requiredText('material', 'Material', 20, 'Describe the requested material'),
+  _requiredText('finish', 'Finish', 30, 'Describe the requested finish'),
+  _requiredText(
+    'personalization_text',
+    'Personalization text',
+    40,
+    'Enter names, titles, dates, or other personalization',
+  ),
+  _requiredText(
+    'mounting_or_lighting',
+    'Mounting or lighting',
+    50,
+    'Describe mounting or lighting needs, if applicable',
+    isRequired: false,
+  ),
+];
+
+List<Map<String, dynamic>> _fabrication3dSpecs() => [
+  _requiredText(
+    'dimensions_or_scale',
+    'Dimensions or scale',
+    10,
+    'Enter finished dimensions or scale',
+  ),
+  _requiredText('material', 'Material', 20, 'Describe the requested material'),
+  _requiredText('color', 'Color', 30, 'Describe the requested color'),
+  _requiredText(
+    'layer_or_infill_preference',
+    'Layer or infill preference',
+    40,
+    'Describe layer height or infill preferences',
+  ),
+];
+
+List<Map<String, dynamic>> _cadPlottingSpecs() => [
+  _requiredText(
+    'sheet_size',
+    'Sheet size',
+    10,
+    'Enter the required sheet size',
+  ),
+  _requiredText(
+    'drawing_scale',
+    'Drawing scale',
+    20,
+    'Enter the drawing scale',
+  ),
+  _requiredText(
+    'color_mode',
+    'Color mode',
+    30,
+    'Describe the required color mode',
+  ),
+  _requiredText(
+    'folding_or_binding',
+    'Folding or binding',
+    40,
+    'Describe folding or binding requirements',
+  ),
+];
+
+List<Map<String, dynamic>> _packagingSpecs() => [
+  _requiredText(
+    'box_style',
+    'Box style',
+    10,
+    'Describe the requested box style',
+  ),
+  _requiredText(
+    'internal_dimensions',
+    'Internal dimensions',
+    20,
+    'Enter the internal length, width, and height',
+  ),
+  _requiredText('material', 'Material', 30, 'Describe the requested material'),
+  _requiredText('finish', 'Finish', 40, 'Describe the requested finish'),
+  {
+    'id': 0,
+    'categoryId': 0,
+    'key': 'food_grade_requirement',
+    'label': 'Food-grade requirement',
+    'helpText': 'Indicate whether food-grade packaging is required.',
+    'inputType': 'boolean',
+    'valueType': 'boolean',
+    'isRequired': true,
+    'isActive': true,
+    'pricingRole': 'none',
+    'sortOrder': 50,
+    'options': const [],
+  },
+];
 
 class ProductCategory {
   const ProductCategory({
@@ -384,11 +1046,13 @@ class ProductCategory {
     required this.slug,
     this.description,
     this.mobileDescription,
-    this.audienceLabel,
     this.icon,
-    this.parentId,
-    this.catalogLevel = 1,
-    this.isOrderable = true,
+    this.examples = const [],
+    this.groupSlug,
+    this.groupName,
+    this.groupDescription,
+    this.groupSortOrder,
+    this.pricingStatus,
     required this.fileProcessingType,
     required this.pricingModel,
     required this.baseRate,
@@ -405,14 +1069,16 @@ class ProductCategory {
   final String slug;
   final String? description;
   final String? mobileDescription;
-  final String? audienceLabel;
   final String? icon;
-  final int? parentId;
-  final int catalogLevel;
-  final bool isOrderable;
+  final List<String> examples;
+  final String? groupSlug;
+  final String? groupName;
+  final String? groupDescription;
+  final int? groupSortOrder;
+  final String? pricingStatus;
   final String fileProcessingType;
   final String pricingModel;
-  final double baseRate;
+  final double? baseRate;
   final String quantityUnit;
   final int maxFileSizeMb;
   final List<String> allowedExtensions;
@@ -420,11 +1086,14 @@ class ProductCategory {
   final int sortOrder;
   final List<ProductSpecDefinition> specs;
 
-  bool get isBrowseGroup => !isOrderable;
-
-  factory ProductCategory.fromJson(Map<String, dynamic> json) {
+  factory ProductCategory.fromJson(
+    Map<String, dynamic> json, {
+    String? groupSlug,
+    String? groupName,
+    String? groupDescription,
+    int? groupSortOrder,
+  }) {
     final rawSpecs = json['specs'];
-    final parentRaw = json['parentId'] ?? json['parent_id'];
     return ProductCategory(
       id: _readInt(json['id'], 0),
       name: json['name']?.toString() ?? '',
@@ -432,18 +1101,22 @@ class ProductCategory {
       description: json['description']?.toString(),
       mobileDescription:
           (json['mobileDescription'] ?? json['mobile_description'])?.toString(),
-      audienceLabel:
-          (json['audienceLabel'] ?? json['audience_label'])?.toString(),
       icon: json['icon']?.toString(),
-      parentId: parentRaw == null ? null : _readInt(parentRaw, 0),
-      catalogLevel: _readInt(
-        json['catalogLevel'] ?? json['catalog_level'],
-        1,
-      ),
-      isOrderable: _readBool(
-        json['isOrderable'] ?? json['is_orderable'],
-        true,
-      ),
+      examples: _readStringList(json['examples']),
+      groupSlug:
+          (json['groupSlug'] ?? json['group_slug'])?.toString() ?? groupSlug,
+      groupName:
+          (json['groupName'] ?? json['group_name'])?.toString() ?? groupName,
+      groupDescription:
+          (json['groupDescription'] ?? json['group_description'])?.toString() ??
+          groupDescription,
+      groupSortOrder:
+          _readNullableInt(
+            json['groupSortOrder'] ?? json['group_sort_order'],
+          ) ??
+          groupSortOrder,
+      pricingStatus: (json['pricingStatus'] ?? json['pricing_status'])
+          ?.toString(),
       fileProcessingType:
           (json['fileProcessingType'] ?? json['file_processing_type'])
               ?.toString() ??
@@ -451,7 +1124,7 @@ class ProductCategory {
       pricingModel:
           (json['pricingModel'] ?? json['pricing_model'])?.toString() ??
           'per_page_modifiers',
-      baseRate: _readDouble(json['baseRate'] ?? json['base_rate'], 0),
+      baseRate: _readNullableDouble(json['baseRate'] ?? json['base_rate']),
       quantityUnit:
           (json['quantityUnit'] ?? json['quantity_unit'])?.toString() ?? 'copy',
       maxFileSizeMb: _readInt(
@@ -511,6 +1184,9 @@ class ProductCategory {
   }
 
   double estimatePrice(Map<String, dynamic> values, int quantity) {
+    if (pricingModel == 'quote_required') {
+      throw StateError('RFQ products do not have a client-estimated price');
+    }
     if (pricingModel == 'base_plus_material_estimate') {
       return _estimateBasePlusMaterial(values, quantity);
     }
@@ -531,7 +1207,7 @@ class ProductCategory {
       if (spec.pricingRole == 'fixed_fee') fixedFees += option.fixedFee;
     }
     return _roundMoney(
-      (baseRate * pageCount * multiplier + fixedFees) * quantity,
+      ((baseRate ?? 0) * pageCount * multiplier + fixedFees) * quantity,
     );
   }
 
@@ -548,7 +1224,9 @@ class ProductCategory {
       }
       if (spec.pricingRole == 'fixed_fee') fixedFees += option.fixedFee;
     }
-    return _roundMoney((baseRate + unitCost * estimate + fixedFees) * quantity);
+    return _roundMoney(
+      ((baseRate ?? 0) + unitCost * estimate + fixedFees) * quantity,
+    );
   }
 }
 
@@ -671,18 +1349,17 @@ class ProductSpecDefinition {
       final defaultOption = options
           .where((option) => option.isDefault)
           .firstOrNull;
-      return defaultOption?.value ??
-          options.firstOrNull?.value ??
-          defaultValue ??
-          '';
+      return defaultOption?.value ?? defaultValue;
     }
     if (valueType == 'number') {
-      return _readDouble(defaultValue, minValue ?? 0);
+      return defaultValue == null
+          ? null
+          : double.tryParse(defaultValue!.trim());
     }
     if (valueType == 'boolean') {
-      return _readBool(defaultValue, false);
+      return defaultValue == null ? null : _readBool(defaultValue, false);
     }
-    return defaultValue ?? '';
+    return defaultValue;
   }
 
   ProductSpecOption? optionForValue(dynamic value) {

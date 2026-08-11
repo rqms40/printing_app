@@ -11,6 +11,7 @@ import {
   BadRequestException,
   Logger,
   Request,
+  Optional,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -20,7 +21,11 @@ import { RidersService } from '../riders/riders.service';
 import { UpdateStatusDto } from '../orders/dto/update-status.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { Order, OrderStatus } from '../orders/entities/order.entity';
+import {
+  Order,
+  OrderStatus,
+  PricingStatus,
+} from '../orders/entities/order.entity';
 import { adminAllowedNextOrderStatuses } from '../orders/order-status-transition';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
@@ -46,7 +51,7 @@ import {
   SupplierAssignmentDecision,
 } from '../matching/entities/supplier-assignment.entity';
 import { UpdateAdminRiderDto } from './dto/update-admin-rider.dto';
-import { AuditEvent } from '../audit/entities/audit-event.entity';
+import { MatchingService } from '../matching/matching.service';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -94,8 +99,7 @@ export class AdminController {
     private deliveryAssignmentsRepo: Repository<DeliveryAssignment>,
     @InjectRepository(SupplierAssignment)
     private supplierAssignmentsRepo: Repository<SupplierAssignment>,
-    @InjectRepository(AuditEvent)
-    private auditEventsRepo: Repository<AuditEvent>,
+    @Optional() private readonly matchingService?: MatchingService,
   ) {}
 
   @Patch('tam-surveys/settings')
@@ -507,10 +511,10 @@ export class AdminController {
       !assignment.pickupOtpVerifiedAt && assignment.pickupOtpCode
         ? assignment.pickupOtpCode
         : null;
-    // Delivery OTP is available from assign through handoff (same code the
-    // customer sees on their order status card).
     const deliveryOtp =
-      !assignment.deliveryOtpVerifiedAt && assignment.deliveryOtpCode
+      assignment.pickupOtpVerifiedAt &&
+      !assignment.deliveryOtpVerifiedAt &&
+      assignment.deliveryOtpCode
         ? assignment.deliveryOtpCode
         : null;
     return {
@@ -541,26 +545,6 @@ export class AdminController {
       signatureData: assignment.proofSignatureData ?? null,
       capturedAt: assignment.proofCapturedAt ?? null,
       capturedByRiderId: assignment.proofCapturedByRiderId ?? null,
-    };
-  }
-
-  /** Rider pickup handoff photo (required at picked_up). */
-  private pickupProofFromAssignment(
-    assignment: DeliveryAssignment | undefined,
-  ) {
-    if (!assignment) return null;
-    const hasPhoto =
-      assignment.pickupProofFileId != null && assignment.pickupProofFileId > 0;
-    const hasSignature = Boolean(assignment.pickupProofSignatureData?.trim());
-    if (!hasPhoto && !hasSignature) return null;
-    return {
-      type: hasPhoto ? 'photo' : 'signature',
-      fileId: assignment.pickupProofFileId ?? null,
-      objectKey: assignment.pickupProofObjectKey ?? null,
-      signatureData: assignment.pickupProofSignatureData ?? null,
-      capturedAt: assignment.pickupProofCapturedAt ?? null,
-      // Pickup path does not store a separate capturer column — use rider profile.
-      capturedByRiderId: assignment.riderId ?? null,
     };
   }
 
@@ -610,7 +594,8 @@ export class AdminController {
           assignedSupplierContact?: Record<string, unknown> | null;
         }
       ).assignedSupplierContact;
-      return Object.assign(order, {
+      return {
+        ...order,
         assignedRiderContact:
           this.assignedRiderContactFromAssignment(assignment) ??
           (
@@ -638,14 +623,90 @@ export class AdminController {
                   supplierAssignment.selfQcEvidenceFileIds ?? [],
               }
             : null),
+        currentSupplierAssignment: supplierAssignment
+          ? {
+              id: supplierAssignment.id,
+              supplierId: supplierAssignment.supplierId,
+              decision: supplierAssignment.decision,
+              rankPosition: supplierAssignment.rankPosition,
+              acceptanceDeadline: supplierAssignment.acceptanceDeadline ?? null,
+              finalPriceMinor: supplierAssignment.finalPriceMinor ?? null,
+              promisedDate: supplierAssignment.promisedDate ?? null,
+              decidedAt: supplierAssignment.decidedAt ?? null,
+            }
+          : null,
         deliveryProof: this.deliveryProofFromAssignment(assignment),
-        pickupProof: this.pickupProofFromAssignment(assignment),
-      });
+      } as Order;
     });
   }
 
-  private mapProofSnapshot(proof: Record<string, unknown> | null | undefined) {
+  private async attachMatchingOutcomes(orders: Order[]): Promise<Order[]> {
+    if (!this.matchingService) return orders;
+    const projected = new Array<Order>(orders.length);
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < orders.length) {
+        const index = nextIndex++;
+        const order = orders[index];
+        if (order.orderStatus !== OrderStatus.APPROVED_FOR_MATCHING) {
+          projected[index] = {
+            ...order,
+            matchingOutcome: null,
+            unmetCoverage: false,
+          } as Order;
+          continue;
+        }
+        const result = await this.matchingService!.getCandidates(order.id);
+        projected[index] = {
+          ...order,
+          matchingOutcome: result.outcome,
+          unmetCoverage: result.outcome.code === 'no_eligible_supplier',
+        } as Order;
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(4, orders.length) }, () => worker()),
+    );
+    return projected;
+  }
+
+  private currentSupplierAssignment(order: Order) {
+    const assignment = (
+      order as Order & {
+        currentSupplierAssignment?: {
+          id?: number;
+          supplierId?: number;
+          decision?: string;
+          rankPosition?: number;
+          acceptanceDeadline?: Date | string | null;
+          finalPriceMinor?: string | null;
+          promisedDate?: Date | string | null;
+          decidedAt?: Date | string | null;
+        } | null;
+      }
+    ).currentSupplierAssignment;
+    if (!assignment) return null;
+    return {
+      id: assignment.id ?? null,
+      supplier_id: assignment.supplierId ?? null,
+      decision: assignment.decision ?? null,
+      rank_position: assignment.rankPosition ?? null,
+      acceptance_deadline: assignment.acceptanceDeadline ?? null,
+      final_price_minor: assignment.finalPriceMinor ?? null,
+      promised_date: assignment.promisedDate ?? null,
+      decided_at: assignment.decidedAt ?? null,
+    };
+  }
+
+  private deliveryProof(o: Order) {
+    const enriched = o as Order & {
+      deliveryProof?: Record<string, unknown> | null;
+      assignedRiderContact?: { proof?: Record<string, unknown> | null } | null;
+    };
+    const proof =
+      enriched.deliveryProof ?? enriched.assignedRiderContact?.proof;
     if (!proof) return null;
+
     return {
       type: proof.type ?? null,
       file_id: proof.fileId ?? proof.file_id ?? null,
@@ -657,33 +718,7 @@ export class AdminController {
     };
   }
 
-  private deliveryProof(o: Order) {
-    const enriched = o as Order & {
-      deliveryProof?: Record<string, unknown> | null;
-      assignedRiderContact?: { proof?: Record<string, unknown> | null } | null;
-    };
-    const proof =
-      enriched.deliveryProof ?? enriched.assignedRiderContact?.proof;
-    return this.mapProofSnapshot(proof);
-  }
-
-  private pickupProof(o: Order) {
-    const enriched = o as Order & {
-      pickupProof?: Record<string, unknown> | null;
-    };
-    return this.mapProofSnapshot(enriched.pickupProof);
-  }
-
-  private mapOrder(
-    o: Order,
-    extras?: {
-      productionMilestones?: Array<{
-        milestone: string;
-        reached_at: Date;
-        notes: string | null;
-      }>;
-    },
-  ) {
+  private mapOrder(o: Order) {
     const firstPaperItem = (o.items ?? []).find(
       (item) => item.category === 'paper',
     );
@@ -692,6 +727,11 @@ export class AdminController {
     );
     const paperSpecs = this.paperSpecsFromValues(firstPaperItem?.specValues);
     const threeDSpecs = this.threeDSpecsFromValues(firstThreeDItem?.specValues);
+    const pending = o.pricingStatus === PricingStatus.PENDING_QUOTE;
+    const projection = o as Order & {
+      matchingOutcome?: { code: string; message: string } | null;
+      unmetCoverage?: boolean;
+    };
 
     return {
       id: o.id,
@@ -703,8 +743,19 @@ export class AdminController {
       file_metadata_id: o.fileMetadataId ?? null,
       special_instructions: o.items?.[0]?.specialInstructions ?? null,
       quantity: o.quantity,
-      total_price: Number(o.totalPrice),
-      delivery_fee: Number(o.deliveryFee),
+      total_price: pending ? null : Number(o.totalPrice),
+      delivery_fee: pending ? null : Number(o.deliveryFee),
+      pricing_status: o.pricingStatus,
+      quoted_total_minor: o.quotedTotalMinor ?? null,
+      quoted_at: o.quotedAt ?? null,
+      quote_accepted_at: o.quoteAcceptedAt ?? null,
+      quoted_by_user_id: o.quotedByUserId ?? null,
+      promised_completion_at: o.promisedCompletionAt ?? null,
+      current_supplier_assignment: this.currentSupplierAssignment(o),
+      matching_outcome: projection.matchingOutcome ?? null,
+      unmet_coverage:
+        projection.unmetCoverage ??
+        projection.matchingOutcome?.code === 'no_eligible_supplier',
       payment_method: o.paymentMethod,
       payment_status: o.paymentStatus,
       order_status: o.orderStatus,
@@ -719,8 +770,10 @@ export class AdminController {
       delivery_slot_booking_id: o.batchOrder?.slotBookingId ?? null,
       speed_tier: o.batchOrder?.speedTier ?? null,
       priority_fee:
-        o.batchOrder?.priorityFee == null
-          ? 0
+        pending || o.batchOrder?.priorityFee == null
+          ? pending
+            ? null
+            : 0
           : Number(o.batchOrder.priorityFee),
       priority:
         o.batchOrder?.priorityFee == null
@@ -728,8 +781,10 @@ export class AdminController {
           : Number(o.batchOrder.priorityFee) > 0,
       delivery_type: o.batchOrder?.deliveryType ?? null,
       extra_destination_fee:
-        o.batchOrder?.extraDestinationFee == null
-          ? 0
+        pending || o.batchOrder?.extraDestinationFee == null
+          ? pending
+            ? null
+            : 0
           : Number(o.batchOrder.extraDestinationFee),
       admin_notes: o.adminNotes ?? null,
       decline_reason: o.declineReason ?? null,
@@ -738,34 +793,67 @@ export class AdminController {
       assigned_rider_id: o.assignedRiderId ?? null,
       assigned_rider_contact: this.assignedRiderContact(o),
       assigned_supplier_contact: this.assignedSupplierContact(o),
-      pickup_proof: this.pickupProof(o),
       delivery_proof: this.deliveryProof(o),
-      production_milestones: extras?.productionMilestones ?? [],
       created_at: o.createdAt,
       updated_at: o.updatedAt,
       paper_specs: paperSpecs,
       three_d_specs: threeDSpecs,
-      items: (o.items ?? []).map((item) => ({
-        id: item.id,
-        order_id: item.orderId,
-        destination_id: item.destinationId ?? null,
-        delivery_address_id: item.destination?.addressId ?? null,
-        delivery_address: this.destinationSnapshot(item.destination),
-        category: item.category,
-        file_url: item.fileUrl ?? null,
-        file_name: item.fileName ?? null,
-        file_metadata_id: item.fileMetadataId ?? null,
-        special_instructions: item.specialInstructions ?? null,
-        quantity: item.quantity,
-        total_price: Number(item.totalPrice),
-        category_id: item.categoryId,
-        category_slug: item.categorySlug,
-        category_name: item.categoryName,
-        pricing_model: item.pricingModel,
-        specs: this.specSnapshots(item.specValues),
-        paper_specs: this.paperSpecsFromValues(item.specValues),
-        three_d_specs: this.threeDSpecsFromValues(item.specValues),
-      })),
+      items: (o.items ?? []).map((item) => {
+        const dynamicItem = item as typeof item & {
+          groupSlug?: string | null;
+          groupName?: string | null;
+          groupDescription?: string | null;
+          examples?: string[];
+          catalogProduct?: {
+            groupSlug?: string | null;
+            groupName?: string | null;
+            groupDescription?: string | null;
+            examples?: string[];
+          } | null;
+        };
+        return {
+          id: item.id,
+          order_id: item.orderId,
+          destination_id: item.destinationId ?? null,
+          delivery_address_id: item.destination?.addressId ?? null,
+          delivery_address: this.destinationSnapshot(item.destination),
+          category: item.category,
+          file_url: item.fileUrl ?? null,
+          file_name: item.fileName ?? null,
+          file_metadata_id: item.fileMetadataId ?? null,
+          special_instructions: item.specialInstructions ?? null,
+          quantity: item.quantity,
+          total_price: pending ? null : Number(item.totalPrice),
+          category_id: item.categoryId,
+          category_slug: item.categorySlug,
+          category_name: item.categoryName,
+          pricing_model: item.pricingModel,
+          group_slug:
+            dynamicItem.groupSlug ??
+            dynamicItem.catalogProduct?.groupSlug ??
+            null,
+          group_name:
+            dynamicItem.groupName ??
+            dynamicItem.catalogProduct?.groupName ??
+            null,
+          group_description:
+            dynamicItem.groupDescription ??
+            dynamicItem.catalogProduct?.groupDescription ??
+            null,
+          examples:
+            dynamicItem.examples ?? dynamicItem.catalogProduct?.examples ?? [],
+          required_at: item.requiredAt ?? null,
+          specs: this.specSnapshots(item.specValues),
+          paper_specs:
+            (item.categorySlug ?? item.category) === 'paper'
+              ? this.paperSpecsFromValues(item.specValues)
+              : null,
+          three_d_specs:
+            (item.categorySlug ?? item.category) === '3d'
+              ? this.threeDSpecsFromValues(item.specValues)
+              : null,
+        };
+      }),
       status_history: (o.statusHistory ?? []).map((h) => ({
         id: h.id,
         order_id: h.orderId,
@@ -858,7 +946,10 @@ export class AdminController {
         'assignedRider',
       ],
     });
-    const enriched = await this.attachDeliveryAssignmentDetails(orders);
+    const withCatalog = await this.ordersService.attachCatalogSnapshots(orders);
+    const withAssignments =
+      await this.attachDeliveryAssignmentDetails(withCatalog);
+    const enriched = await this.attachMatchingOutcomes(withAssignments);
     return enriched.map((o) => this.mapOrder(o));
   }
 
@@ -878,66 +969,59 @@ export class AdminController {
         'assignedRider',
       ],
     });
-    const [enriched] = await this.attachDeliveryAssignmentDetails([order]);
+    const [withCatalog] = await this.ordersService.attachCatalogSnapshots([
+      order,
+    ]);
+    const [withAssignments] = await this.attachDeliveryAssignmentDetails([
+      withCatalog,
+    ]);
+    let [enriched] = await this.attachMatchingOutcomes([withAssignments]);
     // Pull signed logo + self-QC evidence URLs from OrdersService enrichment.
     try {
       const withMedia = await this.ordersService.findById(id);
       if (withMedia) {
         const media = withMedia as Order & {
-          assignedSupplierContact?: Record<string, unknown> | null;
+          assignedSupplierContact?: {
+            logoUrl?: string | null;
+            broadAddress?: string | null;
+            selfQcEvidenceUrls?: string[];
+          } | null;
         };
-        if (media.assignedSupplierContact) {
-          Object.assign(enriched, {
-            assignedSupplierContact: media.assignedSupplierContact,
-          });
+        const adminContact = (
+          enriched as Order & {
+            assignedSupplierContact?: {
+              logoUrl?: string | null;
+              broadAddress?: string | null;
+              selfQcEvidenceUrls?: string[];
+              [key: string]: unknown;
+            } | null;
+          }
+        ).assignedSupplierContact;
+        if (adminContact && media.assignedSupplierContact) {
+          enriched = {
+            ...enriched,
+            assignedSupplierContact: {
+              ...adminContact,
+              logoUrl:
+                media.assignedSupplierContact.logoUrl ??
+                adminContact.logoUrl ??
+                null,
+              broadAddress:
+                media.assignedSupplierContact.broadAddress ??
+                adminContact.broadAddress ??
+                null,
+              selfQcEvidenceUrls:
+                media.assignedSupplierContact.selfQcEvidenceUrls ??
+                adminContact.selfQcEvidenceUrls ??
+                [],
+            },
+          } as Order;
         }
       }
     } catch {
       /* non-fatal — fall back to basic supplier contact */
     }
-
-    const productionMilestones = await this.loadProductionMilestones(id);
-    return this.mapOrder(enriched, { productionMilestones });
-  }
-
-  /**
-   * Supplier production sub-steps (materials → in production → complete)
-   * are audited while order status stays at `production`.
-   */
-  private async loadProductionMilestones(orderId: number): Promise<
-    Array<{
-      milestone: string;
-      reached_at: Date;
-      notes: string | null;
-    }>
-  > {
-    const events = await this.auditEventsRepo.find({
-      where: {
-        orderId,
-        action: 'supplier_production_milestone',
-      },
-      order: { createdAt: 'ASC' },
-    });
-    const byMilestone = new Map<
-      string,
-      { milestone: string; reached_at: Date; notes: string | null }
-    >();
-    for (const event of events) {
-      const raw = event.metadata?.milestone;
-      const milestone =
-        typeof raw === 'string' && raw.trim()
-          ? raw.trim().toLowerCase()
-          : null;
-      if (!milestone) continue;
-      // Keep first reach time for each milestone key.
-      if (byMilestone.has(milestone)) continue;
-      byMilestone.set(milestone, {
-        milestone,
-        reached_at: event.createdAt,
-        notes: event.reason ?? null,
-      });
-    }
-    return [...byMilestone.values()];
+    return this.mapOrder(enriched);
   }
 
   // Update any order's status

@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -62,6 +63,67 @@ void main() {
     expect(find.text('3'), findsOneWidget);
     expect(find.text('Add Items'), findsOneWidget);
     expect(find.text('View'), findsOneWidget);
+  });
+
+  testWidgets('names the quantity stepper controls for assistive technology', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container
+        .read(checkoutProvider.notifier)
+        .addItem(
+          CartItem(
+            id: 'accessible-stepper',
+            category: 'paper',
+            fileName: 'flyer.pdf',
+            filePath: '/tmp/flyer.pdf',
+            fileSize: 1,
+            fileMetadataId: 1,
+            quantity: 3,
+            pageCount: 1,
+            printSubtotal: 150,
+            createdAt: DateTime.now(),
+          ),
+        );
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const Scaffold(body: CheckoutItemsCard()),
+        ),
+        GoRoute(
+          path: '/customer/order/new',
+          builder: (_, _) => const Scaffold(body: SizedBox()),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+
+    expect(find.bySemanticsLabel('Decrease quantity'), findsOneWidget);
+    expect(find.bySemanticsLabel('Increase quantity'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(find.bySemanticsLabel('Decrease quantity'))
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+    expect(
+      tester
+          .getSemantics(find.bySemanticsLabel('Increase quantity'))
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+    semantics.dispose();
   });
 
   testWidgets('View action opens preview with selected item metadata', (

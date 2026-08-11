@@ -34,6 +34,10 @@ import {
   THREE_D_MAX_FILE_SIZE_MB,
 } from '../storage/storage.config';
 import { removeUploadedTempFile } from './upload-temp-file';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
+import { PendingUploadCleanupService } from './pending-upload-cleanup.service';
+import type { PendingUploadHandle } from './pending-upload-cleanup.service';
 
 @Injectable()
 export class FilesService {
@@ -42,8 +46,12 @@ export class FilesService {
   constructor(
     @InjectRepository(FileMetadata)
     private readonly fileRepo: Repository<FileMetadata>,
+    @InjectRepository(ProductCategory)
+    private readonly categoryRepo: Repository<ProductCategory>,
     private readonly storageService: StorageService,
     private readonly analysisService: FileAnalysisService,
+    private readonly catalogUploadPolicy: CatalogUploadPolicyService,
+    private readonly pendingUploadCleanup: PendingUploadCleanupService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -51,28 +59,47 @@ export class FilesService {
     file: Express.Multer.File,
     uploadedBy?: number,
     purpose = 'general',
+    productSlug?: string,
   ): Promise<FileMetadata> {
+    const pendingHandles: PendingUploadHandle[] = [];
     try {
       const normalizedPurpose = this.normalizeUploadPurpose(purpose);
       const fileExt = extname(file.originalname).toLowerCase();
-      const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
-      const extOk =
-        MIME_ALLOWED_EXTENSIONS[file.mimetype]?.includes(fileExt) ?? false;
-      const fileTypeAllowed = mimeOk && extOk;
-      // Match MIME and filename extension. Generic browser fallbacks are still
-      // accepted through MIME_ALLOWED_EXTENSIONS, but only for known extensions.
-      if (!fileTypeAllowed) {
-        throw new BadRequestException('File type not allowed');
-      }
       const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
-      const maxSizeBytes = isThreeDFile
-        ? THREE_D_MAX_FILE_SIZE_BYTES
-        : PAPER_MAX_FILE_SIZE_BYTES;
-      const maxSizeMb = isThreeDFile
-        ? THREE_D_MAX_FILE_SIZE_MB
-        : PAPER_MAX_FILE_SIZE_MB;
-      if (file.size > maxSizeBytes) {
-        throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
+      let catalogProductSlug: string | null = null;
+      if (normalizedPurpose === FilePurpose.CATALOG_ARTWORK) {
+        if (!Number.isInteger(uploadedBy)) {
+          throw new BadRequestException('Catalog artwork owner required');
+        }
+        catalogProductSlug = productSlug?.trim() || null;
+        const category = catalogProductSlug
+          ? await this.categoryRepo.findOne({
+              where: { slug: catalogProductSlug },
+            })
+          : null;
+        if (!category) {
+          throw new BadRequestException('Active catalog product required');
+        }
+        await this.catalogUploadPolicy.validate(category, file);
+      } else {
+        const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
+        const extOk =
+          MIME_ALLOWED_EXTENSIONS[file.mimetype]?.includes(fileExt) ?? false;
+        const fileTypeAllowed = mimeOk && extOk;
+        // Match MIME and filename extension. Generic browser fallbacks are
+        // still accepted for the legacy endpoint through its existing table.
+        if (!fileTypeAllowed) {
+          throw new BadRequestException('File type not allowed');
+        }
+        const maxSizeBytes = isThreeDFile
+          ? THREE_D_MAX_FILE_SIZE_BYTES
+          : PAPER_MAX_FILE_SIZE_BYTES;
+        const maxSizeMb = isThreeDFile
+          ? THREE_D_MAX_FILE_SIZE_MB
+          : PAPER_MAX_FILE_SIZE_MB;
+        if (file.size > maxSizeBytes) {
+          throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
+        }
       }
 
       let evidenceAnalysis:
@@ -82,6 +109,11 @@ export class FilesService {
         normalizedPurpose === FilePurpose.PROOF_OF_DELIVERY ||
         normalizedPurpose === FilePurpose.BETA_TESTIMONIAL
       ) {
+        if (isThreeDFile) {
+          throw new BadRequestException(
+            'Evidence upload must contain a valid image',
+          );
+        }
         try {
           const buffer = await this.readUploadBuffer(file);
           evidenceAnalysis = await this.analysisService.analyze(
@@ -108,45 +140,54 @@ export class FilesService {
       const now = new Date();
       const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
       const objectKey = `uploads/${normalizedPurpose}/${datePath}/${randomUUID()}${fileExt}`;
+      const originalHandle = await this.pendingUploadCleanup.plan(objectKey);
+      pendingHandles.push(originalHandle);
 
       // Run the original-file upload concurrently with content analysis.
       // Disk-backed uploads stream to object storage so large files do not sit
       // in Multer's heap buffer before the service can process them.
-      const uploadPromise = (
-        this.hasMemoryBuffer(file)
-          ? this.storageService.upload(
-              this.storageSource(file),
-              objectKey,
-              file.mimetype,
-            )
-          : this.storageService.upload(
-              this.storageSource(file),
-              objectKey,
-              file.mimetype,
-              file.size,
-            )
-      ).catch((err: unknown) => {
-        this.logger.error('MinIO upload failed', err);
-        throw new InternalServerErrorException('File upload failed');
-      });
+      const uploadPromise = this.pendingUploadCleanup
+        .withUploadLeaseHeartbeat(originalHandle, () =>
+          this.hasMemoryBuffer(file)
+            ? this.storageService.upload(
+                this.storageSource(file),
+                objectKey,
+                file.mimetype,
+              )
+            : this.storageService.upload(
+                this.storageSource(file),
+                objectKey,
+                file.mimetype,
+                file.size,
+              ),
+        )
+        .catch((err: unknown) => {
+          this.logger.error('MinIO upload failed', err);
+          throw new InternalServerErrorException('File upload failed');
+        });
 
       const analysisPromise =
-        evidenceAnalysis !== undefined
-          ? Promise.resolve(evidenceAnalysis)
-          : this.readUploadBuffer(file)
-              .then((buffer) =>
-                this.analysisService.analyze(
-                  buffer,
-                  file.mimetype,
-                  file.originalname,
-                ),
-              )
-              .catch((err: unknown) => {
-                this.logger.warn(
-                  `File analysis failed (non-fatal): ${String(err)}`,
-                );
-                return null;
-              });
+        // Synchronous 3D analysis can fully materialize/decompress archives.
+        // Keep storage/metadata available, but do not generate bounds/previews
+        // for any 3D upload path until analysis itself is streaming/bounded.
+        isThreeDFile || normalizedPurpose === FilePurpose.CATALOG_ARTWORK
+          ? Promise.resolve(null)
+          : evidenceAnalysis !== undefined
+            ? Promise.resolve(evidenceAnalysis)
+            : this.readUploadBuffer(file)
+                .then((buffer) =>
+                  this.analysisService.analyze(
+                    buffer,
+                    file.mimetype,
+                    file.originalname,
+                  ),
+                )
+                .catch((err: unknown) => {
+                  this.logger.warn(
+                    `File analysis failed (non-fatal): ${String(err)}`,
+                  );
+                  return null;
+                });
 
       const [url, analysis] = await Promise.all([
         uploadPromise,
@@ -158,17 +199,28 @@ export class FilesService {
       let previewGlbObjectKey: string | null = null;
       if (analysis?.glbBuffer && analysis.glbBuffer.length > 0) {
         const previewKey = `${objectKey}.preview.glb`;
+        const previewHandle = await this.pendingUploadCleanup.plan(previewKey);
+        pendingHandles.push(previewHandle);
         try {
-          await this.storageService.upload(
-            analysis.glbBuffer,
-            previewKey,
-            'model/gltf-binary',
+          await this.pendingUploadCleanup.withUploadLeaseHeartbeat(
+            previewHandle,
+            () =>
+              this.storageService.upload(
+                analysis.glbBuffer!,
+                previewKey,
+                'model/gltf-binary',
+              ),
           );
           previewGlbObjectKey = previewKey;
         } catch (err) {
           this.logger.warn(
             `Preview GLB upload failed for ${objectKey}: ${err}`,
           );
+          await this.pendingUploadCleanup.queueCleanupAndReconcile(
+            [previewHandle],
+            err,
+          );
+          pendingHandles.splice(pendingHandles.indexOf(previewHandle), 1);
         }
       }
 
@@ -180,6 +232,7 @@ export class FilesService {
         objectKey,
         uploadedBy,
         purpose: normalizedPurpose,
+        catalogProductSlug,
         widthPt: analysis?.widthPt ?? null,
         heightPt: analysis?.heightPt ?? null,
         widthPx: analysis?.widthPx ?? null,
@@ -193,7 +246,34 @@ export class FilesService {
         model3dTriangleCount: analysis?.model3dTriangleCount ?? null,
         previewGlbObjectKey,
       });
-      return this.fileRepo.save(meta);
+      try {
+        const saved = await this.pendingUploadCleanup.finalizeUpload(meta, [
+          ...pendingHandles,
+        ]);
+        pendingHandles.length = 0;
+        return saved;
+      } catch (saveError) {
+        try {
+          const committed = await this.fileRepo.findOne({
+            where: { objectKey },
+          });
+          if (committed) {
+            pendingHandles.length = 0;
+            return committed;
+          }
+        } catch (lookupError) {
+          this.logger.error(
+            `Could not resolve ambiguous metadata save for ${objectKey}; retaining objects for reconciliation (${this.errorLabel(lookupError)})`,
+          );
+        }
+        throw saveError;
+      }
+    } catch (error) {
+      await this.pendingUploadCleanup.queueCleanupAndReconcile(
+        pendingHandles,
+        error,
+      );
+      throw error;
     } finally {
       await removeUploadedTempFile(file);
     }
@@ -204,6 +284,7 @@ export class FilesService {
     const allowed = new Set<FilePurpose>([
       FilePurpose.GENERAL,
       FilePurpose.PAPER,
+      FilePurpose.CATALOG_ARTWORK,
       FilePurpose.PROOF_OF_DELIVERY,
       FilePurpose.BETA_TESTIMONIAL,
     ]);
@@ -211,6 +292,44 @@ export class FilesService {
       throw new BadRequestException('File purpose not allowed');
     }
     return normalized as FilePurpose;
+  }
+
+  async resolveCatalogArtwork(
+    fileId: number,
+    category: ProductCategory,
+    ownerUserId: number,
+    manager: EntityManager,
+  ): Promise<FileMetadata> {
+    if (!Number.isInteger(ownerUserId)) {
+      throw new BadRequestException('Invalid catalog artwork reference');
+    }
+    const file = await manager.getRepository(FileMetadata).findOne({
+      where: { id: fileId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!file || file.uploadedBy !== ownerUserId) {
+      throw new BadRequestException('Invalid catalog artwork reference');
+    }
+    if (
+      file.purpose !== FilePurpose.CATALOG_ARTWORK ||
+      file.catalogProductSlug !== category.slug
+    ) {
+      throw new BadRequestException('Invalid catalog artwork reference');
+    }
+    if (
+      !file.objectKey?.startsWith('uploads/catalog_artwork/') ||
+      file.objectKey.includes('..')
+    ) {
+      throw new BadRequestException('Catalog artwork has no storage object');
+    }
+
+    this.catalogUploadPolicy.validateMetadata(category, file);
+    await this.requireStoredObject(
+      file,
+      new BadRequestException('Catalog artwork storage object not found'),
+      'Could not verify catalog artwork storage',
+    );
+    return file;
   }
 
   async resolveDeliveryProofFile(
@@ -282,6 +401,7 @@ export class FilesService {
   private async requireStoredObject(
     file: FileMetadata,
     missingError: Error,
+    unavailableMessage = 'Could not verify evidence storage',
   ): Promise<void> {
     try {
       if (!(await this.storageService.objectExists(file.objectKey!))) {
@@ -289,9 +409,7 @@ export class FilesService {
       }
     } catch (error) {
       if (error === missingError) throw error;
-      throw new InternalServerErrorException(
-        'Could not verify evidence storage',
-      );
+      throw new InternalServerErrorException(unavailableMessage);
     }
   }
 
@@ -477,7 +595,8 @@ export class FilesService {
       }
       if (
         file.purpose !== FilePurpose.GENERAL &&
-        file.purpose !== FilePurpose.PAPER
+        file.purpose !== FilePurpose.PAPER &&
+        file.purpose !== FilePurpose.CATALOG_ARTWORK
       ) {
         throw new ConflictException('Evidence files are retained');
       }

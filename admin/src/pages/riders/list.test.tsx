@@ -2,13 +2,21 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 import { RiderList } from "./list";
 
-const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
+const { mockGet, mockStartDirectConversation } = vi.hoisted(() => ({
+  mockGet: vi.fn(),
+  mockStartDirectConversation: vi.fn(),
+}));
 
 vi.mock("@/providers/api-client", () => ({
   apiClient: { get: mockGet, post: vi.fn() },
+}));
+
+vi.mock("@/hooks/useChat", () => ({
+  useChatInbox: () => ({ startDirectConversation: mockStartDirectConversation }),
 }));
 
 vi.mock("react-leaflet", () => ({
@@ -71,6 +79,14 @@ const readyOrder = {
   updated_at: "2026-07-10T10:00:00.000Z",
 };
 
+function renderRiderList() {
+  return render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <RiderList />
+    </MemoryRouter>,
+  );
+}
+
 describe("RiderList", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(cleanup);
@@ -82,7 +98,7 @@ describe("RiderList", () => {
         : Promise.resolve({ data: [] }),
     );
 
-    render(<RiderList />);
+    renderRiderList();
 
     expect(await screen.findByText("Rider request failed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry riders" })).toBeInTheDocument();
@@ -94,7 +110,7 @@ describe("RiderList", () => {
       Promise.resolve({ data: url === "/admin/riders" ? riders : [readyOrder] }),
     );
 
-    render(<RiderList />);
+    renderRiderList();
 
     fireEvent.click(await screen.findByRole("button", { name: "Assign rider for ORD-MARK" }));
 
@@ -111,7 +127,7 @@ describe("RiderList", () => {
       Promise.resolve({ data: url === "/admin/riders" ? riders : [] }),
     );
 
-    render(<RiderList />);
+    renderRiderList();
 
     const expand = await screen.findByRole("button", {
       name: "Expand live tracking map",

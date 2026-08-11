@@ -11,6 +11,7 @@ import {
   ParseIntPipe,
   Request,
   ForbiddenException,
+  BadRequestException,
   HttpCode,
   Body,
 } from '@nestjs/common';
@@ -27,9 +28,14 @@ import { PresignedUrlResponseDto } from './dto/presigned-url.dto';
 import { FileInspectionDto } from './dto/file-inspection.dto';
 import { PaperSizeValidatorService } from './paper-size-validator.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
+import { isAdminRole } from '../users/entities/user.entity';
 import { PT_TO_MM } from './files.constants';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
-import { removeUploadedTempFile } from './upload-temp-file';
+import {
+  removeUploadedTempFile,
+  UploadTempFileCleanupInterceptor,
+} from './upload-temp-file';
+import { CatalogUploadDto } from './dto/catalog-upload.dto';
 
 const UPLOAD_TMP_DIR = join(tmpdir(), 'gridgo-uploads');
 
@@ -65,19 +71,29 @@ export class FilesController {
       // rejects anything larger before it reaches application code.
       limits: { fileSize: 200 * 1024 * 1024 },
     }),
+    new UploadTempFileCleanupInterceptor(),
   )
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Request() req: RequestWithUser,
-    @Body('purpose') purpose?: string,
+    @Body() upload: CatalogUploadDto,
   ) {
+    if (!file) {
+      throw new BadRequestException('Multipart file is required');
+    }
+    const purpose = upload?.purpose;
     if (req.user.betaTestimonialPending && purpose !== 'beta_testimonial') {
       await removeUploadedTempFile(file);
       throw new ForbiddenException(
         'Only a beta testimonial photo may be uploaded',
       );
     }
-    return this.filesService.storeMetadata(file, req.user?.sub, purpose);
+    return this.filesService.storeMetadata(
+      file,
+      req.user?.sub,
+      purpose,
+      upload?.productSlug,
+    );
   }
 
   // NOTE: 'my-uploads' must be declared before ':id' so the literal string
@@ -92,8 +108,7 @@ export class FilesController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: RequestWithUser,
   ): Promise<PresignedUrlResponseDto> {
-    const isAdmin =
-      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
+    const isAdmin = isAdminRole(req.user.role);
     const url = await this.filesService.getPresignedUrl(
       id,
       req.user.sub,
@@ -110,8 +125,7 @@ export class FilesController {
     @Query('paperSize') paperSize?: string,
   ): Promise<FileInspectionDto> {
     const file = await this.filesService.findById(id);
-    const isAdmin =
-      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
+    const isAdmin = isAdminRole(req.user.role);
     if (
       !isAdmin &&
       (file.uploadedBy == null || file.uploadedBy !== req.user.sub)
@@ -220,8 +234,7 @@ export class FilesController {
     @Request() req: RequestWithUser,
   ) {
     const file = await this.filesService.findById(id);
-    const isAdmin =
-      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
+    const isAdmin = isAdminRole(req.user.role);
     if (
       !isAdmin &&
       (file.uploadedBy == null || file.uploadedBy !== req.user.sub)
@@ -237,8 +250,7 @@ export class FilesController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: RequestWithUser,
   ): Promise<void> {
-    const isAdmin =
-      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
+    const isAdmin = isAdminRole(req.user.role);
     await this.filesService.deleteOwnedFile(id, req.user.sub, isAdmin);
   }
 }

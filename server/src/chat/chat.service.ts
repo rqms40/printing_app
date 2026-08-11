@@ -25,6 +25,13 @@ import { Order } from '../orders/entities/order.entity';
 
 export type ChatActorRole = 'admin' | 'customer' | 'rider';
 
+export interface RiderMessageNotificationContext {
+  customerId: number;
+  orderId: number;
+  orderRef: string;
+  customerFcmToken: string | null;
+}
+
 @Injectable()
 export class ChatService {
   private readonly SYSTEM_PROMPT = GRIDBOT_SYSTEM_PROMPT;
@@ -305,6 +312,37 @@ export class ChatService {
 
   async findConversation(id: number): Promise<Conversation | null> {
     return this.convRepo.findOne({ where: { id } });
+  }
+
+  async getRiderMessageNotificationContext(
+    conversationId: number,
+  ): Promise<RiderMessageNotificationContext | null> {
+    const conversation = await this.convRepo.findOne({
+      where: { id: conversationId },
+    });
+    if (
+      !conversation ||
+      conversation.type !== ConversationType.RIDER ||
+      conversation.orderId == null
+    ) {
+      return null;
+    }
+
+    const order = await this.orderRepo.findOne({
+      where: {
+        id: conversation.orderId,
+        userId: conversation.customerId,
+      },
+      relations: ['user'],
+    });
+    if (!order) return null;
+
+    return {
+      customerId: conversation.customerId,
+      orderId: order.id,
+      orderRef: order.orderId,
+      customerFcmToken: order.user?.fcmToken ?? null,
+    };
   }
 
   async saveMessage(

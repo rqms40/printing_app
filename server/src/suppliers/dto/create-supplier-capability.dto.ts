@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
@@ -9,8 +10,9 @@ import {
 } from 'class-validator';
 
 export class CreateSupplierCapabilityDto {
-  @ApiProperty({ example: 'flyer', maxLength: 80 })
+  @ApiProperty({ example: 'flyers', maxLength: 80 })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(80)
   productFamily: string;
 

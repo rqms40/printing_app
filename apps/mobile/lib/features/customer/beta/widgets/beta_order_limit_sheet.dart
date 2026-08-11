@@ -5,6 +5,7 @@ class BetaOrderLimitSheet extends StatelessWidget {
 
   static Future<void> show(BuildContext context) {
     return showModalBottomSheet<void>(
+      barrierLabel: 'Dismiss beta order limit notice',
       context: context,
       isScrollControlled: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -66,4 +67,3 @@ class BetaOrderLimitSheet extends StatelessWidget {
     );
   }
 }
-

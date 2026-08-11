@@ -16,6 +16,7 @@ import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { NotificationsService } from './notifications.service';
 import { MarketingSchedulerService } from './marketing-scheduler.service';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+import type { MarketingNotification } from './entities/marketing-notification.entity';
 
 @ApiTags('notifications')
 @ApiBearerAuth()
@@ -37,14 +38,17 @@ export class NotificationsController {
   @Post('marketing')
   @UseGuards(RolesGuard)
   @Roles('ops_admin', 'super_admin')
-  createMarketingNotification(@Body() data: any) {
+  createMarketingNotification(@Body() data: Partial<MarketingNotification>) {
     return this.notificationsService.createMarketingNotification(data);
   }
 
   @Patch('marketing/:id')
   @UseGuards(RolesGuard)
   @Roles('ops_admin', 'super_admin')
-  updateMarketingNotification(@Param('id') id: string, @Body() data: any) {
+  updateMarketingNotification(
+    @Param('id') id: string,
+    @Body() data: Partial<MarketingNotification>,
+  ) {
     return this.notificationsService.updateMarketingNotification(+id, data);
   }
 

@@ -28,6 +28,8 @@ jobs:
       GRIDGO_RIDER_EMAIL: juan@gridgo.ph
       GRIDGO_BETA_EVIDENCE_DIR: ${{ github.workspace }}/beta-evidence
       GRIDGO_BETA_PLAYWRIGHT_OUTPUT: ${{ github.workspace }}/e2e/mobile-web/test-results
+      GRIDGO_CATALOG_RFQ_EVIDENCE_DIR: ${{ github.workspace }}/catalog-rfq-evidence
+      GRIDGO_CATALOG_RFQ_PLAYWRIGHT_OUTPUT: ${{ github.workspace }}/e2e/mobile-web/catalog-test-results
 
     steps:
       - name: Check out requested evidence commit
@@ -113,6 +115,16 @@ jobs:
           GRIDGO_API_URL: http://127.0.0.1:3000/api
         run: npm run test:beta:visual
 
+      - name: Run screenshot-backed catalog RFQ workflow
+        working-directory: e2e/mobile-web
+        env:
+          GRIDGO_RUN_CATALOG_RFQ_VISUAL: "1"
+          MOBILE_WEB_E2E_NO_SERVER: "1"
+          MOBILE_WEB_E2E_URL: http://127.0.0.1:8088
+          GRIDGO_ADMIN_URL: http://127.0.0.1:8189
+          GRIDGO_API_URL: http://127.0.0.1:3000/api
+        run: npm run test:catalog:visual
+
       - name: Build sanitized accepted evidence
         env:
           EXPECTED_SHA: ${{ github.sha }}
@@ -127,11 +139,16 @@ jobs:
           import struct
 
           source = pathlib.Path("beta-evidence").resolve()
+          catalog_source = pathlib.Path("catalog-rfq-evidence").resolve()
           destination = pathlib.Path("sanitized-evidence").resolve()
           if destination.exists():
               shutil.rmtree(destination)
           screenshots = destination / "screenshots"
           screenshots.mkdir(parents=True, mode=0o700)
+          catalog_screenshots = destination / "catalog-screenshots"
+          catalog_screenshots.mkdir(parents=True, mode=0o700)
+          catalog_videos = destination / "catalog-videos"
+          catalog_videos.mkdir(parents=True, mode=0o700)
 
           raw_manifest = json.loads((source / "manifest.json").read_text())
           entries = raw_manifest.get("entries")
@@ -160,11 +177,46 @@ jobs:
                   raise SystemExit(f"incomplete screenshot evidence: {entry['file']}")
               shutil.copyfile(source_image, screenshots / entry["file"])
 
+          catalog_manifest = json.loads((catalog_source / "manifest.json").read_text())
+          catalog_entries = catalog_manifest.get("entries")
+          if not isinstance(catalog_entries, list) or {entry.get("stepId") for entry in catalog_entries} != set(range(1, 9)):
+              raise SystemExit("catalog visual manifest must contain accepted evidence for every step 1..8")
+          for entry in catalog_entries:
+              required = ("surface", "url", "sha256", "png", "assertionSummary")
+              if any(key not in entry for key in required):
+                  raise SystemExit(f"catalog step {entry.get('stepId')} is missing required evidence metadata")
+              if pathlib.Path(entry["file"]).name != entry["file"]:
+                  raise SystemExit(f"unsafe catalog screenshot filename: {entry['file']}")
+              source_image = (catalog_source / "screenshots" / entry["file"]).resolve()
+              if catalog_source not in source_image.parents or not source_image.is_file() or source_image.is_symlink():
+                  raise SystemExit(f"missing or unsafe catalog screenshot path: {entry.get('file')}")
+              data = source_image.read_bytes()
+              if hashlib.sha256(data).hexdigest() != entry["sha256"]:
+                  raise SystemExit(f"catalog screenshot hash mismatch: {entry['file']}")
+              if data[:8] != b"\x89PNG\r\n\x1a\n":
+                  raise SystemExit(f"not a PNG: {entry['file']}")
+              width, height = struct.unpack(">II", data[16:24])
+              png = entry["png"]
+              if (png.get("width"), png.get("height"), png.get("bytes")) != (width, height, len(data)):
+                  raise SystemExit(f"catalog PNG metadata mismatch: {entry['file']}")
+              if width <= 300 or height <= 600 or not entry["assertionSummary"]:
+                  raise SystemExit(f"incomplete catalog screenshot evidence: {entry['file']}")
+              shutil.copyfile(source_image, catalog_screenshots / entry["file"])
+          raw_video_dir = (catalog_source / "videos").resolve()
+          video_files = sorted(raw_video_dir.glob("*.webm"))
+          if len(video_files) < 2:
+              raise SystemExit("catalog visual evidence must retain mobile and Admin videos")
+          for video in video_files:
+              if catalog_source not in video.parents or not video.is_file() or video.is_symlink():
+                  raise SystemExit(f"missing or unsafe catalog video: {video}")
+              shutil.copyfile(video, catalog_videos / video.name)
+
           manifest = {
               "runLabel": raw_manifest.get("runLabel"),
               "generatedAt": raw_manifest.get("generatedAt"),
               "commitSha": os.environ["EXPECTED_SHA"],
               "entries": entries,
+              "catalogEntries": catalog_entries,
           }
           manifest_path = destination / "manifest.json"
           manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
@@ -244,7 +296,7 @@ jobs:
         run: |
           docker compose -f docker-compose.dev.yml down -v --remove-orphans || true
           rm -f server/.env
-          rm -rf beta-evidence sanitized-evidence e2e/mobile-web/test-results
+          rm -rf beta-evidence catalog-rfq-evidence sanitized-evidence e2e/mobile-web/test-results e2e/mobile-web/catalog-test-results
 
   evidence-accepted:
     name: Evidence Accepted
@@ -288,6 +340,9 @@ jobs:
           entries = manifest.get("entries")
           if not isinstance(entries, list) or {entry.get("stepId") for entry in entries} != set(range(1, 30)):
               raise SystemExit("visual manifest must contain accepted evidence for every step 1..29")
+          catalog_entries = manifest.get("catalogEntries")
+          if not isinstance(catalog_entries, list) or {entry.get("stepId") for entry in catalog_entries} != set(range(1, 9)):
+              raise SystemExit("catalog visual manifest must contain accepted evidence for every step 1..8")
 
           files = acceptance.get("files")
           if not isinstance(files, list) or not files:

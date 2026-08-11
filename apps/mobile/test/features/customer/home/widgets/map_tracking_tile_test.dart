@@ -61,7 +61,7 @@ Order _activeOrder() => Order(
   deliveryFee: 0,
   paymentMethod: PaymentMethod.gridCredits,
   paymentStatus: PaymentStatus.paid,
-  orderStatus: OrderStatus.orderPlaced,
+  orderStatus: OrderStatus.submitted,
   deliveryOption: 'delivery',
   createdAt: DateTime(2026, 1, 1),
   updatedAt: DateTime(2026, 1, 1),
@@ -234,7 +234,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.text('No delivery in progress — track your rider here once you order.'),
+      find.text(
+        'No delivery in progress — track your rider here once you order.',
+      ),
       findsOneWidget,
     );
     expect(find.text('Live map starts after rider dispatch.'), findsNothing);
@@ -376,7 +378,7 @@ void main() {
         routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
         orderId: 'ORD-001',
         deliveryAssignmentId: 'assign-001',
-        orderStatus: OrderStatus.onTheWay,
+        orderStatus: OrderStatus.outForDelivery,
       );
       await tester.pumpWidget(
         _wrap(
@@ -410,7 +412,7 @@ void main() {
       routePoints: const [LatLng(7.19, 125.45), LatLng(7.21, 125.47)],
       orderId: 'ORD-SECOND',
       deliveryAssignmentId: null,
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
       queuePosition: 2,
       queueSize: 2,
       canTrackDelivery: false,
@@ -446,7 +448,7 @@ void main() {
       routePoints: const [LatLng(7.19, 125.45), LatLng(7.21, 125.47)],
       orderId: 'ORD-SECOND',
       deliveryAssignmentId: null,
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
       queuePosition: 2,
       queueSize: 2,
       canTrackDelivery: false,
@@ -471,7 +473,7 @@ void main() {
         routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
         orderId: 'ORD-001',
         deliveryAssignmentId: 'assign-001',
-        orderStatus: OrderStatus.onTheWay,
+        orderStatus: OrderStatus.outForDelivery,
       );
 
       await tester.pumpWidget(
@@ -497,9 +499,7 @@ void main() {
       );
       expect(
         tester
-            .widget<Semantics>(
-              _semanticsLabel('Open current delivery details'),
-            )
+            .widget<Semantics>(_semanticsLabel('Open current delivery details'))
             .explicitChildNodes,
         isTrue,
       );
@@ -531,7 +531,7 @@ void main() {
         routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
         orderId: 'ORD-001',
         deliveryAssignmentId: 'assign-001',
-        orderStatus: OrderStatus.onTheWay,
+        orderStatus: OrderStatus.outForDelivery,
         queuePosition: 1,
         queueSize: 2,
       );
@@ -555,9 +555,7 @@ void main() {
       expect(find.text('Order Dispatched'), findsOneWidget);
       expect(find.text('Rider is on the way'), findsOneWidget);
       expect(
-        _semanticsLabel(
-          'Rider is on the way. Live · location updating',
-        ),
+        _semanticsLabel('Rider is on the way. Live · location updating'),
         findsOneWidget,
       );
       expect(find.text('Live map starts after rider dispatch.'), findsNothing);
@@ -569,10 +567,7 @@ void main() {
         mapSemantics.properties.hint,
         'Shows the rider current location and delivery route',
       );
-      expect(
-        _semanticsLabel('Open current delivery details'),
-        findsOneWidget,
-      );
+      expect(_semanticsLabel('Open current delivery details'), findsOneWidget);
       expect(_semanticsLabel('Rider current location marker'), findsNothing);
       expect(find.byKey(const Key('live-delivery-map')), findsOneWidget);
       expect(
@@ -594,7 +589,7 @@ void main() {
       routePoints: route,
       orderId: 'ORD-001',
       deliveryAssignmentId: 'assign-001',
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
     );
 
     await tester.pumpWidget(
@@ -631,7 +626,7 @@ void main() {
       routePoints: route,
       orderId: 'ORD-001',
       deliveryAssignmentId: 'assign-001',
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
       legDurationSeconds: 540,
     );
 
@@ -664,7 +659,7 @@ void main() {
       routePoints: const [],
       orderId: 'ORD-001',
       deliveryAssignmentId: 'assign-001',
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
       routingHealth: RoutingHealth.malformed,
       legDurationSeconds: 120,
     );
@@ -699,7 +694,7 @@ void main() {
       routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
       orderId: 'ORD-001',
       deliveryAssignmentId: 'assign-001',
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
     );
     final harness = _harness(
       state: active,
@@ -737,7 +732,7 @@ void main() {
       orderId: 'ORD-001',
       deliveryAssignmentId: 'assign-001',
       planVersion: 1,
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
     );
     final second = LiveDeliveryMapState.active(
       shopPoint: const LatLng(7.19, 125.45),
@@ -746,7 +741,7 @@ void main() {
       orderId: 'ORD-002',
       deliveryAssignmentId: 'assign-002',
       planVersion: 2,
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
     );
     final desiredMapState = StateProvider<LiveDeliveryMapState>((_) => first);
     final connectGate = Completer<void>();
@@ -800,7 +795,7 @@ void main() {
       routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
       orderId: 'ORD-001',
       deliveryAssignmentId: 'assign-001',
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
     );
     final harness = _harness(state: active, slots: _dailySlots);
 
@@ -828,7 +823,7 @@ void main() {
       routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
       orderId: 'ORD-001',
       deliveryAssignmentId: 'assign-001',
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
     );
     final harness = _harness(state: active, slots: _dailySlots);
 
@@ -862,7 +857,7 @@ void main() {
       routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
       orderId: 'ORD-001',
       deliveryAssignmentId: 'assign-001',
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
     );
     await tester.pumpWidget(
       _wrap(
@@ -965,10 +960,7 @@ void main() {
       nextSlotEnd: '11:30:00',
     );
     await tester.pumpWidget(
-      _harness(
-        state: LiveDeliveryMapState.idle(),
-        nextBatch: nextBatch,
-      ).widget,
+      _harness(state: LiveDeliveryMapState.idle(), nextBatch: nextBatch).widget,
     );
     await tester.pumpAndSettle();
 
@@ -990,7 +982,7 @@ void main() {
       routePoints: const [LatLng(7.19, 125.45), LatLng(7.21, 125.47)],
       orderId: 'ORD-QUEUED',
       deliveryAssignmentId: null,
-      orderStatus: OrderStatus.onTheWay,
+      orderStatus: OrderStatus.outForDelivery,
       assignedSlot: AssignedDeliverySlot(
         slotTemplateId: 1,
         date: _today(),

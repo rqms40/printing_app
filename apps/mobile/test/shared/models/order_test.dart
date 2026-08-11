@@ -32,7 +32,7 @@ void main() {
       deliveryFee: 80.0,
       paymentMethod: PaymentMethod.gcash,
       paymentStatus: PaymentStatus.paid,
-      orderStatus: OrderStatus.orderPlaced,
+      orderStatus: OrderStatus.submitted,
       deliveryOption: 'delivery',
       deliveryAddressId: 'addr_001',
       createdAt: now,
@@ -64,7 +64,7 @@ void main() {
       expect(sampleOrder.category, 'Poster');
       expect(sampleOrder.quantity, 5);
       expect(sampleOrder.totalPrice, 750.0);
-      expect(sampleOrder.orderStatus, OrderStatus.orderPlaced);
+      expect(sampleOrder.orderStatus, OrderStatus.submitted);
       expect(sampleOrder.isBatchOrder, isTrue);
       expect(sampleOrder.itemCount, 2);
       expect(sampleOrder.hasMixedItemTypes, isTrue);
@@ -84,7 +84,7 @@ void main() {
         deliveryFee: 0.0,
         paymentMethod: PaymentMethod.cod,
         paymentStatus: PaymentStatus.pending,
-        orderStatus: OrderStatus.orderPlaced,
+        orderStatus: OrderStatus.submitted,
         deliveryOption: 'pickup',
         createdAt: now,
         updatedAt: now,
@@ -100,8 +100,8 @@ void main() {
       expect(minimalOrder.deliveryQueuePosition, isNull);
       expect(minimalOrder.deliveryQueueSize, isNull);
       expect(minimalOrder.canTrackDelivery, isFalse);
-      expect(minimalOrder.lineItems.single.category, 'paper');
-      expect(minimalOrder.orderTypeLabel, 'Paper Printing');
+      expect(minimalOrder.lineItems.single.category, 'Document');
+      expect(minimalOrder.orderTypeLabel, 'Document');
     });
 
     test('single item with batch logistics is not a customer batch order', () {
@@ -118,7 +118,7 @@ void main() {
         deliveryFee: 0,
         paymentMethod: PaymentMethod.gcash,
         paymentStatus: PaymentStatus.pending,
-        orderStatus: OrderStatus.orderPlaced,
+        orderStatus: OrderStatus.submitted,
         deliveryOption: 'delivery',
         createdAt: now,
         updatedAt: now,
@@ -139,6 +139,111 @@ void main() {
       expect(order.orderId, 'ORD-10007');
     });
 
+    test('unknown catalog leaves preserve identity and never become 3D', () {
+      final order = Order(
+        id: 'future-1',
+        orderId: 'ORD-FUTURE-1',
+        userId: '1',
+        category: 'future-fabrication',
+        categoryName: 'Future Fabrication',
+        groupSlug: 'future-services',
+        groupName: 'Future Services',
+        examples: const ['A future product'],
+        quantity: 1,
+        totalPrice: 0,
+        deliveryFee: 0,
+        paymentMethod: PaymentMethod.gridCredits,
+        paymentStatus: PaymentStatus.pending,
+        orderStatus: OrderStatus.submitted,
+        deliveryOption: 'delivery',
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      expect(order.lineItems.single.category, 'future-fabrication');
+      expect(order.orderTypeShortLabel, 'Future Fabrication');
+      expect(order.orderTypeLabel, 'Future Fabrication');
+      expect(order.lineItems.single.threeDSpecs, isNull);
+    });
+
+    test('exact paper and 3d leaves retain historical labels', () {
+      final paper = sampleOrder.copyWith(category: 'paper', items: const []);
+      final threeD = sampleOrder.copyWith(category: '3d', items: const []);
+
+      expect(paper.orderTypeShortLabel, 'Paper');
+      expect(paper.lineItems.single.category, 'paper');
+      expect(threeD.orderTypeShortLabel, '3D');
+      expect(threeD.lineItems.single.category, '3d');
+    });
+
+    test('quote minor units remain exact beyond JavaScript safe integers', () {
+      final order = sampleOrder.copyWith(
+        pricingStatus: PricingStatus.quoted,
+        quotedTotalMinor: BigInt.parse('90071992547409931234'),
+        deliveryFeeMinor: BigInt.parse('1234'),
+      );
+
+      expect(order.quotedTotalMinor.toString(), '90071992547409931234');
+      expect(order.quotedGoodsMinor.toString(), '90071992547409930000');
+    });
+
+    test(
+      'legacy accepted assignment token does not imply an RFQ lifecycle',
+      () {
+        final legacy = Order(
+          id: 'legacy-paper',
+          orderId: 'ORD-LEGACY',
+          userId: '1',
+          category: 'paper',
+          quantity: 1,
+          totalPrice: 250,
+          deliveryFee: 25,
+          pricingStatus: PricingStatus.accepted,
+          quoteAssignmentId: 901,
+          paymentMethod: PaymentMethod.cod,
+          paymentStatus: PaymentStatus.pending,
+          orderStatus: OrderStatus.production,
+          deliveryOption: 'delivery',
+          estimatedCompletionAt: now.add(const Duration(days: 2)),
+          createdAt: now,
+          updatedAt: now,
+        );
+
+        expect(legacy.hasQuoteLifecycle, isFalse);
+      },
+    );
+
+    test('quote-required accepted catalog order retains RFQ lifecycle', () {
+      final rfq = Order(
+        id: 'accepted-rfq',
+        orderId: 'ORD-RFQ',
+        userId: '1',
+        category: 'custom-signage',
+        quantity: 1,
+        totalPrice: 0,
+        deliveryFee: 0,
+        pricingStatus: PricingStatus.accepted,
+        paymentMethod: PaymentMethod.gridCredits,
+        paymentStatus: PaymentStatus.pending,
+        orderStatus: OrderStatus.awaitingPayment,
+        deliveryOption: 'delivery',
+        createdAt: now,
+        updatedAt: now,
+        items: const [
+          OrderLineItem(
+            id: 'accepted-rfq-line',
+            orderId: 'ORD-RFQ',
+            category: 'custom-signage',
+            pricingModel: 'quote_required',
+            quantity: 1,
+            totalPrice: 0,
+          ),
+        ],
+      );
+
+      expect(rfq.hasQuoteLifecycle, isTrue);
+    });
+
     test('copyWith updates specified fields only', () {
       const rider = AssignedRiderContact(
         userId: '70',
@@ -152,13 +257,13 @@ void main() {
         deliveryStatus: 'accepted',
       );
       final updated = sampleOrder.copyWith(
-        orderStatus: OrderStatus.printingInProgress,
+        orderStatus: OrderStatus.production,
         assignedRiderId: 'usr_002',
         deliveryAssignmentId: 'da_001',
         assignedRider: rider,
       );
 
-      expect(updated.orderStatus, OrderStatus.printingInProgress);
+      expect(updated.orderStatus, OrderStatus.production);
       expect(updated.assignedRiderId, 'usr_002');
       expect(updated.deliveryAssignmentId, 'da_001');
       expect(updated.assignedRider, rider);
@@ -222,7 +327,7 @@ void main() {
     test('toString contains orderId and status', () {
       final str = sampleOrder.toString();
       expect(str, contains('ORD-99999'));
-      expect(str, contains('Order Placed'));
+      expect(str, contains('Submitted'));
     });
   });
 

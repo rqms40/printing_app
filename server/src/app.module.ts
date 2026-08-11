@@ -39,6 +39,7 @@ import {
   createTypeOrmOptions,
   initializeDataSourceWithPreSyncNormalization,
 } from './database/typeorm.config';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import {
     SuperModule,
     MockupModule,
   ],
+  controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

@@ -46,12 +46,10 @@ class _ThreeDSpecsScreenState extends ConsumerState<ThreeDSpecsScreen> {
   }
 
   ProductCategory _category() {
-    final catalog =
-        ref.read(productCatalogProvider).valueOrNull ??
-        ProductCatalog.fallback();
+    final catalog = ref.read(productCatalogProvider).catalog;
     final slug = ref.read(orderFlowProvider).category ?? '3d';
     return catalog.categoryBySlug(slug) ??
-        ProductCatalog.fallback().categoryBySlug('3d')!;
+        ProductCatalog.legacyFallback().categoryBySlug('3d')!;
   }
 
   void _ensureDefaults(ProductCategory category) {
@@ -66,13 +64,11 @@ class _ThreeDSpecsScreenState extends ConsumerState<ThreeDSpecsScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
-    final catalog =
-        ref.watch(productCatalogProvider).valueOrNull ??
-        ProductCatalog.fallback();
+    final catalog = ref.watch(productCatalogProvider).catalog;
     final slug = ref.watch(orderFlowProvider).category ?? '3d';
     final category =
         catalog.categoryBySlug(slug) ??
-        ProductCatalog.fallback().categoryBySlug('3d')!;
+        ProductCatalog.legacyFallback().categoryBySlug('3d')!;
     _ensureDefaults(category);
 
     return Scaffold(

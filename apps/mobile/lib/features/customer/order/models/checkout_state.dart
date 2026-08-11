@@ -55,7 +55,12 @@ class CheckoutState {
   final Map<String, List<String?>> unitAssignments;
 
   int get itemCount => items.length;
-  double get subtotal => items.fold(0.0, (s, i) => s + i.printSubtotal);
+  bool get hasPendingQuoteItems => items.any((item) => item.quoteRequired);
+  bool get hasLegacyPricedItems => items.any((item) => !item.quoteRequired);
+  bool get hasMixedPricingModes => hasPendingQuoteItems && hasLegacyPricedItems;
+  double? get subtotal => hasPendingQuoteItems
+      ? null
+      : items.fold<double>(0, (sum, item) => sum + (item.printSubtotal ?? 0));
 
   CheckoutState copyWith({
     List<CartItem>? items,

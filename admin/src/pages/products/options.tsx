@@ -19,6 +19,8 @@ import {
   Typography,
 } from 'antd';
 import {
+  ArrowDownOutlined,
+  ArrowUpOutlined,
   DeleteOutlined,
   HomeOutlined,
   PlusOutlined,
@@ -218,6 +220,30 @@ export function ProductOptionsPage() {
     }
   };
 
+  const handleMoveOption = async (opt: SpecOption, direction: -1 | 1) => {
+    const ordered = options
+      .filter((candidate) => candidate.option_group === opt.option_group)
+      .sort((a, b) => a.sort_order - b.sort_order || Number(a.id) - Number(b.id));
+    const index = ordered.findIndex(({ id: optionId }) => optionId === opt.id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= ordered.length) return;
+    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+    try {
+      await apiClient.patch('/products/options/reorder', {
+        items: ordered.map((option, sortOrder) => ({
+          id: Number(option.id),
+          sortOrder,
+        })),
+      });
+      void message.success('Option order updated');
+      void fetchData();
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        void message.error(err.response?.data?.message ?? 'Reorder failed');
+      }
+    }
+  };
+
   const handleDelete = (opt: SpecOption) => {
     modal.confirm({
       title: `Delete "${opt.label}"?`,
@@ -389,6 +415,7 @@ export function ProductOptionsPage() {
       width: 105,
       render: (v: number, record: SpecOption) => (
         <InputNumber
+          aria-label={`Multiplier for ${record.label}`}
           size="small"
           min={0.001}
           step={0.1}
@@ -453,6 +480,7 @@ export function ProductOptionsPage() {
       width: 78,
       render: (v: boolean, record: SpecOption) => (
         <Switch
+          aria-label={`Default option ${record.label}`}
           checked={v}
           size="small"
           onChange={(checked) => void handleInlineEdit(record, 'is_default', checked)}
@@ -464,20 +492,42 @@ export function ProductOptionsPage() {
       dataIndex: 'is_active',
       width: 78,
       render: (v: boolean, record: SpecOption) => (
-        <Switch checked={v} size="small" onChange={() => void handleToggleOptionActive(record)} />
+        <Switch
+          aria-label={`Visible option ${record.label}`}
+          checked={v}
+          size="small"
+          onChange={() => void handleToggleOptionActive(record)}
+        />
       ),
     },
     {
       title: '',
-      width: 44,
+      width: 116,
       render: (_: unknown, record: SpecOption) => (
-        <Button
-          type="text"
-          size="small"
-          icon={<DeleteOutlined />}
-          onClick={() => handleDelete(record)}
-          style={{ color: '#555' }}
-        />
+        <Space size={0}>
+          <Button
+            aria-label={`Move ${record.label} up`}
+            type="text"
+            size="small"
+            icon={<ArrowUpOutlined />}
+            onClick={() => void handleMoveOption(record, -1)}
+          />
+          <Button
+            aria-label={`Move ${record.label} down`}
+            type="text"
+            size="small"
+            icon={<ArrowDownOutlined />}
+            onClick={() => void handleMoveOption(record, 1)}
+          />
+          <Button
+            aria-label={`Delete option ${record.label}`}
+            type="text"
+            size="small"
+            icon={<DeleteOutlined />}
+            onClick={() => handleDelete(record)}
+            style={{ color: '#555' }}
+          />
+        </Space>
       ),
     },
   ];
@@ -565,6 +615,7 @@ export function ProductOptionsPage() {
                         <Space size={6}>
                           <Text style={{ color: '#808080', fontSize: 12 }}>Required</Text>
                           <Switch
+                            aria-label={`Required spec ${spec.label}`}
                             checked={spec.is_required}
                             size="small"
                             onChange={(checked) => void handleSpecPatch(spec, { isRequired: checked })}
@@ -573,6 +624,7 @@ export function ProductOptionsPage() {
                         <Space size={6}>
                           <Text style={{ color: '#808080', fontSize: 12 }}>Visible</Text>
                           <Switch
+                            aria-label={`Visible spec ${spec.label}`}
                             checked={spec.is_active}
                             size="small"
                             onChange={(checked) => void handleSpecPatch(spec, { isActive: checked })}

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
 import {
   CodCollection,
@@ -52,6 +52,18 @@ export type AssertCodCheckoutInput = {
   excludeOrderId?: number;
   /** Optional address/zone flag; default allow (stub). */
   addressZoneEligible?: boolean;
+};
+
+export type CodQuoteEligibilityInput = {
+  orderId: number;
+  finalTotalMinor: string | number | null | undefined;
+  addressZoneEligible?: boolean;
+};
+
+type CodEligibilityReadContext = {
+  pilotCodEligible: boolean;
+  opsRiskBlocked: boolean;
+  activeUnpaidCodOrderIds: ReadonlySet<number>;
 };
 
 @Injectable()
@@ -207,21 +219,9 @@ export class PaymentsService {
   async countActiveUnpaidCodOrders(
     userId: number,
     excludeOrderId?: number,
+    manager?: EntityManager,
   ): Promise<number> {
-    const qb = this.ordersRepo
-      .createQueryBuilder('o')
-      .where('o.userId = :userId', { userId })
-      .andWhere('o.paymentStatus != :paid', { paid: 'paid' })
-      .andWhere('o.orderStatus NOT IN (:...inactive)', {
-        inactive: COD_INACTIVE_ORDER_STATUSES,
-      })
-      // COD method labels: cod, cash, cash_on_delivery (normalized in app)
-      .andWhere(
-        `(
-          LOWER(REPLACE(REPLACE(o.paymentMethod, '_', ''), '-', '')) IN
-            ('cod', 'cash', 'cashondelivery')
-        )`,
-      );
+    const qb = this.activeUnpaidCodOrdersQuery(userId, manager);
 
     if (excludeOrderId != null) {
       qb.andWhere('o.id != :excludeOrderId', { excludeOrderId });
@@ -230,18 +230,98 @@ export class PaymentsService {
     return qb.getCount();
   }
 
+  private activeUnpaidCodOrdersQuery(userId: number, manager?: EntityManager) {
+    const ordersRepo = manager?.getRepository(Order) ?? this.ordersRepo;
+    return (
+      ordersRepo
+        .createQueryBuilder('o')
+        .where('o.userId = :userId', { userId })
+        .andWhere('o.paymentStatus != :paid', { paid: 'paid' })
+        .andWhere('o.orderStatus NOT IN (:...inactive)', {
+          inactive: COD_INACTIVE_ORDER_STATUSES,
+        })
+        // COD method labels: cod, cash, cash_on_delivery (normalized in app)
+        .andWhere(
+          `(
+          LOWER(REPLACE(REPLACE(o.paymentMethod, '_', ''), '-', '')) IN
+            ('cod', 'cash', 'cashondelivery')
+        )`,
+        )
+    );
+  }
+
+  /**
+   * Advisory customer projection for Q quoted orders. Policy inputs and all
+   * active unpaid COD ids are loaded once, then every quote is evaluated in
+   * memory with the same current-order exclusion used by checkout.
+   *
+   * This read helper is intentionally unlocked. acceptQuote continues to use
+   * evaluateCodEligibilityForUser with the transaction manager and customer
+   * lock as the authoritative TOCTOU-safe gate.
+   */
+  async evaluateCodEligibilityForOrders(
+    userId: number,
+    quotes: readonly CodQuoteEligibilityInput[],
+  ): Promise<Map<number, CodEligibilityResult>> {
+    if (quotes.length === 0) return new Map();
+    const context = await this.loadCodEligibilityReadContext(userId);
+    const results = new Map<number, CodEligibilityResult>();
+    for (const quote of quotes) {
+      const activeUnpaidCodCount =
+        context.activeUnpaidCodOrderIds.size -
+        (context.activeUnpaidCodOrderIds.has(quote.orderId) ? 1 : 0);
+      results.set(
+        quote.orderId,
+        evaluateCodEligibility({
+          pilotCodEligible: context.pilotCodEligible,
+          opsRiskBlocked: context.opsRiskBlocked,
+          finalTotalMinor: quote.finalTotalMinor,
+          activeUnpaidCodCount,
+          addressZoneEligible: quote.addressZoneEligible,
+        }),
+      );
+    }
+    return results;
+  }
+
+  private async loadCodEligibilityReadContext(
+    userId: number,
+  ): Promise<CodEligibilityReadContext> {
+    const user = await this.usersRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`User ${userId} not found`);
+
+    const rows = await this.activeUnpaidCodOrdersQuery(userId)
+      .select('o.id', 'id')
+      .getRawMany<{ id: string | number }>();
+    const activeUnpaidCodOrderIds = new Set<number>();
+    for (const row of rows) {
+      const id = Number(row.id);
+      if (Number.isSafeInteger(id) && id > 0) activeUnpaidCodOrderIds.add(id);
+    }
+    return {
+      pilotCodEligible: user.pilotCodEligible === true,
+      opsRiskBlocked: user.codOpsRiskBlocked === true,
+      activeUnpaidCodOrderIds,
+    };
+  }
+
   /**
    * Evaluate COD eligibility for a user + commercial total.
    * Does not throw — callers decide whether to reject.
    */
-  async evaluateCodEligibilityForUser(input: {
-    userId: number;
-    finalTotalMinor: string | number | null | undefined;
-    excludeOrderId?: number;
-    addressZoneEligible?: boolean;
-  }): Promise<CodEligibilityResult> {
-    const user = await this.usersRepo.findOne({
+  async evaluateCodEligibilityForUser(
+    input: {
+      userId: number;
+      finalTotalMinor: string | number | null | undefined;
+      excludeOrderId?: number;
+      addressZoneEligible?: boolean;
+    },
+    manager?: EntityManager,
+  ): Promise<CodEligibilityResult> {
+    const usersRepo = manager?.getRepository(User) ?? this.usersRepo;
+    const user = await usersRepo.findOne({
       where: { id: input.userId },
+      ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
     });
     if (!user) {
       throw new NotFoundException(`User ${input.userId} not found`);
@@ -250,6 +330,7 @@ export class PaymentsService {
     const activeUnpaidCodCount = await this.countActiveUnpaidCodOrders(
       input.userId,
       input.excludeOrderId,
+      manager,
     );
 
     return evaluateCodEligibility({
@@ -270,17 +351,21 @@ export class PaymentsService {
    */
   async assertCodEligibleForCheckout(
     input: AssertCodCheckoutInput,
+    manager?: EntityManager,
   ): Promise<CodEligibilityResult | null> {
     if (!isCodPaymentMethod(input.paymentMethod)) {
       return null;
     }
 
-    const result = await this.evaluateCodEligibilityForUser({
-      userId: input.userId,
-      finalTotalMinor: input.finalTotalMinor,
-      excludeOrderId: input.excludeOrderId,
-      addressZoneEligible: input.addressZoneEligible,
-    });
+    const result = await this.evaluateCodEligibilityForUser(
+      {
+        userId: input.userId,
+        finalTotalMinor: input.finalTotalMinor,
+        excludeOrderId: input.excludeOrderId,
+        addressZoneEligible: input.addressZoneEligible,
+      },
+      manager,
+    );
 
     if (!result.eligible) {
       throw new ForbiddenException({
@@ -299,14 +384,29 @@ export class PaymentsService {
    * Create a pending COD collection row after eligible COD checkout.
    * Idempotent per order: returns existing row if present.
    */
-  async ensurePendingCodCollection(input: {
-    orderId: number;
-    amountMinor: string;
-    eligible: boolean;
-    eligibilityReason?: string | null;
-    riderId?: number | null;
-  }): Promise<CodCollection> {
-    const existing = await this.codCollectionRepo.findOne({
+  async ensurePendingCodCollection(
+    input: {
+      orderId: number;
+      amountMinor: string;
+      eligible: boolean;
+      eligibilityReason?: string | null;
+      riderId?: number | null;
+    },
+    manager?: EntityManager,
+  ): Promise<CodCollection> {
+    const codCollectionRepo = manager
+      ? manager.getRepository(CodCollection)
+      : this.codCollectionRepo;
+    if (manager) {
+      // Callers follow the commerce lock order before reaching this method;
+      // re-locking the order makes direct concurrent calls deterministic too.
+      await manager.getRepository(Order).findOneOrFail({
+        where: { id: input.orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+    }
+
+    const existing = await codCollectionRepo.findOne({
       where: { orderId: input.orderId },
       order: { id: 'ASC' },
     });
@@ -314,7 +414,7 @@ export class PaymentsService {
       return existing;
     }
 
-    const row = this.codCollectionRepo.create({
+    const row = codCollectionRepo.create({
       orderId: input.orderId,
       riderId: input.riderId ?? null,
       eligible: input.eligible,
@@ -331,7 +431,7 @@ export class PaymentsService {
       discrepancyReason: null,
       returnReason: null,
     });
-    return this.codCollectionRepo.save(row);
+    return codCollectionRepo.save(row);
   }
 
   /**

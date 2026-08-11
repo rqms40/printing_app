@@ -326,6 +326,7 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
                       children: [
                         _FloatingIconButton(
                           icon: HugeIcons.strokeRoundedArrowLeft01,
+                          semanticLabel: 'Back',
                           onTap: () => Navigator.of(context).pop(),
                         ),
                         const Spacer(),
@@ -582,10 +583,18 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _FloatingIconButton extends StatelessWidget {
-  const _FloatingIconButton({required this.icon, required this.onTap});
+  const _FloatingIconButton({
+    required this.icon,
+    required this.onTap,
+    required this.semanticLabel,
+  });
 
   final dynamic icon;
   final VoidCallback onTap;
+
+  /// Required: the child is icon-only, so without this the button reaches
+  /// screen readers (and axe) as a control with no accessible name.
+  final String semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -593,18 +602,29 @@ class _FloatingIconButton extends StatelessWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    return Material(
-      color: colors.surface.withValues(alpha: 0.94),
-      shape: const CircleBorder(),
-      elevation: 2,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(
-            child: HugeIcon(icon: icon, color: colors.onBackground, size: 20),
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      container: true,
+      child: Material(
+        color: colors.surface.withValues(alpha: 0.94),
+        shape: const CircleBorder(),
+        elevation: 2,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: ExcludeSemantics(
+                child: HugeIcon(
+                  icon: icon,
+                  color: colors.onBackground,
+                  size: 20,
+                ),
+              ),
+            ),
           ),
         ),
       ),

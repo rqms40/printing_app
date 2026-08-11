@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { IssuesService } from './issues.service';
 import { IssuePayoutImpact, IssueStatus } from './entities/issue.entity';
 import { OrderStatus } from '../orders/entities/order.entity';
+import { UserRole } from '../users/entities/user.entity';
 
 describe('IssuesService', () => {
   let service: IssuesService;
@@ -87,7 +88,7 @@ describe('IssuesService', () => {
     const out = await service.openIssue(
       { orderId: 9, category: 'print_defect', notes: 'smudge' },
       5,
-      'client',
+      UserRole.CLIENT,
     );
 
     expect(out.withinWindow).toBe(true);
@@ -97,7 +98,7 @@ describe('IssuesService', () => {
       9,
       11,
       5,
-      'client',
+      UserRole.CLIENT,
     );
     expect(auditService.append).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'issue_open' }),
@@ -112,7 +113,11 @@ describe('IssuesService', () => {
       issueWindowEndsAt: new Date(Date.now() + 60_000),
     });
     await expect(
-      service.openIssue({ orderId: 9, category: 'damage' }, 99, 'client'),
+      service.openIssue(
+        { orderId: 9, category: 'damage' },
+        99,
+        UserRole.CLIENT,
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -126,7 +131,7 @@ describe('IssuesService', () => {
     const out = await service.openIssue(
       { orderId: 9, category: 'late_claim' },
       5,
-      'client',
+      UserRole.CLIENT,
     );
     expect(out.withinWindow).toBe(false);
     expect(out.payoutImpact).toBe(IssuePayoutImpact.NONE);
@@ -146,13 +151,13 @@ describe('IssuesService', () => {
       11,
       { path: 'release', resolutionNotes: 'no defect' },
       1,
-      'ops_admin',
+      UserRole.OPS_ADMIN,
     );
     expect(out.status).toBe(IssueStatus.CLOSED);
     expect(payoutsService.releaseIssueHold).toHaveBeenCalledWith(
       9,
       1,
-      'ops_admin',
+      UserRole.OPS_ADMIN,
       'issue_release',
     );
     expect(notificationsService.create).toHaveBeenCalledWith(
@@ -180,7 +185,7 @@ describe('IssuesService', () => {
       11,
       { path: 'refund', refundAmountMinor: '5000' },
       1,
-      'ops_admin',
+      UserRole.OPS_ADMIN,
     );
     expect(out.status).toBe(IssueStatus.RESOLVED_REFUND);
     expect(payoutsService.releaseIssueHold).not.toHaveBeenCalled();
@@ -200,7 +205,7 @@ describe('IssuesService', () => {
       status: IssueStatus.CLOSED,
     });
     await expect(
-      service.resolveIssue(11, { path: 'release' }, 1, 'ops_admin'),
+      service.resolveIssue(11, { path: 'release' }, 1, UserRole.OPS_ADMIN),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

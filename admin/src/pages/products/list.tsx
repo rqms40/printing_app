@@ -1,7 +1,7 @@
 // admin/src/pages/products/list.tsx
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Row, Col, Card, Typography, Switch, Button, Drawer, Form, Input,
+  Row, Col, Card, Typography, Switch, Button, Drawer, Form, Input, Alert,
   InputNumber, Select, Space, Tag, Divider, Spin, App, Popconfirm
 } from 'antd';
 import {
@@ -10,11 +10,11 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { mockCategories } from '@/providers/mock-data';
 import { apiClient } from '@/providers/api-client';
 import type { ServiceCategory } from '@/types/products';
 import { formatCurrency } from '@/utils/format';
 import { normalizeServiceCategories } from '@/utils/api-normalizers';
+import { buildCategoryPayload, catalogAdminCategories, groupCatalogCategories } from './catalog-groups';
 
 const { Text, Title } = Typography;
 
@@ -30,61 +30,26 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   '3d': <AppstoreOutlined style={{ fontSize: 28, color: '#42A5F5' }} />,
 };
 
-const LEVEL_LABEL: Record<number, string> = {
-  1: 'Category',
-  2: 'Subgroup',
-  3: 'Variant',
-};
-
-function levelColor(level: number): string {
-  if (level === 1) return '#FFDE58';
-  if (level === 2) return '#42A5F5';
-  return '#34d399';
-}
-
-function buildChildrenMap(categories: ServiceCategory[]): Map<string | null, ServiceCategory[]> {
-  const map = new Map<string | null, ServiceCategory[]>();
-  for (const cat of categories) {
-    const key = cat.parent_id ?? null;
-    const bucket = map.get(key) ?? [];
-    bucket.push(cat);
-    map.set(key, bucket);
-  }
-  for (const bucket of map.values()) {
-    bucket.sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
-  }
-  return map;
-}
-
 export function ProductList() {
   const navigate = useNavigate();
   const { message } = App.useApp();
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ServiceCategory | null>(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
-  const isOrderableWatch = Form.useWatch('is_orderable', form);
-
-  const childrenMap = useMemo(() => buildChildrenMap(categories), [categories]);
-  const roots = childrenMap.get(null) ?? [];
-
-  const parentOptions = useMemo(() => {
-    return categories
-      .filter((c) => c.catalog_level < 3 && c.id !== editTarget?.id)
-      .map((c) => ({
-        value: c.id,
-        label: `${'—'.repeat(Math.max(0, c.catalog_level - 1))} ${c.name} (L${c.catalog_level})`,
-      }));
-  }, [categories, editTarget]);
 
   const fetchCategories = async () => {
+    setLoading(true);
+    setLoadError(false);
     try {
       const res = await apiClient.get("/products/categories?include_inactive=true");
       setCategories(normalizeServiceCategories(res.data));
     } catch {
-      setCategories(mockCategories);
+      setCategories([]);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -92,22 +57,18 @@ export function ProductList() {
 
   useEffect(() => { void fetchCategories(); }, []);
 
-  const openCreate = (parent?: ServiceCategory) => {
+  const openCreate = () => {
     setEditTarget(null);
     form.resetFields();
-    const level = parent ? Math.min(3, (parent.catalog_level || 1) + 1) : 1;
-    const orderable = level === 3;
     form.setFieldsValue({
       file_processing_type: 'document',
-      pricing_model: 'per_page_modifiers',
-      quantity_unit: 'copy',
-      base_rate: orderable ? 2 : 0,
+      pricing_model: 'quote_required',
+      quantity_unit: 'page',
+      base_rate: 0,
       max_file_size_mb: 50,
-      allowed_extensions: orderable ? 'pdf, png, jpg, jpeg' : '',
+      allowed_extensions: 'pdf, png, jpg, jpeg, tif, tiff, docx',
       sort_order: categories.length + 1,
-      parent_id: parent?.id ?? null,
-      catalog_level: level,
-      is_orderable: orderable,
+      is_active: true,
     });
     setDrawerOpen(true);
   };
@@ -119,8 +80,12 @@ export function ProductList() {
       slug: cat.slug,
       description: cat.description,
       mobile_description: cat.mobile_description,
-      audience_label: cat.audience_label,
       icon: cat.icon,
+      group_slug: cat.group_slug,
+      group_name: cat.group_name,
+      group_description: cat.group_description,
+      group_sort_order: cat.group_sort_order,
+      examples: cat.examples?.join(', '),
       file_processing_type: cat.file_processing_type,
       pricing_model: cat.pricing_model,
       base_rate: cat.base_rate,
@@ -128,9 +93,7 @@ export function ProductList() {
       max_file_size_mb: cat.max_file_size_mb,
       allowed_extensions: cat.allowed_extensions.join(', '),
       sort_order: cat.sort_order,
-      parent_id: cat.parent_id ?? null,
-      catalog_level: cat.catalog_level ?? 1,
-      is_orderable: cat.is_orderable !== false,
+      is_active: cat.is_active,
     });
     setDrawerOpen(true);
   };
@@ -139,32 +102,7 @@ export function ProductList() {
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const orderable = values.is_orderable !== false;
-      const payload = {
-        name: values.name,
-        slug: values.slug,
-        description: values.description,
-        icon: values.icon,
-        allowedExtensions: JSON.stringify(
-          orderable
-            ? (values.allowed_extensions as string)
-                .split(',')
-                .map((e: string) => e.trim().toLowerCase())
-                .filter(Boolean)
-            : [],
-        ),
-        mobileDescription: values.mobile_description,
-        audienceLabel: values.audience_label,
-        fileProcessingType: values.file_processing_type,
-        pricingModel: values.pricing_model,
-        baseRate: values.base_rate ?? 0,
-        quantityUnit: values.quantity_unit ?? 'copy',
-        maxFileSizeMb: values.max_file_size_mb ?? 50,
-        sortOrder: values.sort_order ?? 0,
-        parentId: values.parent_id || null,
-        catalogLevel: values.catalog_level ?? 1,
-        isOrderable: orderable,
-      };
+      const payload = { ...buildCategoryPayload(values), icon: values.icon };
       if (editTarget) {
         await apiClient.patch(`/products/categories/${editTarget.id}`, payload);
         void message.success('Category updated');
@@ -202,50 +140,77 @@ export function ProductList() {
     }
   };
 
-  const renderCard = (cat: ServiceCategory, depth = 0) => {
-    const kids = childrenMap.get(cat.id) ?? [];
-    return (
-      <div key={cat.id} style={{ marginLeft: depth * 16, marginBottom: 12 }}>
-        <Card
-          style={{ ...S.card, opacity: cat.is_active ? 1 : 0.6 }}
-          styles={{ body: { padding: 20 } }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ background: '#1A1A1A', borderRadius: 10, padding: 10, border: '1px solid #2E2E2E' }}>
-                {CATEGORY_ICONS[cat.slug] ?? <AppstoreOutlined style={{ fontSize: 28, color: '#808080' }} />}
-              </div>
-              <div>
-                <Text strong style={{ color: '#F0F0F0', display: 'block', fontSize: 15 }}>{cat.name}</Text>
-                <Space size={4} style={{ marginTop: 4 }} wrap>
-                  <Tag style={{ fontSize: 10, borderRadius: 4, background: '#1A1A1A', borderColor: '#333', color: '#808080' }}>
-                    {cat.slug}
-                  </Tag>
-                  <Tag style={{ fontSize: 10, borderRadius: 4, background: '#1A1A1A', borderColor: levelColor(cat.catalog_level), color: levelColor(cat.catalog_level) }}>
-                    {LEVEL_LABEL[cat.catalog_level] ?? `L${cat.catalog_level}`}
-                  </Tag>
-                  {cat.is_orderable ? (
-                    <Tag color="success" style={{ fontSize: 10, borderRadius: 4 }}>Orderable</Tag>
-                  ) : (
-                    <Tag style={{ fontSize: 10, borderRadius: 4, background: '#1A1A1A', borderColor: '#333', color: '#808080' }}>Browse only</Tag>
-                  )}
-                </Space>
-              </div>
-            </div>
-            <Switch checked={cat.is_active} size="small" onChange={() => handleToggleActive(cat)} />
-          </div>
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spin size="large" /></div>;
+  }
 
-          <Text style={{ color: '#666', fontSize: 12, display: 'block', marginBottom: 8, lineHeight: 1.5 }}>
-            {cat.audience_label ?? cat.description ?? '—'}
-          </Text>
+  return (
+    <div style={S.page}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <Title level={3} style={{ color: '#F0F0F0', margin: 0, marginBottom: 2 }}>Products & Services</Title>
+          <Text style={{ color: '#666', fontSize: 13 }}>Manage service categories, pricing options, and addons</Text>
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}
+          style={{ background: '#FFDE58', borderColor: '#FFDE58', color: '#141414', fontWeight: 600 }}>
+          New Category
+        </Button>
+      </div>
 
-          {cat.is_orderable && (
-            <>
-              <Divider style={{ borderColor: '#2E2E2E', margin: '0 0 12px' }} />
+      {loadError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="Unable to load catalog"
+          description="The saved catalog remains unchanged. Try loading it again."
+          action={<Button onClick={() => void fetchCategories()}>Retry</Button>}
+        />
+      ) : null}
+
+      {/* Category Cards */}
+      <Row gutter={[16, 16]}>
+        {groupCatalogCategories(catalogAdminCategories(categories)).map((group) => (
+          <React.Fragment key={group.slug}>
+          <Col span={24}>
+            <Title level={4} style={{ color: '#F0F0F0', margin: '12px 0 0' }}>{group.name}</Title>
+            {group.description ? <Text style={{ color: '#808080' }}>{group.description}</Text> : null}
+          </Col>
+          {group.products.map((cat) => (
+          <Col xs={24} sm={12} lg={8} key={cat.id}>
+            <Card
+              style={{ ...S.card, opacity: cat.is_active ? 1 : 0.6 }}
+              styles={{ body: { padding: 20 } }}
+            >
+              {/* Icon + name row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ background: '#1A1A1A', borderRadius: 10, padding: 10, border: '1px solid #2E2E2E' }}>
+                    {CATEGORY_ICONS[cat.slug] ?? <AppstoreOutlined style={{ fontSize: 28, color: '#808080' }} />}
+                  </div>
+                  <div>
+                    <Text strong style={{ color: '#F0F0F0', display: 'block', fontSize: 15 }}>{cat.name}</Text>
+                    <Tag style={{ marginTop: 2, fontSize: 10, borderRadius: 4, background: '#1A1A1A', borderColor: '#333', color: '#808080' }}>
+                      {cat.slug}
+                    </Tag>
+                  </div>
+                </div>
+                <Switch checked={cat.is_active} size="small" onChange={() => handleToggleActive(cat)} />
+              </div>
+
+              <Text style={{ color: '#666', fontSize: 12, display: 'block', marginBottom: 16, lineHeight: 1.5 }}>
+                {cat.description ?? '—'}
+              </Text>
+
+              <Divider style={{ borderColor: '#2E2E2E', margin: '0 0 14px' }} />
+
+              {/* Stats grid */}
               <Row gutter={[12, 10]}>
                 <Col span={12}>
                   <Text style={S.label}>Base Rate</Text>
-                  <Text style={{ ...S.value, color: '#34d399', display: 'block' }}>{formatCurrency(cat.base_rate)}/{cat.quantity_unit}</Text>
+                  <Text style={{ ...S.value, color: '#34d399', display: 'block' }}>
+                    {cat.pricing_model === 'quote_required' ? 'Quote required' : `${formatCurrency(cat.base_rate)}/${cat.quantity_unit}`}
+                  </Text>
                 </Col>
                 <Col span={12}>
                   <Text style={S.label}>Max File</Text>
@@ -259,80 +224,55 @@ export function ProductList() {
                   <Text style={S.label}>Pricing</Text>
                   <Text style={{ ...S.value, display: 'block', fontSize: 12 }}>{cat.pricing_model.replace(/_/g, ' ')}</Text>
                 </Col>
+                <Col span={24}>
+                  <Text style={S.label}>File Types</Text>
+                  <div style={{ marginTop: 4 }}>
+                    {cat.allowed_extensions.map((ext) => (
+                      <Tag key={ext} style={{ fontSize: 10, background: '#1A1A1A', borderColor: '#333', color: '#A0A0A0', marginBottom: 2 }}>
+                        .{ext}
+                      </Tag>
+                    ))}
+                  </div>
+                </Col>
               </Row>
-            </>
-          )}
 
-          <Divider style={{ borderColor: '#2E2E2E', margin: '12px 0' }} />
+              <Divider style={{ borderColor: '#2E2E2E', margin: '14px 0 12px' }} />
 
-          <Space size={8} style={{ width: '100%', display: 'flex', flexWrap: 'wrap' }}>
-            <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(cat)}
-              style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
-              Edit
-            </Button>
-            {cat.catalog_level < 3 && (
-              <Button size="small" icon={<PlusOutlined />} onClick={() => openCreate(cat)}
-                style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
-                Add child
-              </Button>
-            )}
-            {cat.is_orderable && (
-              <>
+              {/* Action buttons */}
+              <Space size={8} style={{ width: '100%', display: 'flex' }}>
+                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(cat)}
+                  style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0', flex: 1 }}>
+                  Edit
+                </Button>
                 <Button size="small" icon={<SettingOutlined />}
                   onClick={() => navigate(`/products/${cat.id}/options`)}
-                  style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
+                  style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0', flex: 1 }}>
                   Spec Options
                 </Button>
                 <Button size="small" icon={<ArrowRightOutlined />}
                   onClick={() => navigate(`/products-addons?category_id=${cat.id}`)}
-                  style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
+                  style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0', flex: 1 }}>
                   Addons
                 </Button>
-              </>
-            )}
-            <Popconfirm
-              title="Delete Category"
-              description="Delete this node and any nested children?"
-              onConfirm={() => handleDeleteCategory(cat)}
-              okText="Yes"
-              cancelText="No"
-              placement="topRight"
-            >
-              <Button size="small" danger icon={<DeleteOutlined />} style={{ background: '#1A1A1A', borderColor: '#ff4d4f' }} />
-            </Popconfirm>
-          </Space>
-        </Card>
-        {kids.map((child) => renderCard(child, depth + 1))}
-      </div>
-    );
-  };
+                <Popconfirm
+                  title="Delete Category"
+                  description="Are you sure you want to delete this category?"
+                  onConfirm={() => handleDeleteCategory(cat)}
+                  okText="Yes"
+                  cancelText="No"
+                  placement="topRight"
+                >
+                  <Button size="small" danger icon={<DeleteOutlined />} style={{ background: '#1A1A1A', borderColor: '#ff4d4f', flexShrink: 0 }} />
+                </Popconfirm>
+              </Space>
+            </Card>
+          </Col>
+          ))}
+          </React.Fragment>
+        ))}
+      </Row>
 
-  if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spin size="large" /></div>;
-  }
-
-  return (
-    <div style={S.page}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <Title level={3} style={{ color: '#F0F0F0', margin: 0, marginBottom: 2 }}>Products & Services</Title>
-          <Text style={{ color: '#666', fontSize: 13 }}>
-            Category → Subgroup → Variant hierarchy, pricing options, and addons
-          </Text>
-        </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate()}
-          style={{ background: '#FFDE58', borderColor: '#FFDE58', color: '#141414', fontWeight: 600 }}>
-          New Category
-        </Button>
-      </div>
-
-      <div>
-        {roots.map((cat) => renderCard(cat, 0))}
-        {roots.length === 0 && (
-          <Text style={{ color: '#666' }}>No product categories yet.</Text>
-        )}
-      </div>
-
+      {/* Create/Edit Drawer */}
       <Drawer
         title={<Text style={{ color: '#F0F0F0', fontWeight: 600 }}>{editTarget ? 'Edit Category' : 'New Category'}</Text>}
         open={drawerOpen}
@@ -348,44 +288,35 @@ export function ProductList() {
       >
         <Form form={form} layout="vertical">
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Name</Text>} name="name" rules={[{ required: true }]}>
-            <Input placeholder="Marketing & Promotional Collateral" />
+            <Input placeholder="Paper Printing" />
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Slug</Text>} name="slug"
             rules={[{ required: true }, { pattern: /^[a-z0-9-]+$/, message: 'Lowercase alphanumeric + hyphens only' }]}>
-            <Input placeholder="marketing-promo" disabled={!!editTarget} />
-          </Form.Item>
-          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Parent</Text>} name="parent_id">
-            <Select
-              allowClear
-              placeholder="None (top-level)"
-              options={parentOptions}
-              optionFilterProp="label"
-              showSearch
-            />
-          </Form.Item>
-          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Catalog Level</Text>} name="catalog_level" rules={[{ required: true }]}>
-            <Select
-              options={[
-                { value: 1, label: '1 — Category' },
-                { value: 2, label: '2 — Subgroup' },
-                { value: 3, label: '3 — Variant / product' },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Orderable product</Text>} name="is_orderable" valuePropName="checked">
-            <Switch />
+            <Input placeholder="paper" disabled={!!editTarget} />
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Description</Text>} name="description">
             <Input.TextArea rows={2} placeholder="Short description..." />
-          </Form.Item>
-          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Audience label</Text>} name="audience_label">
-            <Input.TextArea rows={2} maxLength={240} placeholder="Best for: …" />
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Mobile Description</Text>} name="mobile_description">
             <Input.TextArea rows={2} maxLength={160} placeholder="Short customer-facing description..." />
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Icon (Ant Design icon name)</Text>} name="icon">
             <Input placeholder="FileTextOutlined" />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Group slug</Text>} name="group_slug">
+            <Input placeholder="marketing-promo" />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Group name</Text>} name="group_name">
+            <Input placeholder="Marketing & Promotional Collateral" />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Group description</Text>} name="group_description">
+            <Input.TextArea rows={2} />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Group order</Text>} name="group_sort_order">
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Examples (comma separated)</Text>} name="examples">
+            <Input />
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>File Processing</Text>} name="file_processing_type" rules={[{ required: true }]}>
             <Select
@@ -401,32 +332,29 @@ export function ProductList() {
               options={[
                 { value: 'per_page_modifiers', label: 'Per page + spec modifiers' },
                 { value: 'base_plus_material_estimate', label: 'Base + material estimate' },
+                { value: 'quote_required', label: 'Quote required (RFQ)' },
               ]}
             />
           </Form.Item>
-          <Form.Item
-            label={<Text style={{ color: '#A0A0A0' }}>Base Rate (₱)</Text>}
-            name="base_rate"
-            rules={isOrderableWatch === false ? [] : [{ required: true }]}
-          >
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Base Rate (₱)</Text>} name="base_rate" rules={[{ required: true }]}>
             <InputNumber min={0} step={0.01} style={{ width: '100%' }} prefix="₱" />
           </Form.Item>
-          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Quantity Unit</Text>} name="quantity_unit">
-            <Input placeholder="page, copy, unit, sqft" />
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Quantity Unit</Text>} name="quantity_unit" rules={[{ required: true }]}>
+            <Input placeholder="page, gram, copy" />
           </Form.Item>
-          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Max File Size (MB)</Text>} name="max_file_size_mb">
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Max File Size (MB)</Text>} name="max_file_size_mb" rules={[{ required: true }]}>
             <InputNumber min={1} max={500} style={{ width: '100%' }} addonAfter="MB" />
           </Form.Item>
-          <Form.Item
-            label={<Text style={{ color: '#A0A0A0' }}>Allowed Extensions</Text>}
-            name="allowed_extensions"
-            rules={isOrderableWatch === false ? [] : [{ required: true }]}
-            help={<Text style={{ color: '#555', fontSize: 11 }}>Comma-separated: pdf, png, jpg, tif, tiff</Text>}
-          >
-            <Input placeholder="pdf, png, jpg, jpeg" disabled={isOrderableWatch === false} />
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Allowed Extensions</Text>} name="allowed_extensions"
+            rules={[{ required: true }]}
+            help={<Text style={{ color: '#555', fontSize: 11 }}>Comma-separated: pdf, png, jpg, tif, tiff</Text>}>
+            <Input placeholder="pdf, png, jpg, jpeg" />
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Sort Order</Text>} name="sort_order">
             <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Active</Text>} name="is_active" valuePropName="checked">
+            <Switch />
           </Form.Item>
         </Form>
       </Drawer>

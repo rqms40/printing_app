@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/home/providers/daily_grid_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/daily_grid_section.dart';
 import 'package:printing_app/shared/models/daily_grid_item.dart';
@@ -71,5 +72,52 @@ void main() {
       find.ancestor(of: image, matching: find.byType(ExcludeSemantics)),
       findsWidgets,
     );
+  });
+
+  testWidgets('card opens the grouped catalog instead of a fresh legacy flow', (
+    tester,
+  ) async {
+    WebSocketService.disableDailyGridSocketForTests = true;
+    addTearDown(() {
+      WebSocketService.disableDailyGridSocketForTests = false;
+    });
+    final router = GoRouter(
+      initialLocation: '/home',
+      routes: [
+        GoRoute(
+          path: '/home',
+          builder: (_, _) => const Scaffold(body: DailyGridSection()),
+        ),
+        GoRoute(
+          path: '/customer/order/new',
+          builder: (_, _) => const Scaffold(body: Text('Grouped catalog')),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          dailyGridProvider.overrideWith(
+            (ref) async => const [
+              DailyGridItem(
+                id: 1,
+                title: 'Paper shortcut',
+                category: 'paper',
+                sortOrder: 0,
+              ),
+            ],
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('Paper shortcut').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Grouped catalog'), findsOneWidget);
   });
 }

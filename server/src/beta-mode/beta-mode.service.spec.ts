@@ -59,7 +59,7 @@ describe('BetaModeService', () => {
     settingsRepo = {
       find: jest.fn().mockResolvedValue([{ id: 1, isEnabled: false }]),
       create: jest.fn().mockReturnValue({ id: 1, isEnabled: false }),
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+
       save: jest.fn().mockImplementation(async (v) => v),
     };
     mockQB = {
@@ -86,7 +86,6 @@ describe('BetaModeService', () => {
       transaction: jest.fn(),
     };
     transactionUserRepo = {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       findOne: jest.fn((options) => userRepo.findOne(options)),
       save: jest.fn().mockImplementation(async (user: User) => user),
       update: jest.fn().mockResolvedValue({ affected: 1 }),

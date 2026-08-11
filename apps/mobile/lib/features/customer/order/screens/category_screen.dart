@@ -1,22 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/models/product_catalog.dart';
-import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
+import 'package:printing_app/features/customer/order/widgets/catalog_group_card.dart';
+import 'package:printing_app/features/customer/order/widgets/catalog_authority_banner.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
-import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
-import 'package:printing_app/shared/widgets/app_card.dart';
-import 'package:printing_app/shared/widgets/app_illustrations.dart';
-import 'package:printing_app/shared/widgets/step_indicator.dart';
 
-/// Step 1/6 -- Category selection with Category → Subgroup → Variant browse.
-class CategoryScreen extends ConsumerStatefulWidget {
+/// Customer entry point for the grouped v1.10 product catalog.
+class CategoryScreen extends ConsumerWidget {
   const CategoryScreen({super.key, this.addMode = false});
 
   final bool addMode;
@@ -24,524 +20,81 @@ class CategoryScreen extends ConsumerStatefulWidget {
   static const routeName = '/order/category';
 
   @override
-  ConsumerState<CategoryScreen> createState() => _CategoryScreenState();
-}
-
-class _CategoryScreenState extends ConsumerState<CategoryScreen> {
-  final _paperCategoryKey = GlobalKey();
-  bool _advancedThisFrame = false;
-  bool _categoryCoachScheduled = false;
-  bool _categoryCoachVisible = false;
-  PipelineTutorialNotifier? _pipelineNotifier;
-  PipelineState _pipelineState = const PipelineState();
-
-  /// Drill-down stack of parent node ids (empty = roots).
-  final List<int> _browseStack = [];
-
-  AppColorSet _colors(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _pipelineNotifier = ref.read(pipelineTutorialProvider.notifier);
-    ref.listenManual<PipelineState>(pipelineTutorialProvider, (_, next) {
-      _pipelineState = next;
-      if (next.active && next.step == PipelineStep.paperCategoryCard) {
-        _schedulePipelineCoachMark();
-      }
-    }, fireImmediately: true);
-    ref.listenManual<AsyncValue<ProductCatalog>>(productCatalogProvider, (
-      _,
-      next,
-    ) {
-      if (!next.isLoading && next.hasValue) {
-        _schedulePipelineCoachMark();
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _schedulePipelineCoachMark(),
-    );
-  }
-
-  @override
-  void dispose() {
-    if (_pipelineState.active &&
-        _pipelineState.step == PipelineStep.paperCategoryCard &&
-        !_advancedThisFrame) {
-      _pipelineNotifier?.abandon();
-    }
-    super.dispose();
-  }
-
-  ProductCategory? _activePaperCategory(ProductCatalog catalog) {
-    for (final category in catalog.activeCategories) {
-      if (category.slug == 'paper') return category;
-    }
-    return null;
-  }
-
-  int _activePaperCategoryIndex(ProductCatalog catalog) {
-    final categories = _visibleCategories(catalog);
-    for (var i = 0; i < categories.length; i++) {
-      if (categories[i].slug == 'paper') return i;
-    }
-    return -1;
-  }
-
-  List<ProductCategory> _visibleCategories(ProductCatalog catalog) {
-    if (_browseStack.isEmpty) return catalog.rootCategories;
-    return catalog.childrenOf(_browseStack.last);
-  }
-
-  ProductCategory? _currentParent(ProductCatalog catalog) {
-    if (_browseStack.isEmpty) return null;
-    return catalog.categoryById(_browseStack.last);
-  }
-
-  void _schedulePipelineCoachMark() {
-    if (!mounted || _categoryCoachScheduled || _categoryCoachVisible) return;
-    final state = ref.read(pipelineTutorialProvider);
-    if (!state.active || state.step != PipelineStep.paperCategoryCard) return;
-
-    final catalogAsync = ref.read(productCatalogProvider);
-    if (catalogAsync.isLoading || !catalogAsync.hasValue) return;
-
-    // Tutorial expects paper at root level.
-    if (_browseStack.isNotEmpty) {
-      setState(() => _browseStack.clear());
-    }
-
-    final catalog = catalogAsync.requireValue;
-    final paperIndex = _activePaperCategoryIndex(catalog);
-    if (paperIndex == -1) {
-      ref.read(pipelineTutorialProvider.notifier).abandon();
-      return;
-    }
-
-    _categoryCoachScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // The cards animate in with a 400ms duration and 60ms stagger. Waiting
-      // from the catalog-backed render keeps the spotlight bounds accurate.
-      await Future<void>.delayed(
-        Duration(milliseconds: 460 + (paperIndex + 1) * 60),
-      );
-      if (!mounted) return;
-      _categoryCoachScheduled = false;
-      _maybePipelineCoachMark();
-    });
-  }
-
-  void _maybePipelineCoachMark() {
-    if (!mounted) return;
-    final state = ref.read(pipelineTutorialProvider);
-    if (!state.active || state.step != PipelineStep.paperCategoryCard) return;
-    if (_categoryCoachVisible) return;
-
-    final catalogAsync = ref.read(productCatalogProvider);
-    if (catalogAsync.isLoading || !catalogAsync.hasValue) {
-      _schedulePipelineCoachMark();
-      return;
-    }
-
-    final paperCategory = _activePaperCategory(catalogAsync.requireValue);
-    if (paperCategory == null) {
-      ref.read(pipelineTutorialProvider.notifier).abandon();
-      return;
-    }
-    if (_paperCategoryKey.currentContext == null) {
-      _schedulePipelineCoachMark();
-      return;
-    }
-
-    _categoryCoachVisible = true;
-    showCoachMark(
-      context,
-      [
-        TutorialStep(
-          targetKey: _paperCategoryKey,
-          icon: HugeIcons.strokeRoundedFile02,
-          title: 'Paper Printing',
-          body: 'Pick Paper Printing for documents, photos, and posters.',
-          advanceOnSpotlightTap: true,
-          onSpotlightTap: () {
-            _advancedThisFrame = true;
-            _categoryCoachVisible = false;
-            ref.read(pipelineTutorialProvider.notifier).advance();
-            _selectCategory(paperCategory);
-          },
-        ),
-      ],
-      () => _categoryCoachVisible = false,
-      onSkip: () {
-        _categoryCoachVisible = false;
-        ref.read(pipelineTutorialProvider.notifier).abandon();
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = _colors(context);
-    final catalogAsync = ref.watch(productCatalogProvider);
-    final catalog =
-        catalogAsync.valueOrNull ?? ProductCatalog.fallback();
-    final categories = _visibleCategories(catalog);
-    final parent = _currentParent(catalog);
-
-    final heading = parent == null
-        ? 'What would you\nlike to print?'
-        : parent.name;
-    final subheading = parent == null
-        ? null
-        : (parent.audienceLabel ??
-            parent.mobileDescription ??
-            parent.description);
+    final catalogState = ref.watch(productCatalogProvider);
 
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppBar(
         backgroundColor: colors.background,
-        elevation: 0,
-        title: Text(
-          widget.addMode ? 'Add to your order' : 'New Order',
-          style: AppTypography.h3.copyWith(color: colors.onBackground),
-        ),
-        iconTheme: IconThemeData(color: colors.onBackground),
-        leading: _browseStack.isNotEmpty
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  setState(() {
-                    _browseStack.removeLast();
-                  });
-                },
-              )
-            : null,
+        title: Text(addMode ? 'Add to your order' : 'New Order'),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.xxl,
+          ),
+          children: [
+            if (addMode)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => context.go('/customer/order/checkout'),
+                  child: const Text('Skip — review checkout'),
+                ),
+              ),
+            Text(
+              'Browse by product group',
+              style: AppTypography.h1.copyWith(color: colors.onBackground),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Choose the kind of product you need. We’ll confirm availability, price, and turnaround after review.',
+              style: AppTypography.bodyLarge.copyWith(color: colors.onSurface),
+            ),
+            if (catalogState.isLoading || catalogState.error != null) ...[
               const SizedBox(height: AppSpacing.md),
-              const StepIndicator(totalSteps: 6, currentStep: 0),
-              if (widget.addMode) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => context.go('/customer/order/checkout'),
-                    child: Text(
-                      'Skip — review checkout',
-                      style: AppTypography.body.copyWith(color: colors.accent),
-                    ),
-                  ),
-                ),
-              ],
-              if (_browseStack.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.sm),
-                _Breadcrumb(
-                  catalog: catalog,
-                  stack: _browseStack,
-                  onTapLevel: (index) {
-                    setState(() {
-                      if (index < 0) {
-                        _browseStack.clear();
-                      } else {
-                        _browseStack.removeRange(
-                          index + 1,
-                          _browseStack.length,
-                        );
-                      }
-                    });
-                  },
-                ),
-              ],
-              const SizedBox(height: AppSpacing.xl),
-              Text(
-                    heading,
-                    style: AppTypography.h1.copyWith(
-                      color: colors.onBackground,
-                    ),
-                  )
-                  .animate()
-                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                  .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
-              if (subheading != null && subheading.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  subheading,
-                  style: AppTypography.body.copyWith(
-                    color: colors.onSurfaceDim,
-                  ),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.xl),
-              Expanded(
-                child: ListView(
-                  children: [
-                    if (catalogAsync.isLoading &&
-                        catalogAsync.valueOrNull == null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                        child: LinearProgressIndicator(
-                          minHeight: 2,
-                          color: colors.accent,
-                          backgroundColor: colors.surfaceVariant,
-                        ),
-                      ),
-                    if (categories.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: AppSpacing.xl),
-                        child: Text(
-                          'No products in this group yet.',
-                          style: AppTypography.body.copyWith(
-                            color: colors.onSurfaceDim,
-                          ),
-                        ),
-                      ),
-                    ...categories.indexed.map((entry) {
-                      final index = entry.$1;
-                      final category = entry.$2;
-                      final children = catalog.childrenOf(category.id);
-                      final canDrill =
-                          category.isBrowseGroup || children.isNotEmpty;
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          bottom: index == categories.length - 1
-                              ? 0
-                              : AppSpacing.md,
-                        ),
-                        child:
-                            _CategoryCard(
-                                  tutorialKey: category.slug == 'paper'
-                                      ? _paperCategoryKey
-                                      : null,
-                                  illustration: _categoryIllustration(
-                                    category,
-                                    colors,
-                                  ),
-                                  title: category.name,
-                                  description:
-                                      category.audienceLabel ??
-                                      category.mobileDescription ??
-                                      category.description ??
-                                      (canDrill
-                                          ? 'Browse products in this group'
-                                          : 'Configure specs and upload your file'),
-                                  badge: _levelBadge(category),
-                                  onTap: () {
-                                    if (canDrill && !category.isOrderable) {
-                                      setState(() {
-                                        _browseStack.add(category.id);
-                                      });
-                                      return;
-                                    }
-                                    _selectCategory(category);
-                                  },
-                                )
-                                .animate()
-                                .fadeIn(
-                                  duration: 400.ms,
-                                  delay: Duration(
-                                    milliseconds: 60 * (index + 1),
-                                  ),
-                                  curve: Curves.easeOut,
-                                )
-                                .slideY(
-                                  begin: 0.03,
-                                  duration: 400.ms,
-                                  delay: Duration(
-                                    milliseconds: 60 * (index + 1),
-                                  ),
-                                  curve: Curves.easeOut,
-                                ),
-                      );
-                    }),
-                  ],
-                ),
+              CatalogAuthorityBanner(
+                state: catalogState,
+                onRetry: () =>
+                    ref.read(productCatalogProvider.notifier).retry(),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String? _levelBadge(ProductCategory category) {
-    if (category.isOrderable && category.catalogLevel >= 3) return 'Product';
-    if (category.catalogLevel == 2) return 'Group';
-    if (category.isBrowseGroup && category.catalogLevel == 1) return 'Category';
-    return null;
-  }
-
-  Widget _categoryIllustration(ProductCategory category, AppColorSet colors) {
-    if (category.fileProcessingType == 'model_3d' || category.slug == '3d') {
-      return ThreeDCubeIllustration(size: 60, color: colors.accent);
-    }
-    return PrinterIllustration(size: 60, color: colors.accent);
-  }
-
-  Future<void> _selectCategory(ProductCategory category) async {
-    ref
-        .read(orderFlowProvider.notifier)
-        .setCategory(category.slug, categoryName: category.name);
-    ref.read(orderFlowProvider.notifier).goToStep(1);
-    final is3d =
-        category.fileProcessingType == 'model_3d' || category.slug == '3d';
-    await context.push(
-      is3d ? '/customer/order/3d-specs' : '/customer/order/paper-specs',
-    );
-  }
-}
-
-class _Breadcrumb extends StatelessWidget {
-  const _Breadcrumb({
-    required this.catalog,
-    required this.stack,
-    required this.onTapLevel,
-  });
-
-  final ProductCatalog catalog;
-  final List<int> stack;
-  final void Function(int index) onTapLevel;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
-
-    final chips = <Widget>[
-      GestureDetector(
-        onTap: () => onTapLevel(-1),
-        child: Text(
-          'All',
-          style: AppTypography.caption.copyWith(color: colors.accent),
-        ),
-      ),
-    ];
-
-    for (var i = 0; i < stack.length; i++) {
-      final node = catalog.categoryById(stack[i]);
-      if (node == null) continue;
-      chips.add(
-        Text(
-          ' / ',
-          style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
-        ),
-      );
-      final isLast = i == stack.length - 1;
-      chips.add(
-        GestureDetector(
-          onTap: isLast ? null : () => onTapLevel(i),
-          child: Text(
-            node.name,
-            style: AppTypography.caption.copyWith(
-              color: isLast ? colors.onBackground : colors.accent,
-              fontWeight: isLast ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: chips);
-  }
-}
-
-class _CategoryCard extends StatelessWidget {
-  const _CategoryCard({
-    required this.illustration,
-    required this.title,
-    required this.description,
-    required this.onTap,
-    this.tutorialKey,
-    this.badge,
-  });
-
-  final Widget illustration;
-  final String title;
-  final String description;
-  final VoidCallback onTap;
-  final GlobalKey? tutorialKey;
-  final String? badge;
-
-  AppColorSet _colors(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = _colors(context);
-
-    return KeyedSubtree(
-      key: tutorialKey,
-      child: AppCard(
-        onTap: onTap,
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Row(
-          children: [
-            illustration,
-            const SizedBox(width: AppSpacing.xl),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: AppTypography.h3.copyWith(
-                            color: colors.onBackground,
-                          ),
-                        ),
-                      ),
-                      if (badge != null) ...[
-                        const SizedBox(width: AppSpacing.xs),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colors.surfaceVariant,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            badge!,
-                            style: AppTypography.caption.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    description,
-                    style: AppTypography.body.copyWith(
-                      color: colors.onSurfaceDim,
-                    ),
-                  ),
-                ],
+            const SizedBox(height: AppSpacing.xl),
+            for (final group in catalogState.catalog.activeGroups) ...[
+              CatalogGroupCard(
+                key: ValueKey('catalog-group-${group.slug}'),
+                group: group,
+                icon: _groupIcon(group),
+                onTap: () => _selectGroup(context, ref, group),
               ),
-            ),
-            Icon(Icons.chevron_right, color: colors.onSurfaceDim),
+              const SizedBox(height: AppSpacing.md),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  dynamic _groupIcon(ProductGroup group) => switch (group.slug) {
+    'marketing-promo' => HugeIcons.strokeRoundedFile02,
+    'corporate-merch' => HugeIcons.strokeRoundedPackage,
+    'awards-signages' => HugeIcons.strokeRoundedCheckmarkBadge01,
+    'specialized-prototyping' => HugeIcons.strokeRoundedCube,
+    _ => HugeIcons.strokeRoundedPrinter,
+  };
+
+  void _selectGroup(BuildContext context, WidgetRef ref, ProductGroup group) {
+    final tutorial = ref.read(pipelineTutorialProvider);
+    if (tutorial.active && tutorial.step == PipelineStep.catalogGroup) {
+      ref.read(pipelineTutorialProvider.notifier).advance();
+    }
+    context.push('/customer/order/groups/${Uri.encodeComponent(group.slug)}');
   }
 }

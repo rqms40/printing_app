@@ -22,6 +22,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
 import 'package:printing_app/features/customer/orders/widgets/marketplace_order_actions.dart';
+import 'package:printing_app/features/customer/orders/widgets/quote_card.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_claims_section.dart';
 import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
 import 'package:printing_app/utils/formatters.dart';
@@ -175,46 +176,9 @@ class OrderDetailScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
-                      // Status badge + delivery OTP chip in the same row
-                      // (placement matches the customer order status card).
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          StatusBadge(
-                            label: order.orderStatus.displayName,
-                            variant: _orderStatusBadgeVariant(
-                              order.orderStatus,
-                            ),
-                          ),
-                          if (order.deliveryOtp != null &&
-                              order.deliveryOtp!.trim().isNotEmpty) ...[
-                            const SizedBox(width: AppSpacing.sm),
-                            Flexible(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colors.brand.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: colors.brand.withValues(alpha: 0.4),
-                                  ),
-                                ),
-                                child: Text(
-                                  'OTP ${order.deliveryOtp!.trim()}',
-                                  style: AppTypography.bodyBold.copyWith(
-                                    color: colors.onBackground,
-                                    letterSpacing: 2,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                      StatusBadge(
+                        label: order.orderStatus.displayName,
+                        variant: _orderStatusBadgeVariant(order.orderStatus),
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       Text(
@@ -225,11 +189,43 @@ class OrderDetailScreen extends ConsumerWidget {
                       ),
                       if (order.deliveryOtp != null &&
                           order.deliveryOtp!.trim().isNotEmpty) ...[
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          'Show this delivery OTP to the rider when your order arrives.',
-                          style: AppTypography.caption.copyWith(
-                            color: colors.onSurfaceDim,
+                        const SizedBox(height: AppSpacing.md),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: colors.brand.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: colors.brand.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'DELIVERY OTP',
+                                style: AppTypography.overline.copyWith(
+                                  color: colors.brand,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                order.deliveryOtp!.trim(),
+                                style: AppTypography.h2.copyWith(
+                                  color: colors.onBackground,
+                                  letterSpacing: 4,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                'Show this code to the rider when your order arrives.',
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -274,6 +270,13 @@ class OrderDetailScreen extends ConsumerWidget {
             ],
 
             // --- Marketplace QA / payment actions (Phases 3–4) ---
+            if (order.hasQuoteLifecycle) ...[
+              QuoteCard(
+                order: order,
+                isOwner: ref.watch(authProvider).user?.id == order.userId,
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
             MarketplaceOrderActions(order: order)
                 .animate()
                 .fadeIn(duration: 400.ms, curve: Curves.easeOut)
@@ -331,7 +334,8 @@ class OrderDetailScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.md),
 
             // --- Estimated Completion ---
-            if (order.estimatedCompletionAt != null) ...[
+            if (!order.hasQuoteLifecycle &&
+                order.estimatedCompletionAt != null) ...[
               AppCard(
                     child: Row(
                       children: [
@@ -376,28 +380,40 @@ class OrderDetailScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.md),
 
             // --- Price Breakdown ---
-            _buildPriceSection(order, colors)
-                .animate()
-                .fadeIn(duration: 400.ms, delay: 320.ms, curve: Curves.easeOut)
-                .slideY(
-                  begin: 0.03,
-                  duration: 400.ms,
-                  delay: 320.ms,
-                  curve: Curves.easeOut,
-                ),
-            const SizedBox(height: AppSpacing.md),
+            if (!order.hasQuoteLifecycle) ...[
+              _buildPriceSection(order, colors)
+                  .animate()
+                  .fadeIn(
+                    duration: 400.ms,
+                    delay: 320.ms,
+                    curve: Curves.easeOut,
+                  )
+                  .slideY(
+                    begin: 0.03,
+                    duration: 400.ms,
+                    delay: 320.ms,
+                    curve: Curves.easeOut,
+                  ),
+              const SizedBox(height: AppSpacing.md),
+            ],
 
             // --- Payment Info ---
-            _buildPaymentSection(order, colors)
-                .animate()
-                .fadeIn(duration: 400.ms, delay: 400.ms, curve: Curves.easeOut)
-                .slideY(
-                  begin: 0.03,
-                  duration: 400.ms,
-                  delay: 400.ms,
-                  curve: Curves.easeOut,
-                ),
-            const SizedBox(height: AppSpacing.md),
+            if (!order.hasQuoteLifecycle) ...[
+              _buildPaymentSection(order, colors)
+                  .animate()
+                  .fadeIn(
+                    duration: 400.ms,
+                    delay: 400.ms,
+                    curve: Curves.easeOut,
+                  )
+                  .slideY(
+                    begin: 0.03,
+                    duration: 400.ms,
+                    delay: 400.ms,
+                    curve: Curves.easeOut,
+                  ),
+              const SizedBox(height: AppSpacing.md),
+            ],
 
             // --- Delivery Info ---
             _buildDeliverySection(order, address, colors)
@@ -483,7 +499,13 @@ class OrderDetailScreen extends ConsumerWidget {
               padding: EdgeInsets.only(
                 bottom: index == order.itemCount ? 0 : AppSpacing.md,
               ),
-              child: _buildOrderItem(context, item, index, colors),
+              child: _buildOrderItem(
+                context,
+                item,
+                index,
+                colors,
+                showPrice: !order.hasQuoteLifecycle,
+              ),
             );
           }),
         ],
@@ -495,8 +517,9 @@ class OrderDetailScreen extends ConsumerWidget {
     BuildContext context,
     OrderLineItem item,
     int index,
-    AppColorSet colors,
-  ) {
+    AppColorSet colors, {
+    required bool showPrice,
+  }) {
     final fileName = item.fileName;
     final extension = fileName?.split('.').last.toUpperCase();
 
@@ -548,7 +571,7 @@ class OrderDetailScreen extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
-        _specRow('Type', _itemCategoryLabel(item.category), colors),
+        _specRow('Type', _itemCategoryLabel(item), colors),
         _specRow('Quantity', '${item.quantity}', colors),
         ..._itemSpecRows(item, colors),
         if (item.specialInstructions != null)
@@ -558,7 +581,8 @@ class OrderDetailScreen extends ConsumerWidget {
             colors,
             multiline: true,
           ),
-        _specRow('Item Subtotal', formatCurrency(item.totalPrice), colors),
+        if (showPrice)
+          _specRow('Item Subtotal', formatCurrency(item.totalPrice), colors),
       ],
     );
   }
@@ -616,8 +640,11 @@ class OrderDetailScreen extends ConsumerWidget {
       return item.specDisplayValues.entries
           .where((entry) => entry.value.trim().isNotEmpty)
           .map(
-            (entry) =>
-                _specRow(_humanizeSpecKey(entry.key), entry.value, colors),
+            (entry) => _specRow(
+              item.specLabels[entry.key] ?? _humanizeSpecKey(entry.key),
+              entry.value,
+              colors,
+            ),
           )
           .toList();
     }
@@ -650,10 +677,11 @@ class OrderDetailScreen extends ConsumerWidget {
     return const [];
   }
 
-  String _itemCategoryLabel(String category) {
-    if (category == '3d') return '3D Print';
-    if (category == 'paper') return 'Paper Print';
-    return category;
+  String _itemCategoryLabel(OrderLineItem item) {
+    if (item.category == '3d') return '3D Print';
+    if (item.category == 'paper') return 'Paper Print';
+    final name = item.categoryName?.trim();
+    return name == null || name.isEmpty ? item.category : name;
   }
 
   String _humanizeSpecKey(String key) {
@@ -939,8 +967,7 @@ class _SupplierShopDropdown extends StatelessWidget {
       OrderStatus.awaitingPayment ||
       OrderStatus.paymentAuthorized ||
       OrderStatus.production ||
-      OrderStatus.supplierSelfQc =>
-        'Supplier shop',
+      OrderStatus.supplierSelfQc => 'Supplier shop',
       _ => 'Assigned supplier',
     };
 
@@ -1143,14 +1170,14 @@ class _SelfQcEvidenceSection extends StatelessWidget {
                             fit: BoxFit.contain,
                             errorBuilder: (context, error, stackTrace) =>
                                 Padding(
-                              padding: const EdgeInsets.all(AppSpacing.xl),
-                              child: Text(
-                                'Could not load evidence photo',
-                                style: AppTypography.body.copyWith(
-                                  color: colors.onSurfaceDim,
+                                  padding: const EdgeInsets.all(AppSpacing.xl),
+                                  child: Text(
+                                    'Could not load evidence photo',
+                                    style: AppTypography.body.copyWith(
+                                      color: colors.onSurfaceDim,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
                           ),
                         ),
                       ),

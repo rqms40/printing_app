@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   BadRequestException,
   ForbiddenException,
@@ -18,6 +17,7 @@ import {
   Order,
   OrderStatus,
   PaymentAuthorizationStatus,
+  PricingStatus,
 } from './entities/order.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { OrderItem } from './entities/order-item.entity';
@@ -35,6 +35,7 @@ import {
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import { SupplierAssignmentDecision } from '../matching/entities/supplier-assignment.entity';
 import { Address } from '../addresses/entities/address.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
@@ -43,6 +44,7 @@ import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-booking.entity';
 import {
   CancellationClosedException,
+  ServiceAreaMismatchException,
   SlotFullException,
 } from '../delivery-slots/exceptions';
 import { BatchOrder } from './entities/batch-order.entity';
@@ -51,6 +53,15 @@ import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
+import { CatalogReadService } from '../products/catalog-read.service';
+import { CatalogValidationService } from '../products/catalog-validation.service';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import {
+  InputType,
+  PricingModel,
+  PricingRole,
+  ValueType,
+} from '../products/enums/catalog.enums';
 import { User } from '../users/entities/user.entity';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 import {
@@ -208,6 +219,9 @@ describe('OrdersService', () => {
   let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
   let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
   let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
+  let supplierAssignmentRepo: jest.Mocked<
+    Partial<Repository<SupplierAssignment>>
+  >;
   let slotBookingRepo: jest.Mocked<Partial<Repository<DeliverySlotBooking>>>;
   let dispatchPlanRepo: jest.Mocked<Partial<Repository<DispatchPlan>>>;
   let historyRepo: jest.Mocked<Partial<Repository<OrderStatusHistory>>>;
@@ -219,10 +233,13 @@ describe('OrdersService', () => {
   let creditsService: Partial<CreditsService>;
   let paymentsService: {
     assertCodEligibleForCheckout: jest.Mock;
+    evaluateCodEligibilityForUser: jest.Mock;
+    evaluateCodEligibilityForOrders: jest.Mock;
     ensurePendingCodCollection: jest.Mock;
   };
   let notificationsService: Partial<NotificationsService>;
   let catalogPricingService: { quote: jest.Mock };
+  let catalogReadService: { getPublicCatalog: jest.Mock };
   let fileMetadataRepo: jest.Mocked<Partial<Repository<FileMetadata>>>;
   let auditService: {
     recordOrderStatusTransition: jest.Mock;
@@ -230,6 +247,7 @@ describe('OrdersService', () => {
   };
   let transactionQuery: jest.Mock;
   let transactionBetaSettingsRepo: { findOne: jest.Mock };
+  let transactionUserRepo: { findOne: jest.Mock };
 
   const mockOrder = {
     id: 1,
@@ -327,6 +345,10 @@ describe('OrdersService', () => {
       find: jest.fn(),
       findOne: jest.fn(),
     };
+    supplierAssignmentRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn(),
+    };
     slotBookingRepo = {
       find: jest.fn().mockResolvedValue([]),
     };
@@ -349,7 +371,15 @@ describe('OrdersService', () => {
       })),
       findOneOrFail: jest.fn().mockResolvedValue({ model3dWidthMm: null }),
     };
-    addressRepo.findOne.mockResolvedValue({ id: 9, userId: 1 } as Address);
+    addressRepo.findOne.mockResolvedValue({
+      id: 9,
+      userId: 1,
+      label: 'Home',
+      fullAddress: '9 Main Street',
+      city: 'Davao City',
+      latitude: 7.0731,
+      longitude: 125.6128,
+    } as Address);
     gateway = {
       notifyOrderUpdate: jest.fn(),
     };
@@ -387,6 +417,10 @@ describe('OrdersService', () => {
     };
     paymentsService = {
       assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
+      evaluateCodEligibilityForUser: jest
+        .fn()
+        .mockResolvedValue({ eligible: false }),
+      evaluateCodEligibilityForOrders: jest.fn().mockResolvedValue(new Map()),
       ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
     };
     notificationsService = {
@@ -444,6 +478,13 @@ describe('OrdersService', () => {
         };
       }),
     };
+    catalogReadService = {
+      getPublicCatalog: jest.fn().mockResolvedValue({
+        version: '1.10.0',
+        groups: [],
+        categories: [],
+      }),
+    };
     auditService = {
       recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
       append: jest.fn().mockResolvedValue({ id: 1 }),
@@ -462,6 +503,9 @@ describe('OrdersService', () => {
     transactionBetaSettingsRepo = {
       findOne: jest.fn().mockResolvedValue({ id: 1, isEnabled: true }),
     };
+    transactionUserRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 1 }),
+    };
     dataSource = {
       query: jest.fn().mockResolvedValue([{ is_enabled: true }]),
       getRepository: jest.fn().mockReturnValue(slotBookingRepo),
@@ -477,6 +521,9 @@ describe('OrdersService', () => {
             if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
             if (entity?.name === 'BatchOrder') return batchRepo;
             if (entity?.name === 'OrderStatusHistory') return historyRepo;
+            if (entity?.name === 'SupplierAssignment')
+              return supplierAssignmentRepo;
+            if (entity?.name === 'User') return transactionUserRepo;
             if (entity?.name === BetaModeSettings.name)
               return transactionBetaSettingsRepo;
             if (entity?.name === 'DeliveryDestination')
@@ -508,7 +555,7 @@ describe('OrdersService', () => {
         },
         {
           provide: getRepositoryToken(SupplierAssignment),
-          useValue: { find: jest.fn().mockResolvedValue([]) },
+          useValue: supplierAssignmentRepo,
         },
         {
           provide: getRepositoryToken(DispatchPlan),
@@ -581,6 +628,7 @@ describe('OrdersService', () => {
         },
         catalogPricingProvider(),
         { provide: CatalogPricingService, useValue: catalogPricingService },
+        { provide: CatalogReadService, useValue: catalogReadService },
         { provide: AuditService, useValue: auditService },
       ],
     }).compile();
@@ -628,6 +676,288 @@ describe('OrdersService', () => {
       expect(
         (order.authorizationSnapshot as { priceMinor: string }).priceMinor,
       ).toBe('10000');
+    });
+  });
+
+  describe('acceptQuote (RFQ customer gate)', () => {
+    function quotedOrder(overrides: Partial<Order> = {}): Order {
+      return {
+        id: 42,
+        orderId: 'ORD-10042',
+        userId: 1,
+        batchOrderId: null,
+        orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
+        pricingStatus: PricingStatus.QUOTED,
+        quotedTotalMinor: '12500',
+        quotedAt: new Date('2026-08-10T10:00:00Z'),
+        quoteAcceptedAt: null,
+        quotedByUserId: 55,
+        promisedCompletionAt: new Date('2026-08-13T10:00:00Z'),
+        paymentMethod: 'unselected',
+        paymentStatus: 'pending',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+        authorizationSnapshot: null,
+        totalPrice: 0,
+        deliveryFee: 0,
+        finalTotalMinor: null,
+        deliveryFeeMinor: null,
+        category: 'flyers',
+        quantity: 100,
+        fileMetadataId: 8,
+        estimatedCompletionAt: new Date('2026-08-13T10:00:00Z'),
+        codEligible: false,
+        ...overrides,
+      } as Order;
+    }
+
+    function acceptedAssignment(
+      overrides: Partial<SupplierAssignment> = {},
+    ): SupplierAssignment {
+      return {
+        id: 17,
+        orderId: 42,
+        supplierId: 5,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        finalPriceMinor: '10000',
+        promisedDate: new Date('2026-08-13T10:00:00Z'),
+        ...overrides,
+      } as SupplierAssignment;
+    }
+
+    beforeEach(() => {
+      const order = quotedOrder();
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      repo.save.mockImplementation(async (row) => row as Order);
+      supplierAssignmentRepo.find!.mockResolvedValue([acceptedAssignment()]);
+    });
+
+    it('accepts the current frozen quote without authorizing or debiting payment', async () => {
+      const result = await service.acceptQuote(42, 1, {
+        supplierAssignmentId: 17,
+        paymentMethod: 'pilot_credit',
+      });
+
+      expect(result.orderStatus).toBe(OrderStatus.AWAITING_PAYMENT);
+      expect(result.pricingStatus).toBe(PricingStatus.ACCEPTED);
+      expect(result.quoteAcceptedAt).toEqual(expect.any(Date));
+      expect(result.paymentMethod).toBe('pilot_credit');
+      expect(result.paymentAuthorizationStatus).toBe(
+        PaymentAuthorizationStatus.NONE,
+      );
+      expect(result.authorizationSnapshot).toBeNull();
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+      expect(creditsService.spendCredits).not.toHaveBeenCalled();
+      expect(paymentsService.ensurePendingCodCollection).not.toHaveBeenCalled();
+      expect(historyRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 42,
+          fromStatus: OrderStatus.SUPPLIER_ACCEPTED,
+          toStatus: OrderStatus.AWAITING_PAYMENT,
+          changedByUserId: 1,
+        }),
+      );
+      expect(auditService.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'customer_quote_accepted',
+          metadata: expect.objectContaining({ supplierAssignmentId: 17 }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects a non-owner under the transaction lock', async () => {
+      await expect(
+        service.acceptQuote(42, 99, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'not_order_owner' }),
+      });
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a superseded assignment as stale', async () => {
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        acceptedAssignment({ id: 17 }),
+        acceptedAssignment({ id: 18 }),
+      ]);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'stale_quote' }),
+      });
+    });
+
+    it('rejects a superseded assignment even when replaying an accepted downstream order', async () => {
+      const order = quotedOrder({
+        orderStatus: OrderStatus.PRODUCTION,
+        pricingStatus: PricingStatus.ACCEPTED,
+        quoteAcceptedAt: new Date('2026-08-10T12:00:00Z'),
+        paymentMethod: 'pilot_credit',
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        acceptedAssignment({ id: 17 }),
+        acceptedAssignment({ id: 18 }),
+      ]);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'stale_quote' }),
+      });
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['price', { finalPriceMinor: null }],
+      ['promised date', { promisedDate: null }],
+    ])('rejects a quote missing its %s', async (_label, assignmentOverride) => {
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        acceptedAssignment(assignmentOverride),
+      ]);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'quote_terms_missing' }),
+      });
+    });
+
+    it('is idempotent only for the same accepted assignment and payment rail', async () => {
+      const order = quotedOrder({
+        orderStatus: OrderStatus.AWAITING_PAYMENT,
+        pricingStatus: PricingStatus.ACCEPTED,
+        quoteAcceptedAt: new Date('2026-08-10T12:00:00Z'),
+        paymentMethod: 'pilot_credit',
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'pilot_credit',
+        }),
+      ).resolves.toBe(order);
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
+    });
+
+    it.each([OrderStatus.PAYMENT_AUTHORIZED, OrderStatus.PRODUCTION])(
+      'replays an accepted quote idempotently from downstream status %s',
+      async (orderStatus) => {
+        const order = quotedOrder({
+          orderStatus,
+          pricingStatus: PricingStatus.ACCEPTED,
+          quoteAcceptedAt: new Date('2026-08-10T12:00:00Z'),
+          paymentMethod: 'pilot_credit',
+          paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
+        });
+        repo.findOne.mockResolvedValue(order);
+        repo.findOneOrFail.mockResolvedValue(order);
+
+        await expect(
+          service.acceptQuote(42, 1, {
+            supplierAssignmentId: 17,
+            paymentMethod: 'pilot_credit',
+          }),
+        ).resolves.toBe(order);
+        expect(repo.save).not.toHaveBeenCalled();
+        expect(historyRepo.insert).not.toHaveBeenCalled();
+        expect(auditService.recordOrderStatusTransition).not.toHaveBeenCalled();
+        expect(auditService.append).not.toHaveBeenCalled();
+        expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+        expect(creditsService.spendCredits).not.toHaveBeenCalled();
+        expect(
+          paymentsService.assertCodEligibleForCheckout,
+        ).not.toHaveBeenCalled();
+        expect(
+          paymentsService.ensurePendingCodCollection,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects a conflicting payment rail after acceptance', async () => {
+      const order = quotedOrder({
+        orderStatus: OrderStatus.AWAITING_PAYMENT,
+        pricingStatus: PricingStatus.ACCEPTED,
+        quoteAcceptedAt: new Date('2026-08-10T12:00:00Z'),
+        paymentMethod: 'pilot_credit',
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'cod',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'quote_acceptance_conflict',
+        }),
+      });
+    });
+
+    it('evaluates COD against the frozen quoted total without creating a collection', async () => {
+      paymentsService.assertCodEligibleForCheckout.mockResolvedValue({
+        eligible: true,
+        reasons: [],
+        message: 'COD eligible',
+        amountMinor: '12500',
+        maxAmountMinor: 150000,
+      });
+
+      const result = await service.acceptQuote(42, 1, {
+        supplierAssignmentId: 17,
+        paymentMethod: 'cod',
+      });
+
+      expect(paymentsService.assertCodEligibleForCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          finalTotalMinor: '12500',
+          excludeOrderId: 42,
+        }),
+        expect.anything(),
+      );
+      expect(result.codEligible).toBe(true);
+      expect(paymentsService.ensurePendingCodCollection).not.toHaveBeenCalled();
+    });
+
+    it('rejects COD ineligibility before quote acceptance is persisted', async () => {
+      paymentsService.assertCodEligibleForCheckout.mockRejectedValue(
+        new ForbiddenException({
+          code: 'cod_not_eligible',
+          reasons: ['active_unpaid_cod_exists'],
+        }),
+      );
+
+      await expect(
+        service.acceptQuote(42, 1, {
+          supplierAssignmentId: 17,
+          paymentMethod: 'cod',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'cod_not_eligible' }),
+      });
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
     });
   });
 
@@ -758,6 +1088,7 @@ describe('OrdersService', () => {
           amountMinor: '100000',
           eligible: true,
         }),
+        expect.anything(),
       );
       expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
       expect(result.paymentAuthorizationStatus).toBe(
@@ -834,6 +1165,110 @@ describe('OrdersService', () => {
 
       expect(creditsService.reserveCredits).not.toHaveBeenCalled();
       expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
+    });
+
+    it('rejects direct authorization of a newly quoted RFQ from supplier_accepted', async () => {
+      const order = awaitingPilotCreditOrder({
+        orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
+        pricingStatus: PricingStatus.QUOTED,
+        quotedTotalMinor: '12500',
+      });
+      repo.findOne.mockResolvedValue(order);
+
+      await expect(
+        service.authorizePayment(42, authContext),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'rfq_quote_not_accepted',
+        }),
+      });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+    });
+
+    it('freezes accepted RFQ money from the current supplier assignment and quote', async () => {
+      const order = awaitingPilotCreditOrder({
+        pricingStatus: PricingStatus.ACCEPTED,
+        quotedTotalMinor: '12500',
+        finalTotalMinor: null,
+        deliveryFeeMinor: null,
+        totalPrice: 0,
+        deliveryFee: 0,
+        promisedCompletionAt: new Date('2026-08-13T10:00:00Z'),
+      });
+      const supplierAssignment = {
+        id: 17,
+        orderId: 42,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        finalPriceMinor: '10000',
+        promisedDate: new Date('2026-08-13T10:00:00Z'),
+      } as SupplierAssignment;
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      repo.save.mockImplementation(async (row) => row as Order);
+      supplierAssignmentRepo.find!.mockResolvedValue([supplierAssignment]);
+
+      const result = await service.authorizePayment(42, authContext);
+
+      expect(creditsService.reserveCredits).toHaveBeenCalledWith(
+        1,
+        125,
+        OrdersService.creditReserveIdempotencyKey(42),
+        expect.anything(),
+      );
+      expect(result.authorizationSnapshot).toEqual(
+        expect.objectContaining({
+          priceMinor: '10000',
+          deliveryFeeMinor: '2500',
+          finalTotalMinor: '12500',
+          promisedDate: '2026-08-13T10:00:00.000Z',
+        }),
+      );
+    });
+
+    it('rejects authorization when the accepted assignment has been superseded', async () => {
+      const order = awaitingPilotCreditOrder({
+        pricingStatus: PricingStatus.ACCEPTED,
+        quotedTotalMinor: '12500',
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 17,
+          orderId: 42,
+          decision: SupplierAssignmentDecision.ACCEPTED,
+          finalPriceMinor: '10000',
+          promisedDate: new Date('2026-08-13T10:00:00Z'),
+        } as SupplierAssignment,
+        {
+          id: 18,
+          orderId: 42,
+          decision: SupplierAssignmentDecision.PENDING,
+        } as SupplierAssignment,
+      ]);
+
+      await expect(
+        service.authorizePayment(42, authContext),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'current_quote_missing' }),
+      });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the locked order no longer matches the prechecked commerce owner', async () => {
+      const precheck = awaitingPilotCreditOrder({ userId: 1 });
+      const changed = awaitingPilotCreditOrder({ userId: 2 });
+      repo.findOne.mockResolvedValue(precheck);
+      repo.findOneOrFail.mockResolvedValue(changed);
+
+      await expect(
+        service.authorizePayment(42, authContext),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'order_changed_during_authorization',
+        }),
+      });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
     });
   });
 
@@ -1056,8 +1491,9 @@ describe('OrdersService', () => {
         new Date('2026-08-04T12:00:00.000Z'),
       );
 
-      expect(result.orderStatus).toBe(OrderStatus.APPROVED_FOR_MATCHING);
-      expect(result.paymentAuthorizationStatus).toBe(
+      expect(result.outcome).toBe('expired');
+      expect(result.order.orderStatus).toBe(OrderStatus.APPROVED_FOR_MATCHING);
+      expect(result.order.paymentAuthorizationStatus).toBe(
         PaymentAuthorizationStatus.EXPIRED,
       );
       expect(historyRepo.insert).toHaveBeenCalledWith(
@@ -1071,9 +1507,95 @@ describe('OrdersService', () => {
         [9, 'payment_timeout'],
       );
     });
+
+    it('keeps a customer-accepted RFQ immutable for Operations resolution on timeout', async () => {
+      const order = {
+        id: 10,
+        orderId: 'ORD-10',
+        userId: 2,
+        orderStatus: OrderStatus.AWAITING_PAYMENT,
+        pricingStatus: PricingStatus.ACCEPTED,
+        quoteAcceptedAt: new Date('2026-08-03T12:00:00.000Z'),
+        quotedTotalMinor: '12500',
+        paymentMethod: 'cod',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(order);
+      const txQuery = jest.fn();
+      (dataSource as any).transaction = jest.fn(async (run) =>
+        run({
+          query: txQuery,
+          getRepository: (entity: { name?: string }) => {
+            if (entity?.name === 'Order') return repo;
+            if (entity?.name === 'OrderStatusHistory') return historyRepo;
+            throw new Error(`Unexpected repository ${entity?.name}`);
+          },
+        }),
+      );
+
+      const result = await service.expirePaymentWait(
+        10,
+        new Date('2026-08-04T12:00:00.000Z'),
+      );
+
+      expect(result).toEqual({
+        outcome: 'operations_resolution_required',
+        order,
+      });
+      expect(order.orderStatus).toBe(OrderStatus.AWAITING_PAYMENT);
+      expect(order.pricingStatus).toBe(PricingStatus.ACCEPTED);
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
+      expect(auditService.recordOrderStatusTransition).not.toHaveBeenCalled();
+      expect(txQuery).not.toHaveBeenCalled();
+    });
   });
 
   describe('create', () => {
+    it('rejects quote-required products on the legacy create path', async () => {
+      catalogPricingService.quote.mockResolvedValueOnce({
+        pricingStatus: 'pending_quote',
+        items: [
+          {
+            categoryId: 10,
+            categorySlug: 'flyers',
+            categoryName: 'Flyers',
+            pricingModel: 'quote_required',
+            quantity: 100,
+            printSubtotal: null,
+            specSnapshots: [],
+            pricingBreakdown: [],
+          },
+        ],
+        subtotal: null,
+        deliveryFee: null,
+        serviceFee: null,
+        total: null,
+      });
+
+      await expect(
+        service.create({
+          userId: 1,
+          category: 'flyers',
+          quantity: 100,
+          specs: {},
+        } as Partial<Order> & { specs: Record<string, unknown> }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'RFQ_ENDPOINT_REQUIRED' }),
+      });
+      expect(repo.create).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(orderItemsRepo.save).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(creditsService.subtractCredits).not.toHaveBeenCalled();
+      expect(
+        paymentsService.assertCodEligibleForCheckout,
+      ).not.toHaveBeenCalled();
+      expect(paymentsService.ensurePendingCodCollection).not.toHaveBeenCalled();
+      expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(notificationsService.createForAllAdmins).not.toHaveBeenCalled();
+    });
+
     it('should generate orderId, save order', async () => {
       repo.count.mockResolvedValue(0);
       repo.create.mockReturnValue(mockOrder);
@@ -1414,6 +1936,59 @@ describe('OrdersService', () => {
       ).rejects.toThrow('Batch order requires at least one item');
     });
 
+    it('rejects quote-required products on the legacy batch path', async () => {
+      catalogPricingService.quote.mockResolvedValueOnce({
+        pricingStatus: 'pending_quote',
+        items: [
+          {
+            categoryId: 10,
+            categorySlug: 'flyers',
+            categoryName: 'Flyers',
+            pricingModel: 'quote_required',
+            quantity: 100,
+            printSubtotal: null,
+            specSnapshots: [],
+            pricingBreakdown: [],
+          },
+        ],
+        subtotal: null,
+        deliveryFee: null,
+        serviceFee: null,
+        total: null,
+      });
+
+      await expect(
+        (service as any).createBatch(1, {
+          ...batchDto,
+          deliveryOption: 'pickup',
+          deliveryAddressId: undefined,
+          items: [
+            {
+              ...batchDto.items[0],
+              category: 'flyers',
+              quantity: 100,
+              specs: {},
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'RFQ_ENDPOINT_REQUIRED' }),
+      });
+      expect(batchRepo.create).not.toHaveBeenCalled();
+      expect(batchRepo.save).not.toHaveBeenCalled();
+      expect(repo.create).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(orderItemsRepo.save).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(creditsService.subtractCredits).not.toHaveBeenCalled();
+      expect(
+        paymentsService.assertCodEligibleForCheckout,
+      ).not.toHaveBeenCalled();
+      expect(paymentsService.ensurePendingCodCollection).not.toHaveBeenCalled();
+      expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(notificationsService.createForAllAdmins).not.toHaveBeenCalled();
+    });
+
     it('rejects delivery addresses that do not belong to the user', async () => {
       addressRepo.findOne.mockResolvedValueOnce(null);
 
@@ -1739,10 +2314,328 @@ describe('OrdersService', () => {
           'items',
           'items.destination',
           'items.specValues',
+          'statusHistory',
         ],
         order: { createdAt: 'DESC' },
       });
-      expect(result).toEqual(orders);
+      expect(result).toMatchObject(orders);
+    });
+
+    it('masks RFQ compatibility money on subsequent customer reads', async () => {
+      catalogReadService.getPublicCatalog.mockResolvedValueOnce({
+        version: '1.10.0',
+        groups: [],
+        categories: [
+          {
+            id: 31,
+            slug: 'business-store-signages',
+            name: 'Business & Store Signages',
+            groupSlug: 'awards-signages',
+            groupName: 'Recognition, Awards & Signage',
+            groupDescription: 'Recognition and visible brand spaces.',
+            examples: ['Acrylic build-up letters', 'LED neon flex'],
+            pricingModel: 'quote_required',
+          },
+        ],
+      });
+      repo.find.mockResolvedValue([
+        {
+          ...mockOrder,
+          category: 'business-store-signages',
+          pricingStatus: PricingStatus.PENDING_QUOTE,
+          totalPrice: 0,
+          deliveryFee: 0,
+          deliveryFeeMinor: null,
+          finalTotalMinor: null,
+          quotedTotalMinor: null,
+          batchOrder: {
+            id: 77,
+            subtotal: 0,
+            deliveryFee: 42,
+            totalPrice: 0,
+            priorityFee: 0,
+            extraDestinationFee: 0,
+          },
+          items: [
+            {
+              id: 10,
+              category: 'business-store-signages',
+              categoryId: 31,
+              categorySlug: 'business-store-signages',
+              categoryName: 'Business & Store Signages',
+              pricingModel: 'quote_required',
+              totalPrice: 0,
+              specValues: [
+                {
+                  id: 20,
+                  orderItemId: 10,
+                  specDefinitionId: 30,
+                  specKey: 'size',
+                  specLabel: 'Size',
+                  inputType: 'text',
+                  value: 'A5',
+                  displayValue: 'A5',
+                  optionId: null,
+                  optionLabel: null,
+                  multiplier: 1,
+                  fixedFee: 0,
+                  unitCost: 0,
+                  estimatedQuantity: null,
+                },
+              ],
+            },
+          ],
+        } as Order,
+      ]);
+      assignmentRepo.find.mockResolvedValue([]);
+
+      const [result] = await service.findByUser(1);
+
+      expect(result).toMatchObject({
+        totalPrice: null,
+        deliveryFee: null,
+        deliveryFeeMinor: null,
+        finalTotalMinor: null,
+        quotedTotalMinor: null,
+        batchOrder: {
+          subtotal: null,
+          deliveryFee: null,
+          totalPrice: null,
+          priorityFee: null,
+          extraDestinationFee: null,
+        },
+        items: [{ totalPrice: null }],
+      });
+      expect(result.items[0]).toMatchObject({
+        category: 'business-store-signages',
+        categorySlug: 'business-store-signages',
+        categoryName: 'Business & Store Signages',
+        groupSlug: 'awards-signages',
+        groupName: 'Recognition, Awards & Signage',
+        groupDescription: 'Recognition and visible brand spaces.',
+        examples: ['Acrylic build-up letters', 'LED neon flex'],
+        pricingModel: 'quote_required',
+        specs: [
+          expect.objectContaining({
+            key: 'size',
+            label: 'Size',
+            value: 'A5',
+            displayValue: 'A5',
+          }),
+        ],
+      });
+      expect(result.items[0].specValues[0]).not.toHaveProperty('fixedFee');
+      expect(result.items[0].specValues[0]).not.toHaveProperty('unitCost');
+    });
+
+    it('exposes only the accepted quote assignment id to the customer', async () => {
+      repo.find.mockResolvedValue([{ ...mockOrder, id: 41 }] as Order[]);
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 901,
+          orderId: 41,
+          supplierId: 77,
+          decision: SupplierAssignmentDecision.ACCEPTED,
+          rankPosition: 1,
+          acceptanceDeadline: new Date('2026-08-11T00:00:00Z'),
+          finalPriceMinor: '10000',
+        } as SupplierAssignment,
+      ]);
+
+      const [result] = await service.findByUser(1);
+
+      expect(result).toMatchObject({ quoteAssignmentId: 901 });
+      expect(result).not.toHaveProperty('currentSupplierAssignment');
+      expect(result).not.toHaveProperty('supplierId');
+      expect(JSON.stringify(result)).not.toContain('supplierId');
+      expect(JSON.stringify(result)).not.toContain('assignmentId');
+      expect(JSON.stringify(result)).not.toContain('acceptanceDeadline');
+      expect(JSON.stringify(result)).not.toContain('rankPosition');
+      expect(JSON.stringify(result)).not.toContain('finalPriceMinor');
+    });
+
+    it('projects Q quoted COD advisories with one batched policy call', async () => {
+      repo.find.mockResolvedValue(
+        [
+          { id: 41, quotedTotalMinor: '150000', codEligible: false },
+          { id: 42, quotedTotalMinor: '150000', codEligible: true },
+          { id: 43, quotedTotalMinor: '150100', codEligible: true },
+          { id: 44, quotedTotalMinor: '12500', codEligible: false },
+        ].map(
+          (values) =>
+            ({
+              ...mockOrder,
+              ...values,
+              userId: 1,
+              pricingStatus: PricingStatus.QUOTED,
+            }) as Order,
+        ),
+      );
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue(
+        [41, 42, 43, 44].map(
+          (orderId) =>
+            ({
+              id: 900 + orderId,
+              orderId,
+              decision: SupplierAssignmentDecision.ACCEPTED,
+            }) as SupplierAssignment,
+        ),
+      );
+      paymentsService.evaluateCodEligibilityForOrders.mockResolvedValueOnce(
+        new Map([
+          [41, { eligible: true }],
+          [42, { eligible: false }],
+          [43, { eligible: false }],
+          [44, { eligible: true }],
+        ]),
+      );
+
+      const result = await service.findByUser(1);
+
+      expect(
+        paymentsService.evaluateCodEligibilityForOrders,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        paymentsService.evaluateCodEligibilityForOrders,
+      ).toHaveBeenCalledWith(1, [
+        { orderId: 41, finalTotalMinor: '150000' },
+        { orderId: 42, finalTotalMinor: '150000' },
+        { orderId: 43, finalTotalMinor: '150100' },
+        { orderId: 44, finalTotalMinor: '12500' },
+      ]);
+      expect(
+        paymentsService.evaluateCodEligibilityForUser,
+      ).not.toHaveBeenCalled();
+      expect(result.map((order) => order.codEligible)).toEqual([
+        true,
+        false,
+        false,
+        true,
+      ]);
+      expect(result.map((order) => order.quoteAssignmentId)).toEqual([
+        941, 942, 943, 944,
+      ]);
+    });
+
+    it('uses the same single batched COD helper for order detail', async () => {
+      repo.findOne!.mockResolvedValue({
+        ...mockOrder,
+        id: 51,
+        userId: 1,
+        pricingStatus: PricingStatus.QUOTED,
+        quotedTotalMinor: '12500',
+        codEligible: false,
+      } as Order);
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 951,
+          orderId: 51,
+          decision: SupplierAssignmentDecision.ACCEPTED,
+        } as SupplierAssignment,
+      ]);
+      paymentsService.evaluateCodEligibilityForOrders.mockResolvedValueOnce(
+        new Map([[51, { eligible: true }]]),
+      );
+
+      const result = await service.findById(51);
+
+      expect(
+        paymentsService.evaluateCodEligibilityForOrders,
+      ).toHaveBeenCalledWith(1, [{ orderId: 51, finalTotalMinor: '12500' }]);
+      expect(result).toMatchObject({
+        quoteAssignmentId: 951,
+        codEligible: true,
+      });
+    });
+
+    it('limits customer supplier contact to public presentation fields', async () => {
+      repo.find.mockResolvedValue([{ ...mockOrder, id: 43 }] as Order[]);
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 903,
+          orderId: 43,
+          supplierId: 79,
+          decision: SupplierAssignmentDecision.ACCEPTED,
+          selfQcEvidenceFileIds: [501],
+          supplier: {
+            id: 79,
+            businessName: 'Safe Print Co',
+            address: '123 Exact Supplier Street, Davao City',
+            serviceZones: ['Davao City'],
+            logoFileId: 500,
+          },
+        } as SupplierAssignment,
+      ]);
+      jest
+        .spyOn(service as any, 'signFileId')
+        .mockImplementation(async (id: number) => `https://signed/${id}`);
+
+      const [result] = await service.findByUser(1);
+
+      expect((result as any).assignedSupplierContact).toEqual({
+        businessName: 'Safe Print Co',
+        logoUrl: 'https://signed/500',
+        broadAddress: 'Exact Supplier, Davao City',
+        selfQcEvidenceUrls: ['https://signed/501'],
+      });
+      expect(JSON.stringify(result)).not.toContain('123 Exact Supplier Street');
+      expect(JSON.stringify(result)).not.toContain('selfQcEvidenceFileIds');
+    });
+
+    it('withholds a pending assignment id from the customer', async () => {
+      repo.find.mockResolvedValue([{ ...mockOrder, id: 42 }] as Order[]);
+      assignmentRepo.find.mockResolvedValue([]);
+      supplierAssignmentRepo.find!.mockResolvedValue([
+        {
+          id: 902,
+          orderId: 42,
+          supplierId: 78,
+          decision: SupplierAssignmentDecision.PENDING,
+        } as SupplierAssignment,
+      ]);
+
+      const [result] = await service.findByUser(1);
+
+      expect(result).toMatchObject({ quoteAssignmentId: null });
+      expect(result).not.toHaveProperty('currentSupplierAssignment');
+    });
+
+    it('projects catalog metadata without mutating loaded ORM entities', async () => {
+      const item = {
+        id: 10,
+        category: 'flyers',
+        categorySlug: 'flyers',
+        specValues: [],
+      } as OrderItem;
+      const order = { ...mockOrder, items: [item] } as Order;
+      catalogReadService.getPublicCatalog.mockResolvedValueOnce({
+        version: '1.10.0',
+        groups: [],
+        categories: [
+          {
+            id: 1,
+            slug: 'flyers',
+            name: 'Flyers',
+            groupSlug: 'marketing-promo',
+            examples: [],
+            pricingModel: 'quote_required',
+          },
+        ],
+      });
+
+      const [projected] = await service.attachCatalogSnapshots([order]);
+
+      expect(projected).not.toBe(order);
+      expect(projected.items[0]).not.toBe(item);
+      expect(order).not.toHaveProperty('catalogProduct');
+      expect(item).not.toHaveProperty('groupSlug');
+      expect(projected.items[0]).toMatchObject({
+        groupSlug: 'marketing-promo',
+      });
     });
 
     it('batch-loads and maps assigned slots across multiple order batches', async () => {
@@ -2020,9 +2913,10 @@ describe('OrdersService', () => {
           'items',
           'items.destination',
           'items.specValues',
+          'statusHistory',
         ],
       });
-      expect(result).toEqual(mockOrder);
+      expect(result).toMatchObject(mockOrder);
     });
 
     it('attaches the active batch slot to an individual order', async () => {
@@ -2081,7 +2975,7 @@ describe('OrdersService', () => {
 
       await expect(
         service.updateStatus(1, status, {}, statusContext),
-      ).resolves.toEqual(current);
+      ).resolves.toMatchObject(current);
 
       expect(repo.update).not.toHaveBeenCalled();
       expect(historyRepo.insert).not.toHaveBeenCalled();
@@ -2634,7 +3528,9 @@ describe('OrdersService', () => {
       repo.findOneOrFail.mockResolvedValue(gcashOrder);
       repo.update.mockResolvedValue(undefined as any);
 
-      await expect(service.cancelOrder(1, 1)).resolves.toEqual(gcashOrder);
+      await expect(service.cancelOrder(1, 1)).resolves.toMatchObject(
+        gcashOrder,
+      );
 
       expect(creditsService.refundCredits).not.toHaveBeenCalled();
       expect(repo.update).toHaveBeenCalledWith(
@@ -3185,7 +4081,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         orderId: arrived.id,
         fromStatus: OrderStatus.DELIVERED,
         toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
-        changedByUserId: 0,
+        changedByUserId: 51,
       }),
     );
     expect(
@@ -3326,7 +4222,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {},
         { actorUserId: 51, reason: 'Customer collected pickup' },
       ),
-    ).resolves.toEqual(completed);
+    ).resolves.toMatchObject(completed);
 
     // collected + issue-window endsAt + issue_window_open status
     expect(ordersRepo.update).toHaveBeenCalledTimes(3);
@@ -3343,7 +4239,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {},
         { actorUserId: 51, reason: 'Retry after response failure' },
       ),
-    ).resolves.toEqual(completed);
+    ).resolves.toMatchObject(completed);
 
     // Retry is idempotent when already collected/windowed (no extra writes).
     expect(ordersRepo.update).toHaveBeenCalledTimes(3);
@@ -3387,7 +4283,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {},
         { actorUserId: 51, reason: 'Customer collected pickup' },
       ),
-    ).resolves.toEqual(completed);
+    ).resolves.toMatchObject(completed);
 
     expect(ordersRepo.update).toHaveBeenCalledTimes(3);
     expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(2);
@@ -3429,7 +4325,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {},
         { actorUserId: 51, reason: 'Customer collected pickup' },
       ),
-    ).resolves.toEqual(completed);
+    ).resolves.toMatchObject(completed);
 
     // collected + issue window endsAt + issue_window_open
     expect(ordersRepo.update).toHaveBeenCalledTimes(3);
@@ -3549,7 +4445,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         service.publishStatusUpdate(order, 1, 'delivered', {
           id: 42,
         } as TamSurveyRequirement),
-      ).resolves.toEqual(order);
+      ).resolves.toMatchObject(order);
 
       expect(mockNotifications.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -4099,7 +4995,7 @@ describe('createBatch with slot + destinations', () => {
     it('auto-books the nearest available same-day slot and returns assignedSlot', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        if (where.id === 9) return makeAddress(9, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4159,7 +5055,7 @@ describe('createBatch with slot + destinations', () => {
     it('searches future PH dates when all same-day slots have ended', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T15:30:00Z'));
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        if (where.id === 9) return makeAddress(9, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4217,7 +5113,7 @@ describe('createBatch with slot + destinations', () => {
     it('moves to the next candidate when capacity is lost during booking', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        if (where.id === 9) return makeAddress(9, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4615,7 +5511,7 @@ describe('createBatch with slot + destinations', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
 
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        if (where.id === 1) return makeAddress(1, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4673,7 +5569,7 @@ describe('createBatch with slot + destinations', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
 
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        if (where.id === 1) return makeAddress(1, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4730,7 +5626,7 @@ describe('createBatch with slot + destinations', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T15:30:00Z'));
 
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        if (where.id === 1) return makeAddress(1, 7.07, 125.61);
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -5574,5 +6470,598 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         externalDeliveryStatus: 'booked',
       });
     });
+  });
+});
+
+describe('OrdersService.submitRfq', () => {
+  const makeProduct = (
+    id: number,
+    slug: string,
+    specKey: string,
+    overrides: Partial<ProductCategory> = {},
+  ) =>
+    ({
+      id,
+      slug,
+      name: slug === 'flyers' ? 'Flyers' : 'Custom Apparel',
+      description: 'RFQ leaf',
+      groupSlug: slug === 'flyers' ? 'marketing-promo' : 'corporate-merch',
+      groupName: slug === 'flyers' ? 'Marketing' : 'Merchandise',
+      groupDescription: 'Orderable RFQ products',
+      groupSortOrder: slug === 'flyers' ? 1 : 2,
+      pricingModel: PricingModel.QUOTE_REQUIRED,
+      baseRate: 0,
+      isActive: true,
+      fileProcessingType: 'generic_file',
+      maxFileSizeMb: 100,
+      allowedExtensions: ['pdf'],
+      quantityUnit: 'piece',
+      sortOrder: 1,
+      specs: [
+        {
+          id: id * 10,
+          key: specKey,
+          label: `Required ${specKey}`,
+          inputType: InputType.TEXT,
+          valueType: ValueType.STRING,
+          isRequired: true,
+          isActive: true,
+          pricingRole: PricingRole.NONE,
+          defaultValue: null,
+          minValue: null,
+          maxValue: null,
+          stepValue: null,
+          sortOrder: 1,
+          options: [],
+        },
+      ],
+      addons: [],
+      ...overrides,
+    }) as ProductCategory;
+
+  const flyers = makeProduct(11, 'flyers', 'size');
+  const apparel = makeProduct(12, 'custom-apparel', 'variant');
+  const firstItem = () => ({
+    categorySlug: 'flyers',
+    quantity: 100,
+    requiredDate: '2099-12-31',
+    fileMetadataId: 41,
+    specs: { size: 'A5' },
+    specialInstructions: 'Keep crop marks.',
+  });
+  const request = (items = [firstItem()]) => ({
+    items,
+    deliveryOption: 'pickup' as const,
+  });
+
+  const buildHarness = (
+    products = [flyers, apparel],
+    catalogProducts = products,
+  ) => {
+    const durable = {
+      batches: [] as BatchOrder[],
+      orders: [] as Order[],
+      items: [] as OrderItem[],
+      specs: [] as OrderItemSpecValue[],
+      destinations: [] as DeliveryDestination[],
+    };
+    const credits = {
+      subtractCredits: jest.fn(),
+      publishCreditMutation: jest.fn(),
+    };
+    const payments = {
+      assertCodEligibleForCheckout: jest.fn(),
+      ensurePendingCodCollection: jest.fn(),
+    };
+    const slots = { bookSlot: jest.fn(), getAvailability: jest.fn() };
+    const notifications = { create: jest.fn(), createForAllAdmins: jest.fn() };
+    const files = {
+      resolveCatalogArtwork: jest.fn(
+        async (fileId: number, selected: ProductCategory) =>
+          ({
+            id: fileId,
+            url: `https://files/${fileId}.pdf`,
+            originalName: `${selected.slug}-${fileId}.pdf`,
+          }) as FileMetadata,
+      ),
+    };
+    const savedAddresses = new Map<number, Address>([
+      [
+        9,
+        {
+          id: 9,
+          userId: 1,
+          label: 'Home',
+          fullAddress: '9 Main Street',
+          city: 'Davao City',
+          latitude: 7.0731,
+          longitude: 125.6128,
+        } as Address,
+      ],
+    ]);
+    const addressRepo = {
+      findOne: jest.fn(async ({ where }: any) => {
+        const found = savedAddresses.get(Number(where.id));
+        return found?.userId === Number(where.userId) ? found : null;
+      }),
+    };
+    const settings = { isInsideServiceArea: jest.fn().mockResolvedValue(true) };
+    const geoZones = {
+      hasActiveZones: jest.fn().mockResolvedValue(true),
+      getCommerceSettings: jest
+        .fn()
+        .mockResolvedValue({ rejectOutsideZones: true }),
+      matchPoint: jest.fn().mockResolvedValue({
+        inside: true,
+        zone: { id: 5 },
+        deliveryFeeMinor: '4000',
+      }),
+    };
+    const pricing = new CatalogPricingService(
+      {
+        getPublicCatalog: jest.fn().mockResolvedValue({
+          version: '1.10',
+          groups: [],
+          categories: catalogProducts.filter((entry) => entry.isActive),
+        }),
+      } as any,
+      new CatalogValidationService(),
+    );
+    const dataSource = {
+      transaction: jest.fn(async (callback: (manager: any) => Promise<any>) => {
+        const staged = {
+          batches: [] as BatchOrder[],
+          orders: [] as Order[],
+          items: [] as OrderItem[],
+          specs: [] as OrderItemSpecValue[],
+          destinations: [] as DeliveryDestination[],
+        };
+        const repo = <T extends { id?: number }>(
+          target: T[],
+          idBase: number,
+        ) => ({
+          create: jest.fn((data: T) => data),
+          save: jest.fn(async (data: T) => {
+            const saved = { id: idBase + target.length, ...data } as T;
+            target.push(saved);
+            return saved;
+          }),
+        });
+        const repositories: Record<string, any> = {
+          BatchOrder: repo(staged.batches, 77),
+          Order: repo(staged.orders, 101),
+          OrderItem: repo(staged.items, 201),
+          OrderItemSpecValue: repo(staged.specs, 301),
+          DeliveryDestination: repo(staged.destinations, 401),
+          ProductCategory: {
+            findBy: jest.fn(async () => products),
+          },
+          ProductSpecDefinition: {
+            findBy: jest.fn(async () =>
+              products.flatMap((entry) =>
+                entry.specs.map((spec) => ({
+                  ...spec,
+                  categoryId: entry.id,
+                })),
+              ),
+            ),
+          },
+          ProductSpecOption: {
+            findBy: jest.fn(async () =>
+              products.flatMap((entry) =>
+                entry.specs.flatMap((spec) =>
+                  spec.options.map((option) => ({
+                    ...option,
+                    specDefinitionId: spec.id,
+                  })),
+                ),
+              ),
+            ),
+          },
+          FileMetadata: {},
+        };
+        const result = await callback({
+          query: jest.fn(async (sql: string, parameters?: unknown[]) => {
+            if (sql.includes('FROM product_categories')) {
+              const slugs = parameters?.[0] as string[];
+              return products
+                .filter((entry) => slugs.includes(entry.slug))
+                .sort((a, b) => a.slug.localeCompare(b.slug))
+                .map(({ id, slug }) => ({ id, slug }));
+            }
+            if (sql.includes('FROM product_spec_definitions')) {
+              return products.flatMap((entry) =>
+                entry.specs.map((spec) => ({
+                  id: spec.id,
+                  category_id: entry.id,
+                })),
+              );
+            }
+            if (sql.includes('FROM product_spec_options')) {
+              return products.flatMap((entry) =>
+                entry.specs.flatMap((spec) =>
+                  spec.options.map((option) => ({
+                    id: option.id,
+                    spec_definition_id: spec.id,
+                  })),
+                ),
+              );
+            }
+            if (sql.includes('pg_advisory_xact_lock')) return [];
+            return [{ max_batch_ref: 10020, max_order_ref: 10030 }];
+          }),
+          getRepository: (entity: { name: string }) =>
+            repositories[entity.name],
+        });
+        durable.batches.push(...staged.batches);
+        durable.orders.push(...staged.orders);
+        durable.items.push(...staged.items);
+        durable.specs.push(...staged.specs);
+        durable.destinations.push(...staged.destinations);
+        return result;
+      }),
+    };
+    const service = Object.create(OrdersService.prototype) as OrdersService;
+    Object.assign(service as any, {
+      dataSource,
+      catalogPricingService: pricing,
+      filesService: files,
+      addressRepo,
+      settingsService: settings,
+      geoZonesService: geoZones,
+      creditsService: credits,
+      paymentsService: payments,
+      slotsService: slots,
+      notificationsService: notifications,
+    });
+    return {
+      service,
+      dataSource,
+      durable,
+      files,
+      credits,
+      payments,
+      slots,
+      notifications,
+      settings,
+      geoZones,
+    };
+  };
+
+  it('creates one pending, nullable-money order with one exact item/spec snapshot', async () => {
+    const harness = buildHarness();
+
+    const result = await harness.service.submitRfq(1, request());
+
+    expect(result.batchId).toBe('BATCH-10021');
+    expect(result.orders).toHaveLength(1);
+    expect(result.orders[0]).toMatchObject({
+      orderId: 'ORD-10031',
+      category: 'flyers',
+      batchOrderId: 77,
+      pricingStatus: PricingStatus.PENDING_QUOTE,
+      totalPrice: null,
+      deliveryFee: null,
+      finalTotalMinor: null,
+      quotedTotalMinor: null,
+      paymentMethod: 'unselected',
+      paymentStatus: 'pending',
+    });
+    expect(result.orders[0].items).toEqual([
+      expect.objectContaining({
+        orderId: 101,
+        categorySlug: 'flyers',
+        totalPrice: null,
+        requiredAt: new Date('2099-12-30T16:00:00.000Z'),
+      }),
+    ]);
+    expect(result.orders[0].items[0].specValues[0]).not.toHaveProperty(
+      'fixedFee',
+    );
+    expect(result.orders[0].items[0].specValues[0]).not.toHaveProperty(
+      'unitCost',
+    );
+    expect(harness.durable.orders[0]).toMatchObject({
+      totalPrice: 0,
+      deliveryFee: 0,
+      finalTotalMinor: null,
+      deliveryFeeMinor: null,
+    });
+    expect(harness.durable.specs).toEqual([
+      expect.objectContaining({
+        orderItemId: 201,
+        specDefinitionId: 110,
+        specKey: 'size',
+        value: 'A5',
+        displayValue: 'A5',
+      }),
+    ]);
+    expect(harness.durable.specs[0]).not.toHaveProperty('fixedFee');
+    expect(harness.files.resolveCatalogArtwork).toHaveBeenCalledWith(
+      41,
+      flyers,
+      1,
+      expect.anything(),
+    );
+  });
+
+  it('creates unlike lines as independent orders in one shared batch with contiguous refs', async () => {
+    const harness = buildHarness();
+    const result = await harness.service.submitRfq(
+      1,
+      request([
+        firstItem(),
+        {
+          categorySlug: 'custom-apparel',
+          quantity: 12,
+          requiredDate: '2099-12-30',
+          fileMetadataId: 42,
+          specs: { variant: 'Large shirt' },
+        },
+      ]),
+    );
+
+    expect(result.orders.map((order) => order.orderId)).toEqual([
+      'ORD-10031',
+      'ORD-10032',
+    ]);
+    expect(result.orders.map((order) => order.category)).toEqual([
+      'flyers',
+      'custom-apparel',
+    ]);
+    expect(new Set(result.orders.map((order) => order.batchOrderId))).toEqual(
+      new Set([77]),
+    );
+    expect(harness.durable.items.map((item) => item.orderId)).toEqual([
+      101, 102,
+    ]);
+  });
+
+  it('stores one authoritative shared delivery fee on the batch and maps each destination', async () => {
+    const harness = buildHarness();
+    const result = await harness.service.submitRfq(1, {
+      ...request([
+        { ...firstItem(), destinationIndex: 0 },
+        {
+          ...firstItem(),
+          quantity: 200,
+          fileMetadataId: 41,
+          destinationIndex: 1,
+        },
+      ]),
+      deliveryOption: 'delivery' as const,
+      destinations: [
+        { addressId: 9, label: 'Home drop' },
+        {
+          label: 'Event booth',
+          address: {
+            fullAddress: 'SMX Booth A12',
+            city: 'Davao City',
+            latitude: 7.09,
+            longitude: 125.63,
+          },
+        },
+      ],
+    });
+
+    expect(harness.durable.batches[0]).toMatchObject({
+      subtotal: 0,
+      deliveryFee: 42,
+      totalPrice: 0,
+      priorityFee: 0,
+      extraDestinationFee: 0,
+      slotBookingId: null,
+    });
+    expect(harness.durable.orders.map((order) => order.deliveryFee)).toEqual([
+      0, 0,
+    ]);
+    expect(harness.durable.items.map((item) => item.destinationId)).toEqual([
+      401, 402,
+    ]);
+    expect(result.orders.map((order) => order.destinationId)).toEqual([
+      401, 402,
+    ]);
+  });
+
+  it('does not invoke payment, credit, COD, slot, or production notification side effects', async () => {
+    const harness = buildHarness();
+
+    await harness.service.submitRfq(1, request());
+
+    expect(harness.credits.subtractCredits).not.toHaveBeenCalled();
+    expect(
+      harness.payments.assertCodEligibleForCheckout,
+    ).not.toHaveBeenCalled();
+    expect(harness.payments.ensurePendingCodCollection).not.toHaveBeenCalled();
+    expect(harness.slots.bookSlot).not.toHaveBeenCalled();
+    expect(harness.slots.getAvailability).not.toHaveBeenCalled();
+    expect(harness.notifications.create).not.toHaveBeenCalled();
+    expect(harness.notifications.createForAllAdmins).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['foreign', 'Invalid catalog artwork reference'],
+    ['wrong-product', 'Invalid catalog artwork reference'],
+    ['missing', 'Invalid catalog artwork reference'],
+    ['non-stored', 'Catalog artwork storage object not found'],
+  ])('rejects %s artwork before a durable write', async (_case, message) => {
+    const harness = buildHarness();
+    harness.files.resolveCatalogArtwork.mockRejectedValueOnce(
+      new BadRequestException(message),
+    );
+
+    await expect(harness.service.submitRfq(1, request())).rejects.toThrow(
+      message,
+    );
+    expect(harness.durable.batches).toEqual([]);
+    expect(harness.durable.orders).toEqual([]);
+  });
+
+  it('rolls back when the second line fails and permits same-product file reuse', async () => {
+    const failing = buildHarness();
+    failing.files.resolveCatalogArtwork
+      .mockResolvedValueOnce({ id: 41 } as FileMetadata)
+      .mockRejectedValueOnce(
+        new BadRequestException('Invalid catalog artwork reference'),
+      );
+    await expect(
+      failing.service.submitRfq(
+        1,
+        request([
+          firstItem(),
+          {
+            ...firstItem(),
+            categorySlug: 'custom-apparel',
+            fileMetadataId: 42,
+            specs: { variant: 'M' },
+          },
+        ]),
+      ),
+    ).rejects.toThrow('Invalid catalog artwork reference');
+    expect(failing.durable).toEqual({
+      batches: [],
+      orders: [],
+      items: [],
+      specs: [],
+      destinations: [],
+    });
+
+    const reusable = buildHarness();
+    await expect(
+      reusable.service.submitRfq(
+        1,
+        request([firstItem(), { ...firstItem(), quantity: 200 }]),
+      ),
+    ).resolves.toMatchObject({
+      orders: [{ category: 'flyers' }, { category: 'flyers' }],
+    });
+    expect(reusable.files.resolveCatalogArtwork).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects inactive products, missing specs, past dates, zero quantity, and delivery without an address', async () => {
+    const inactive = buildHarness([
+      makeProduct(11, 'flyers', 'size', { isActive: false }),
+    ]);
+    await expect(
+      inactive.service.submitRfq(1, request()),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CATEGORY_INACTIVE' }),
+    });
+
+    const invalidRequests = [
+      request([{ ...firstItem(), specs: {} }]),
+      request([{ ...firstItem(), requiredDate: '2020-01-01' }]),
+      request([{ ...firstItem(), requiredDate: '2099-02-29' }]),
+      request([{ ...firstItem(), quantity: 0 }]),
+      { ...request(), deliveryOption: 'delivery' as const },
+      {
+        ...request(),
+        deliveryOption: 'delivery' as const,
+        deliveryAddressId: 999,
+      },
+    ];
+    for (const dto of invalidRequests) {
+      const harness = buildHarness();
+      await expect(harness.service.submitRfq(1, dto)).rejects.toBeDefined();
+      expect(harness.durable.orders).toEqual([]);
+    }
+  });
+
+  it('rejects an address outside the configured delivery zones before opening a transaction', async () => {
+    const harness = buildHarness();
+    harness.settings.isInsideServiceArea.mockResolvedValueOnce(false);
+
+    await expect(
+      harness.service.submitRfq(1, {
+        ...request(),
+        deliveryOption: 'delivery',
+        deliveryAddressId: 9,
+      }),
+    ).rejects.toBeInstanceOf(ServiceAreaMismatchException);
+    expect(harness.dataSource.transaction).not.toHaveBeenCalled();
+    expect(harness.durable.orders).toEqual([]);
+  });
+
+  it('revalidates specifications against the locked transaction product', async () => {
+    const changedFlyers = makeProduct(11, 'flyers', 'new_size');
+    const harness = buildHarness([changedFlyers], [flyers]);
+
+    await expect(harness.service.submitRfq(1, request())).rejects.toMatchObject(
+      {
+        response: expect.objectContaining({ code: 'SPEC_REQUIRED' }),
+      },
+    );
+    expect(harness.files.resolveCatalogArtwork).not.toHaveBeenCalled();
+    expect(harness.durable.orders).toEqual([]);
+  });
+
+  it('omits a required spec deactivated after prevalidation', async () => {
+    const locked = makeProduct(11, 'flyers', 'size');
+    locked.specs[0].isActive = false;
+    const harness = buildHarness([locked], [flyers]);
+
+    const result = await harness.service.submitRfq(1, request());
+
+    expect(result.orders[0].items[0].specValues).toEqual([]);
+    expect(harness.durable.specs).toEqual([]);
+  });
+
+  it('rejects an option deactivated after prevalidation without a snapshot', async () => {
+    const makeSelectProduct = (optionActive: boolean) =>
+      makeProduct(11, 'flyers', 'size', {
+        specs: [
+          {
+            ...flyers.specs[0],
+            inputType: InputType.SELECT,
+            options: [
+              {
+                id: 111,
+                value: 'A5',
+                label: 'A5 paper',
+                isActive: optionActive,
+              } as never,
+            ],
+          },
+        ],
+      });
+    const harness = buildHarness(
+      [makeSelectProduct(false)],
+      [makeSelectProduct(true)],
+    );
+
+    await expect(harness.service.submitRfq(1, request())).rejects.toMatchObject(
+      {
+        response: expect.objectContaining({ code: 'SPEC_OPTION_INACTIVE' }),
+      },
+    );
+    expect(harness.durable.specs).toEqual([]);
+  });
+
+  it('preserves deterministic active spec order and exact snapshots', async () => {
+    const product = makeProduct(11, 'flyers', 'later', {
+      specs: [
+        { ...flyers.specs[0], id: 112, key: 'later', label: 'Later' },
+        { ...flyers.specs[0], id: 111, key: 'earlier', label: 'Earlier' },
+      ],
+    });
+    const harness = buildHarness([product], [product]);
+
+    await harness.service.submitRfq(
+      1,
+      request([{ ...firstItem(), specs: { earlier: 'one', later: 'two' } }]),
+    );
+
+    expect(harness.durable.specs).toEqual([
+      expect.objectContaining({
+        specDefinitionId: 111,
+        specKey: 'earlier',
+        value: 'one',
+      }),
+      expect.objectContaining({
+        specDefinitionId: 112,
+        specKey: 'later',
+        value: 'two',
+      }),
+    ]);
   });
 });

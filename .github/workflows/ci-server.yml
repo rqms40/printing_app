@@ -77,6 +77,10 @@ jobs:
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: grid-print
       MINIO_USE_SSL: "false"
+      GRIDGO_LIFECYCLE_MINIO_ENDPOINT: 127.0.0.1
+      GRIDGO_LIFECYCLE_MINIO_PORT: "9000"
+      GRIDGO_LIFECYCLE_MINIO_ACCESS_KEY: minioadmin
+      GRIDGO_LIFECYCLE_MINIO_SECRET_KEY: minioadmin
       NODE_ENV: test
 
     steps:

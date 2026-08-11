@@ -20,7 +20,7 @@ test.describe("GRIDGO mobile web smoke", () => {
     const semanticsPlaceholder = page.locator("flt-semantics-placeholder");
     await expect(semanticsPlaceholder).toHaveCount(1);
     await semanticsPlaceholder.evaluate((element) => {
-      element.click();
+      element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     await expect(page).toHaveURL(/#\/auth\/login$/);
@@ -33,7 +33,7 @@ test.describe("GRIDGO mobile web smoke", () => {
     await expect(passwordInput).toHaveAttribute("type", "password");
 
     await page.getByRole("switch", { name: /Show password/ }).evaluate((element) => {
-      element.click();
+      element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await expect(passwordInput).toHaveAttribute("type", "text");
 

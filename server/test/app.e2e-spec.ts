@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  RequestMethod,
+  ValidationPipe,
+} from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -13,7 +17,9 @@ describe('GRIDGO API (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api', {
+      exclude: [{ path: '/', method: RequestMethod.GET }],
+    });
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, transform: true }),
     );
@@ -32,5 +38,14 @@ describe('GRIDGO API (e2e)', () => {
         expect(res.body.status).toBe('ok');
         expect(res.body.service).toBe('grid-api');
       });
+  });
+
+  it('/ (GET) should describe the API entry points', () => {
+    return request(app.getHttpServer()).get('/').expect(200).expect({
+      service: 'grid-api',
+      status: 'ok',
+      health: '/api/health',
+      docs: '/docs',
+    });
   });
 });

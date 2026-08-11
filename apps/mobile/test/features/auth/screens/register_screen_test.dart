@@ -15,7 +15,7 @@ class _TestAuthNotifier extends AuthNotifier {
     String password, {
     required String fullName,
     required String profileCategory,
-    required String profileField,
+    String? profileField,
     String? nickname,
     String? phone,
     String? gender,
@@ -24,6 +24,7 @@ class _TestAuthNotifier extends AuthNotifier {
     String? course,
     String? organization,
     List<String> printingPreferences = const [],
+    List<String> serviceFocusRanks = const [],
   }) async {
     registerCalls += 1;
     lastRegisterPayload = {
@@ -34,6 +35,7 @@ class _TestAuthNotifier extends AuthNotifier {
       'ageRange': ageRange,
       'profileCategory': profileCategory,
       'profileField': profileField,
+      'serviceFocusRanks': serviceFocusRanks,
     };
   }
 }
@@ -76,10 +78,7 @@ void main() {
     // Continue without consent shows an error and does not advance.
     await tester.tap(find.widgetWithText(InkWell, 'Continue').first);
     await tester.pump();
-    expect(
-      find.text('Please accept the terms to continue'),
-      findsOneWidget,
-    );
+    expect(find.text('Please accept the terms to continue'), findsOneWidget);
     expect(find.textContaining('PLATE 02 / 05'), findsNothing);
   });
 

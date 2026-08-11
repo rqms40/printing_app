@@ -73,9 +73,11 @@ export interface SupplierJobDetail {
     orderStatus: string;
     category: string;
     quantity: number;
-    totalPrice: number;
-    deliveryFee: number;
+    pricingStatus: 'pending_quote' | 'quoted' | 'accepted';
+    totalPrice: number | null;
+    deliveryFee: number | null;
     finalTotalMinor: string | null;
+    quotedTotalMinor: string | null;
     deliveryFeeMinor: string | null;
     paymentMethod: string;
     paymentAuthorizationStatus: string;
@@ -119,6 +121,7 @@ export interface SupplierJobActionResult {
     id: number;
     orderId: string;
     orderStatus: string;
+    pricingStatus?: 'pending_quote' | 'quoted' | 'accepted';
   };
   fromStatus: string;
   toStatus: string;
@@ -248,17 +251,41 @@ export function formatMinorAsCurrency(
   minor: string | number | null | undefined,
 ): string {
   if (minor == null || minor === '') return '—';
-  const n = Number(minor);
-  if (!Number.isFinite(n)) return '—';
-  return `₱${(n / 100).toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  let value: bigint;
+  try {
+    value = BigInt(String(minor));
+  } catch {
+    return '—';
+  }
+  const negative = value < 0n;
+  const absolute = negative ? -value : value;
+  const pesos = (absolute / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const cents = (absolute % 100n).toString().padStart(2, '0');
+  return `${negative ? '-' : ''}₱${pesos}.${cents}`;
 }
 
 /** Pesos amount → integer minor units (centavos). */
 export function pesosToMinor(pesos: number): number {
   return Math.round(pesos * 100);
+}
+
+export function buildSupplierQuotePayload(
+  pricePesos: number | null,
+  promisedDate: string | null,
+): AcceptSupplierJobPayload {
+  if (pricePesos == null || !Number.isFinite(pricePesos) || pricePesos <= 0) {
+    throw new Error('Final price is required');
+  }
+  if (!promisedDate) throw new Error('Promised date is required');
+  return { finalPriceMinor: pesosToMinor(pricePesos), promisedDate };
+}
+
+export function canOperateProduction(
+  allowedActions: readonly string[],
+  paymentAuthorizationStatus: string,
+): boolean {
+  return allowedActions.includes('production-status') &&
+    paymentAuthorizationStatus.toLowerCase() === 'authorized';
 }
 
 /** Axios / Nest error message extraction. */

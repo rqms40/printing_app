@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show Color;
 
@@ -10,6 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../firebase_options.dart';
+import 'package:printing_app/features/customer/notifications/notification_route.dart';
 
 /// Top-level background message handler (must be top-level function).
 @pragma('vm:entry-point')
@@ -120,6 +122,30 @@ class NotificationService {
   static final _tokenRefreshController = StreamController<String>.broadcast();
   static Stream<String> get tokenRefreshStream =>
       _tokenRefreshController.stream;
+  static final _routeController = StreamController<String>.broadcast();
+  static Stream<String> get routeStream => _routeController.stream;
+  static String? _pendingRoute;
+
+  static void handleNotificationTap(Map<String, dynamic> data) {
+    final route = riderMessageRouteForPayload(data);
+    if (route == null) return;
+    if (_routeController.hasListener) {
+      _routeController.add(route);
+    } else {
+      _pendingRoute = route;
+    }
+  }
+
+  static String? takePendingRoute() {
+    final route = _pendingRoute;
+    _pendingRoute = null;
+    return route;
+  }
+
+  static void retainPendingRoute(String route) {
+    _pendingRoute = route;
+  }
+
   static const _pendingTokenDeletionKey = 'fcm_token_deletion_pending';
   static StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   static Future<void> _tokenDeletionTail = Future<void>.value();
@@ -149,6 +175,23 @@ class NotificationService {
   /// GRIDGO brand yellow — accents the small icon and progress bar.
   static const _brandColor = Color(0xFFFFDE58);
 
+  /// Routes a tap on a locally-rendered notification.
+  ///
+  /// Foreground messages are drawn by the local plugin rather than by FCM, so
+  /// their taps never reach [FirebaseMessaging.onMessageOpenedApp].
+  @visibleForTesting
+  static void handleLocalNotificationResponse(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map) return;
+      if (decoded.keys.any((key) => key is! String)) return;
+      handleNotificationTap(decoded.cast<String, dynamic>());
+    } catch (e) {
+      debugPrint('Ignored malformed notification payload: $e');
+    }
+  }
+
   static Future<void> _ensureLocalNotifications() async {
     if (_localNotificationsReady) return;
     await _localNotifications.initialize(
@@ -156,6 +199,8 @@ class NotificationService {
         // White dot-grid silhouette; Android tints it with the accent color.
         android: AndroidInitializationSettings('ic_notification'),
       ),
+      onDidReceiveNotificationResponse: (response) =>
+          handleLocalNotificationResponse(response.payload),
     );
     _localNotificationsReady = true;
   }
@@ -206,6 +251,9 @@ class NotificationService {
         spec.title,
         spec.body,
         NotificationDetails(android: android),
+        // Carries the routing metadata so a tap on a foreground notification
+        // deep-links the same way a background one does.
+        payload: jsonEncode(message.data),
       );
     } catch (e) {
       debugPrint('Failed to display notification: $e');
@@ -340,7 +388,7 @@ class NotificationService {
         // Listen for notification taps (app was in background)
         FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
           debugPrint('Notification tapped: ${message.notification?.title}');
-          // Could navigate to relevant screen based on message data
+          handleNotificationTap(message.data);
         });
 
         // Listen for token refresh
@@ -352,6 +400,10 @@ class NotificationService {
       }
 
       _initialized = true;
+      final initialMessage = await _messaging.getInitialMessage();
+      if (initialMessage != null) {
+        handleNotificationTap(initialMessage.data);
+      }
       return true;
     } catch (e) {
       debugPrint('FCM setup failed (platform may not support FCM): $e');

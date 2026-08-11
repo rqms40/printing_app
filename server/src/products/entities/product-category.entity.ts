@@ -2,8 +2,6 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinColumn,
-  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -32,6 +30,18 @@ export class ProductCategory {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
+  @Column({ name: 'group_slug', type: 'varchar', length: 50, nullable: true })
+  groupSlug: string | null;
+
+  @Column({ name: 'group_name', type: 'varchar', length: 100, nullable: true })
+  groupName: string | null;
+
+  @Column({ name: 'group_description', type: 'text', nullable: true })
+  groupDescription: string | null;
+
+  @Column({ name: 'group_sort_order', type: 'int', nullable: true })
+  groupSortOrder: number | null;
+
   @Column({
     name: 'mobile_description',
     type: 'varchar',
@@ -40,48 +50,11 @@ export class ProductCategory {
   })
   mobileDescription: string | null;
 
-  /** e.g. "Best for: Businesses, startups, and events…" */
-  @Column({
-    name: 'audience_label',
-    type: 'varchar',
-    length: 240,
-    nullable: true,
-  })
-  audienceLabel: string | null;
+  @Column({ type: 'jsonb', nullable: true })
+  examples: string[] | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   icon: string | null;
-
-  /**
-   * Self-referential parent for Category → Subgroup → Variant.
-   * Null for top-level roots (including legacy paper/3d).
-   */
-  @Column({ name: 'parent_id', type: 'int', nullable: true })
-  parentId: number | null;
-
-  @ManyToOne(() => ProductCategory, (category) => category.children, {
-    nullable: true,
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'parent_id' })
-  parent: ProductCategory | null;
-
-  @OneToMany(() => ProductCategory, (category) => category.parent)
-  children: ProductCategory[];
-
-  /**
-   * 1 = top category, 2 = subgroup, 3 = variant / leaf product.
-   * Legacy paper/3d remain level 1 orderable roots.
-   */
-  @Column({ name: 'catalog_level', type: 'smallint', default: 1 })
-  catalogLevel: number;
-
-  /**
-   * Only orderable nodes accept checkout / pricing.
-   * Hierarchy parents (categories & subgroups) are browse-only.
-   */
-  @Column({ name: 'is_orderable', default: true })
-  isOrderable: boolean;
 
   @Column({
     name: 'file_processing_type',

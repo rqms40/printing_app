@@ -15,7 +15,8 @@ class RiderChatListScreen extends ConsumerStatefulWidget {
   const RiderChatListScreen({super.key});
 
   @override
-  ConsumerState<RiderChatListScreen> createState() => _RiderChatListScreenState();
+  ConsumerState<RiderChatListScreen> createState() =>
+      _RiderChatListScreenState();
 }
 
 class _RiderChatListScreenState extends ConsumerState<RiderChatListScreen> {
@@ -328,9 +329,8 @@ class _RiderChatListScreenState extends ConsumerState<RiderChatListScreen> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     TextButton(
-                      onPressed: () => ref
-                          .read(chatProvider.notifier)
-                          .loadConversations(),
+                      onPressed: () =>
+                          ref.read(chatProvider.notifier).loadConversations(),
                       child: Text(
                         'Retry',
                         style: AppTypography.bodyBold.copyWith(
@@ -361,7 +361,7 @@ class _RiderChatListScreenState extends ConsumerState<RiderChatListScreen> {
                   bottom: MediaQuery.of(context).padding.bottom + 100,
                 ),
                 itemCount: convos.length,
-                separatorBuilder: (_, __) => Divider(
+                separatorBuilder: (_, _) => Divider(
                   height: 1,
                   thickness: 1,
                   color: colors.onBackground.withValues(alpha: 0.04),
@@ -370,10 +370,7 @@ class _RiderChatListScreenState extends ConsumerState<RiderChatListScreen> {
                 itemBuilder: (context, i) {
                   return _buildTile(convos[i], colors)
                       .animate()
-                      .fadeIn(
-                        duration: 300.ms,
-                        delay: (i * 40).ms,
-                      )
+                      .fadeIn(duration: 300.ms, delay: (i * 40).ms)
                       .slideX(
                         begin: 0.05,
                         duration: 300.ms,

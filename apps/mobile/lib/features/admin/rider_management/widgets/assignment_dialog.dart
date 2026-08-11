@@ -10,22 +10,18 @@ import 'package:printing_app/features/admin/rider_management/widgets/rider_list_
 
 /// Bottom sheet listing available riders for order assignment.
 class AssignmentDialog extends ConsumerWidget {
-  const AssignmentDialog({
-    super.key,
-    required this.orderId,
-  });
+  const AssignmentDialog({super.key, required this.orderId});
 
   final String orderId;
 
   /// Show the assignment bottom sheet.
   static Future<void> show(BuildContext context, {required String orderId}) {
     return showModalBottomSheet<void>(
+      barrierLabel: 'Dismiss rider assignment',
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppRadius.lg),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
       ),
       builder: (_) => AssignmentDialog(orderId: orderId),
     );
@@ -72,11 +68,13 @@ class AssignmentDialog extends ConsumerWidget {
               children: [
                 Text(
                   'Assign Rider',
-                  style:
-                      AppTypography.h3.copyWith(color: colors.onBackground),
+                  style: AppTypography.h3.copyWith(color: colors.onBackground),
                 ),
                 IconButton(
-                  icon: HugeIcon(icon: HugeIcons.strokeRoundedCancel01, color: colors.onSurfaceDim),
+                  icon: HugeIcon(
+                    icon: HugeIcons.strokeRoundedCancel01,
+                    color: colors.onSurfaceDim,
+                  ),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -90,8 +88,9 @@ class AssignmentDialog extends ConsumerWidget {
                 child: Center(
                   child: Text(
                     'No riders available',
-                    style: AppTypography.body
-                        .copyWith(color: colors.onSurfaceDim),
+                    style: AppTypography.body.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
                   ),
                 ),
               )
@@ -115,8 +114,9 @@ class AssignmentDialog extends ConsumerWidget {
                           SnackBar(
                             content: Text(
                               'Rider assigned successfully',
-                              style: AppTypography.body
-                                  .copyWith(color: colors.background),
+                              style: AppTypography.body.copyWith(
+                                color: colors.background,
+                              ),
                             ),
                             backgroundColor: colors.accent,
                           ),

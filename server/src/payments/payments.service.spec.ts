@@ -402,6 +402,82 @@ describe('PaymentsService', () => {
     });
   });
 
+  describe('evaluateCodEligibilityForOrders', () => {
+    it('loads policy once and applies exact current-order exclusion to every quote', async () => {
+      usersRepo.findOne!.mockResolvedValue({
+        id: 1,
+        pilotCodEligible: true,
+        codOpsRiskBlocked: false,
+      } as User);
+      const qb = {
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ id: 41 }]),
+      };
+      ordersRepo.createQueryBuilder.mockReturnValue(qb as any);
+
+      const results = await service.evaluateCodEligibilityForOrders(1, [
+        { orderId: 41, finalTotalMinor: '150000' },
+        { orderId: 42, finalTotalMinor: '150000' },
+        { orderId: 43, finalTotalMinor: '150100' },
+      ]);
+
+      expect(usersRepo.findOne).toHaveBeenCalledTimes(1);
+      expect(ordersRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+      expect(qb.getRawMany).toHaveBeenCalledTimes(1);
+      expect(results.get(41)?.eligible).toBe(true);
+      expect(results.get(42)).toMatchObject({
+        eligible: false,
+        reasons: expect.arrayContaining([
+          CodIneligibilityReason.ACTIVE_UNPAID_COD,
+        ]),
+      });
+      expect(results.get(43)).toMatchObject({
+        eligible: false,
+        reasons: expect.arrayContaining([
+          CodIneligibilityReason.AMOUNT_EXCEEDS_CAP,
+          CodIneligibilityReason.ACTIVE_UNPAID_COD,
+        ]),
+      });
+    });
+  });
+
+  describe('ensurePendingCodCollection', () => {
+    it('uses the transaction manager repositories and locks the order before creating', async () => {
+      const txOrdersRepo = {
+        findOneOrFail: jest.fn().mockResolvedValue({ id: 42 }),
+      };
+      const txCodRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn((row: Partial<CodCollection>) => row as CodCollection),
+        save: jest.fn(async (row: CodCollection) => ({ id: 7, ...row })),
+      };
+      const manager = {
+        getRepository: jest.fn((entity) =>
+          entity === Order ? txOrdersRepo : txCodRepo,
+        ),
+      } as any;
+
+      const result = await service.ensurePendingCodCollection(
+        { orderId: 42, amountMinor: '12500', eligible: true },
+        manager,
+      );
+
+      expect(txOrdersRepo.findOneOrFail).toHaveBeenCalledWith({
+        where: { id: 42 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(txCodRepo.findOne).toHaveBeenCalledWith({
+        where: { orderId: 42 },
+        order: { id: 'ASC' },
+      });
+      expect(txCodRepo.save).toHaveBeenCalled();
+      expect(codRepo.findOne).not.toHaveBeenCalled();
+      expect(result.id).toBe(7);
+    });
+  });
+
   describe('recordCashCollection + reconcile', () => {
     const codOrder = {
       id: 5,

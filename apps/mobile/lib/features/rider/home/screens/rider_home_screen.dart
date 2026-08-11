@@ -187,7 +187,11 @@ class RiderHomeScreen extends ConsumerWidget {
             // The shell reports the nav bar's true height (66 + device inset)
             // via MediaQuery padding — anchor above it instead of hard-coding.
             bottom: MediaQuery.of(context).padding.bottom + AppSpacing.md,
-            child: Material(
+            child: Semantics(
+              button: true,
+              label: 'Open customer chat',
+              container: true,
+              child: Material(
               color: colors.accent,
               elevation: 6,
               shape: const CircleBorder(),
@@ -199,13 +203,16 @@ class RiderHomeScreen extends ConsumerWidget {
                   width: 52,
                   height: 52,
                   child: Center(
-                    child: HugeIcon(
-                      icon: HugeIcons.strokeRoundedMessage01,
-                      size: 22,
-                      color: colors.accentOnColor,
+                    child: ExcludeSemantics(
+                      child: HugeIcon(
+                        icon: HugeIcons.strokeRoundedMessage01,
+                        size: 22,
+                        color: colors.accentOnColor,
+                      ),
                     ),
                   ),
                 ),
+              ),
               ),
             ),
           ),

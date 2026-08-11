@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { CATALOG_V1_10_GROUPS } from "../../../server/src/products/catalog-v1-10.definition";
+import { assertRfqAuthorizationReady } from "../../../server/src/orders/rfq-authorization-gate";
+import { hasExactActiveLeafCapability } from "../../../server/src/matching/exact-leaf-capability";
 
 /**
  * Marketplace workflow contract (non-mutating by default).
@@ -14,12 +17,7 @@ import { fileURLToPath } from "node:url";
  * flags, mirroring beta-workflow.spec.ts.
  */
 
-type FlowActor =
-  | "super_admin"
-  | "ops_admin"
-  | "client"
-  | "supplier"
-  | "rider";
+type FlowActor = "super_admin" | "ops_admin" | "client" | "supplier" | "rider";
 
 type FlowSurface =
   | "admin-web"
@@ -43,6 +41,8 @@ type KnownGap = {
   affectedSteps: number[];
 };
 
+const catalogGroups = CATALOG_V1_10_GROUPS;
+
 const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
   {
     id: 1,
@@ -63,9 +63,9 @@ const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
     id: 3,
     actor: "client",
     surface: "mobile-client",
-    action: "Submit a structured print order with artwork upload.",
+    action: "Choose a catalog leaf and submit a structured RFQ with artwork.",
     expected:
-      "Order enters needs_qa (or submitted→needs_qa) with file metadata attached.",
+      "Order enters submitted with pricing_status=pending_quote, a null quote, and no payment controls.",
   },
   {
     id: 4,
@@ -79,29 +79,38 @@ const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
     id: 5,
     actor: "ops_admin",
     surface: "admin-web",
-    action: "Match and assign a ranked supplier to the order.",
+    action:
+      "Match and assign a ranked supplier with the requested leaf capability.",
     expected:
-      "Order is supplier_assigned with acceptance SLA / deadline recorded.",
+      "Only a verified active supplier covering the exact leaf is supplier_assigned; the SLA is recorded.",
   },
   {
     id: 6,
     actor: "supplier",
     surface: "supplier-portal",
-    action: "Accept the job with committed price and production date.",
+    action: "Accept the job with a goods quote and promised completion date.",
     expected:
-      "Order advances to supplier_accepted / awaiting_payment as designed.",
+      "Order advances to supplier_accepted with pricing_status=quoted and immutable supplier terms.",
   },
   {
     id: 7,
+    actor: "client",
+    surface: "mobile-client",
+    action: "Review and explicitly accept the supplier quote and payment rail.",
+    expected:
+      "Order advances to awaiting_payment with pricing_status=accepted; authorization is still pending.",
+  },
+  {
+    id: 8,
     actor: "ops_admin",
     surface: "admin-web",
     action:
-      "Authorize payment with Pilot Credits (or eligible COD) after supplier accept.",
+      "Authorize payment with Pilot Credits (or eligible COD) after customer quote acceptance.",
     expected:
       "payment_authorized; production remains gated until ops authorization.",
   },
   {
-    id: 8,
+    id: 9,
     actor: "supplier",
     surface: "mobile-supplier",
     action: "Advance production milestones and upload self-QC evidence.",
@@ -109,14 +118,14 @@ const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
       "Order reaches ready_for_dispatch after supplier_self_qc with evidence.",
   },
   {
-    id: 9,
+    id: 10,
     actor: "ops_admin",
     surface: "admin-web",
     action: "Dispatch order to an available verified rider.",
     expected: "rider_assigned; delivery assignment is visible to the rider.",
   },
   {
-    id: 10,
+    id: 11,
     actor: "rider",
     surface: "mobile-rider",
     action: "Confirm pickup (OTP/proof gates) and start the active trip.",
@@ -124,7 +133,7 @@ const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
       "picked_up / out_for_delivery; live tracking window opens after pickup only.",
   },
   {
-    id: 11,
+    id: 12,
     actor: "rider",
     surface: "mobile-rider",
     action: "Deliver with proof of delivery (photo or signature).",
@@ -132,11 +141,10 @@ const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
       "delivered; 24-hour material issue window opens; tracking stops at terminal.",
   },
   {
-    id: 12,
+    id: 13,
     actor: "ops_admin",
     surface: "api",
-    action:
-      "Close issue window with no claim (or hold payout if issue filed).",
+    action: "Close issue window with no claim (or hold payout if issue filed).",
     expected:
       "No issue → payout releasable; open issue → payout frozen until resolved.",
   },
@@ -148,19 +156,19 @@ const knownGaps: KnownGap[] = [
     id: "live-preflight",
     title:
       "Opt-in live marketplace preflight against docker-compose is not wired yet",
-    affectedSteps: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    affectedSteps: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
   },
   {
     id: "destructive-flag",
     title:
       "Destructive marketplace API workflow (GRIDGO_RUN_MARKETPLACE_FLOW_DESTRUCTIVE) not implemented",
-    affectedSteps: [3, 7, 8, 10, 11, 12],
+    affectedSteps: [3, 6, 7, 8, 9, 11, 12, 13],
   },
   {
     id: "beta-coexistence",
     title:
       "Beta workflow contract remains until marketplace live path fully covers pilot",
-    affectedSteps: [2, 7],
+    affectedSteps: [2, 8],
   },
 ];
 
@@ -172,11 +180,23 @@ const repoRoot = path.resolve(
 const marketplacePlanRel =
   "docs/superpowers/plans/2026-08-04-managed-marketplace-migration.md";
 
+function authorizeUnacceptedProductionRfq(): Promise<unknown> {
+  return Promise.resolve().then(() =>
+    assertRfqAuthorizationReady({
+      id: 910001,
+      orderStatus: "supplier_accepted",
+      pricingStatus: "quoted",
+      quotedTotalMinor: "175000",
+      quotedAt: new Date("2026-08-10T10:00:00.000Z"),
+    }),
+  );
+}
+
 test.describe("GRIDGO marketplace workflow contract", () => {
   test("records the complete super/ops/client/supplier/rider pilot flow", () => {
-    expect(marketplaceWorkflowSteps).toHaveLength(12);
+    expect(marketplaceWorkflowSteps).toHaveLength(13);
     expect(marketplaceWorkflowSteps.map((step) => step.id)).toEqual(
-      Array.from({ length: 12 }, (_, index) => index + 1),
+      Array.from({ length: 13 }, (_, index) => index + 1),
     );
     expect(new Set(marketplaceWorkflowSteps.map((step) => step.actor))).toEqual(
       new Set<FlowActor>([
@@ -203,8 +223,89 @@ test.describe("GRIDGO marketplace workflow contract", () => {
       actor: "super_admin",
       surface: "admin-web",
     });
-    expect(marketplaceWorkflowSteps[11].expected.toLowerCase()).toContain(
+    expect(marketplaceWorkflowSteps[12].expected.toLowerCase()).toContain(
       "payout",
+    );
+  });
+
+  test("freezes the v1.10 browsing catalog at four groups and seventeen leaves", () => {
+    expect(catalogGroups).toBe(CATALOG_V1_10_GROUPS);
+    expect(catalogGroups.map(({ slug }) => slug)).toEqual([
+      "marketing-promo",
+      "corporate-merch",
+      "awards-signages",
+      "specialized-prototyping",
+    ]);
+    expect(catalogGroups.map(({ products }) => products.length)).toEqual([
+      6, 4, 4, 3,
+    ]);
+    expect(catalogGroups.flatMap(({ products }) => products)).toHaveLength(17);
+    expect(
+      new Set(
+        catalogGroups.flatMap(({ products }) =>
+          products.map((product) => product.slug),
+        ),
+      ).size,
+    ).toBe(17);
+  });
+
+  test("orders pending RFQ, leaf matching, quote acceptance, then authorization", () => {
+    const joined = marketplaceWorkflowSteps
+      .map(({ action, expected }) => `${action} ${expected}`.toLowerCase())
+      .join("\n");
+    for (const contract of [
+      "pending_quote",
+      "exact leaf",
+      "goods quote",
+      "promised completion",
+      "pricing_status=quoted",
+      "explicitly accept",
+      "pricing_status=accepted",
+      "authorize payment",
+    ]) {
+      expect(joined).toContain(contract);
+    }
+    expect(joined.indexOf("pricing_status=quoted")).toBeLessThan(
+      joined.indexOf("explicitly accept"),
+    );
+    expect(joined.indexOf("pricing_status=accepted")).toBeLessThan(
+      joined.indexOf("authorize payment"),
+    );
+  });
+
+  test("executes the production authorization gate before accepting an RFQ quote", async () => {
+    await expect(authorizeUnacceptedProductionRfq()).rejects.toMatchObject({
+      response: {
+        code: "rfq_quote_not_accepted",
+      },
+    });
+  });
+
+  test("executes the production exact active leaf capability matcher", () => {
+    expect(
+      hasExactActiveLeafCapability(
+        [
+          { productFamily: "flyer", isActive: true },
+          { productFamily: "flyers", isActive: false },
+        ],
+        "flyers",
+      ),
+    ).toBe(false);
+    expect(
+      hasExactActiveLeafCapability(
+        [{ productFamily: "  FLYERS ", isActive: true }],
+        "flyers",
+      ),
+    ).toBe(true);
+  });
+
+  test("runs the exact marketplace contract in mobile web CI", () => {
+    const workflow = readFileSync(
+      path.join(repoRoot, ".github/workflows/ci-mobile-web-e2e.yml"),
+      "utf8",
+    );
+    expect(workflow).toContain(
+      "npm test -- tests/marketplace-workflow.spec.ts",
     );
   });
 

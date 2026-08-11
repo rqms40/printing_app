@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/customer/address/providers/address_provider.dart';
@@ -13,7 +14,6 @@ import 'package:printing_app/shared/services/token_storage.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/features/customer/home/widgets/next_batch_session_trigger.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
-import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
@@ -171,6 +171,7 @@ class AuthUser {
   final String? profileField;
   final String? course;
   final String? organization;
+
   /// Optional marketplace metadata: business | organization | teacher.
   final String? clientAccountType;
   final List<String> printingPreferences;
@@ -299,6 +300,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   int _authGeneration = 0;
   Future<void> _tokenMutationTail = Future<void>.value();
 
+  /// How long logout waits for queued tutorial writes before giving up.
+  @visibleForTesting
+  static Duration tutorialFlushTimeout = const Duration(seconds: 2);
+
   int _beginAuthOperation() => ++_authGeneration;
 
   bool _isAuthOperationCurrent(int generation) =>
@@ -374,16 +379,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
-      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
-      if (!_isAuthOperationCurrent(authGeneration)) return;
-      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
+      await _ref
+          ?.read(tutorialProvider.notifier)
+          .loadForAccount(
+            accountId: user.id,
+            serverKeys: user.tutorialSeenKeys,
+          );
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
       if (user.role == 'supplier') {
-        try {
-          _ref?.invalidate(supplierAccessProvider);
-        } catch (_) {}
+        await _ref?.read(supplierAccessProvider.notifier).refresh();
+        if (!_isAuthOperationCurrent(authGeneration)) return;
       }
       _connectNotificationsWs();
       _startSessionScopedData();
@@ -450,10 +457,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'fullName': fullName,
           if (nickname != null && nickname.isNotEmpty) 'nickname': nickname,
           'profileCategory': profileCategory,
-          if (isSupplier)
-            'profileField': 'print_shop'
-          else if (profileField != null)
-            'profileField': profileField,
+          'profileField': ?(isSupplier ? 'print_shop' : profileField),
           if (isSupplier && serviceFocusRanks.isNotEmpty)
             'serviceFocusRanks': serviceFocusRanks,
           if (ageRange != null && ageRange.isNotEmpty) 'ageRange': ageRange,
@@ -483,12 +487,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
-      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
-      if (!_isAuthOperationCurrent(authGeneration)) return;
-      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
+      await _ref
+          ?.read(tutorialProvider.notifier)
+          .loadForAccount(
+            accountId: user.id,
+            serverKeys: user.tutorialSeenKeys,
+          );
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
+      if (user.role == 'supplier') {
+        await _ref?.read(supplierAccessProvider.notifier).refresh();
+        if (!_isAuthOperationCurrent(authGeneration)) return;
+      }
       _connectNotificationsWs();
       _startSessionScopedData();
     } on DioException catch (e) {
@@ -648,6 +659,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _ref?.read(ordersProvider.notifier).clear();
     } catch (_) {}
     _ref?.read(ordersInitialLoadCompleteProvider.notifier).state = false;
+    _ref?.read(ordersInitialLoadAuthoritativeProvider.notifier).state = false;
     _ref?.read(liveRiderLocationProvider.notifier).state = null;
     _ref?.read(liveLocationSocketHealthProvider.notifier).state =
         LocationSocketHealth.disconnected;
@@ -663,7 +675,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final shouldRevokeFcmToken = _manageFcmSession && !_isDevBypassSession;
     _disconnectRealtimeSession();
     _prepareSessionScopedData();
+    // Best-effort: give in-flight tutorial writes a bounded window to land
+    // while the token is still valid, but never let a slow or failing write
+    // hold the session open or strand the bearer token.
+    final flush = _ref?.read(tutorialProvider.notifier).flushPendingWrites();
+    if (flush != null) {
+      try {
+        await flush.timeout(tutorialFlushTimeout);
+      } catch (e) {
+        debugPrint('Tutorial flush skipped during logout: $e');
+      }
+    }
     _ref?.read(tutorialProvider.notifier).resetStateOnly();
+    // A push tap captured while signed out must not replay into the next
+    // account's session.
+    NotificationService.takePendingRoute();
     // Reset session-scoped UI flags so they fire again on next login.
     _ref?.read(nextBatchShownThisSessionProvider.notifier).state = false;
     // AuthState() clears everything including betaLocked.
@@ -750,12 +776,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
       user: user,
     );
     try {
-      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
-      if (!_isAuthOperationCurrent(authGeneration)) return;
-      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
+      await _ref
+          ?.read(tutorialProvider.notifier)
+          .loadForAccount(
+            accountId: user.id,
+            serverKeys: user.tutorialSeenKeys,
+          );
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
+      if (user.role == 'supplier') {
+        await _ref?.read(supplierAccessProvider.notifier).refresh();
+        if (!_isAuthOperationCurrent(authGeneration)) return;
+      }
       _connectNotificationsWs();
       _startSessionScopedData();
     } catch (_) {

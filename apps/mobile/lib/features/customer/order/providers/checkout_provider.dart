@@ -32,6 +32,21 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
     state = state.copyWith(items: newItems, unitAssignments: newAssignments);
   }
 
+  /// Removes only the items captured by a completed submission. This avoids
+  /// discarding work added while the request was in flight.
+  void removeSubmittedItems(Set<String> submittedItemIds) {
+    final remaining = state.items
+        .where((item) => !submittedItemIds.contains(item.id))
+        .toList();
+    if (remaining.isEmpty) {
+      reset();
+      return;
+    }
+    final assignments = Map<String, List<String?>>.from(state.unitAssignments)
+      ..removeWhere((itemId, _) => submittedItemIds.contains(itemId));
+    state = state.copyWith(items: remaining, unitAssignments: assignments);
+  }
+
   void setQuantity(String id, int quantity) {
     final newItems = state.items
         .map((i) => i.id == id ? i.copyWith(quantity: quantity) : i)
@@ -212,10 +227,9 @@ final checkoutFeesProvider = Provider<CheckoutFees>((ref) {
   final extraDrops = state.drops.length > 1 ? state.drops.length - 1 : 0;
   final isPickup = state.mode == DeliveryMode.pickup;
   return CheckoutFees(
-    subtotal: state.subtotal,
+    subtotal: state.subtotal ?? 0,
     deliveryFee: isPickup ? 0 : _deliveryFeeForTier(state.speedTier),
-    priorityFee:
-        !isPickup && state.speedTier == DeliverySpeedTier.priority
+    priorityFee: !isPickup && state.speedTier == DeliverySpeedTier.priority
         ? _kPriorityFee
         : 0,
     extraDropFee: isPickup ? 0 : extraDrops * _kExtraDropFee,

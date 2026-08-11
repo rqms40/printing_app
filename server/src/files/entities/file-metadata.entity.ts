@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  Index,
 } from 'typeorm';
 
 export enum FilePurpose {
@@ -11,6 +12,7 @@ export enum FilePurpose {
   PROOF_OF_DELIVERY = 'proof_of_delivery',
   BETA_TESTIMONIAL = 'beta_testimonial',
   LEGACY = 'legacy',
+  CATALOG_ARTWORK = 'catalog_artwork',
 }
 
 @Entity('file_metadata')
@@ -63,11 +65,20 @@ export class FileMetadata {
   @Column()
   url: string;
 
+  @Index('uq_file_metadata_object_key', { unique: true })
   @Column({ name: 'object_key', type: 'varchar', nullable: true })
   objectKey: string | null;
 
   @Column({ name: 'uploaded_by', nullable: true })
   uploadedBy: number;
+
+  @Column({
+    name: 'catalog_product_slug',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+  })
+  catalogProductSlug: string | null;
 
   @Column({
     type: 'enum',

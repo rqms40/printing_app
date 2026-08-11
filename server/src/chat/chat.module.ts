@@ -11,6 +11,7 @@ import { OpenRouterService } from './openrouter.service';
 import { UsersModule } from '../users/users.module';
 import { Order } from '../orders/entities/order.entity';
 import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.mod
     }),
     UsersModule,
     RealtimeSessionsModule,
+    NotificationsModule,
   ],
   providers: [ChatGateway, ChatService, OpenRouterService],
   controllers: [ChatController],

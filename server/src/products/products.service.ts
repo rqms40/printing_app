@@ -4,7 +4,12 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
+import {
+  FindOptionsWhere,
+  IsNull,
+  Repository,
+  type QueryDeepPartialEntity,
+} from 'typeorm';
 
 import { CatalogReadService } from './catalog-read.service';
 import type { CreateAddonDto } from './dto/create-addon.dto';
@@ -88,11 +93,23 @@ export class ProductsService {
       name: category.name,
       slug: category.slug,
       description: category.description,
+      group_slug: category.groupSlug,
+      group_name: category.groupName,
+      group_description: category.groupDescription,
+      group_sort_order: category.groupSortOrder,
       mobile_description: category.mobileDescription,
+      examples: category.examples,
       icon: category.icon,
       file_processing_type: category.fileProcessingType,
       pricing_model: category.pricingModel,
-      base_rate: Number(category.baseRate),
+      pricing_status:
+        category.pricingModel === PricingModel.QUOTE_REQUIRED
+          ? 'pending_quote'
+          : undefined,
+      base_rate:
+        category.pricingModel === PricingModel.QUOTE_REQUIRED
+          ? null
+          : Number(category.baseRate),
       quantity_unit: category.quantityUnit,
       max_file_size_mb: category.maxFileSizeMb,
       allowed_extensions: category.allowedExtensions,
@@ -107,8 +124,9 @@ export class ProductsService {
     if (existing) {
       throw new ConflictException(`Slug '${dto.slug}' is already in use`);
     }
-    await this.assertValidParent(dto.parentId ?? null, dto.catalogLevel);
-    const category = this.catRepo.create(this.normalizeCategoryDto(dto));
+    const normalized = this.normalizeCategoryDto(dto);
+    this.validateCategoryConfiguration(normalized);
+    const category = this.catRepo.create(normalized);
     return this.catRepo.save(category);
   }
 
@@ -116,7 +134,7 @@ export class ProductsService {
     id: number,
     dto: UpdateCategoryDto,
   ): Promise<ProductCategory> {
-    const current = await this.catRepo.findOneOrFail({ where: { id } });
+    const existing = await this.catRepo.findOneOrFail({ where: { id } });
     if (dto.slug) {
       const conflict = await this.catRepo.findOne({
         where: { slug: dto.slug },
@@ -125,16 +143,12 @@ export class ProductsService {
         throw new ConflictException(`Slug '${dto.slug}' is already in use`);
       }
     }
-    if (dto.parentId !== undefined) {
-      if (dto.parentId === id) {
-        throw new BadRequestException('Category cannot be its own parent');
-      }
-      await this.assertValidParent(
-        dto.parentId,
-        dto.catalogLevel ?? current.catalogLevel,
-      );
-    }
-    await this.catRepo.update(id, this.normalizeCategoryDto(dto) as any);
+    const normalized = this.normalizeCategoryDto(dto, true);
+    this.validateCategoryConfiguration({ ...existing, ...normalized });
+    await this.catRepo.update(
+      id,
+      normalized as QueryDeepPartialEntity<ProductCategory>,
+    );
     return this.catRepo.findOneOrFail({ where: { id } });
   }
 
@@ -192,7 +206,10 @@ export class ProductsService {
         );
       }
     }
-    await this.specRepo.update(id, dto as any);
+    await this.specRepo.update(
+      id,
+      dto as QueryDeepPartialEntity<ProductSpecDefinition>,
+    );
     return this.specRepo.findOneOrFail({
       where: { id },
       relations: { options: true },
@@ -321,7 +338,10 @@ export class ProductsService {
         );
       }
     }
-    await this.optRepo.update(id, dto as any);
+    await this.optRepo.update(
+      id,
+      dto as QueryDeepPartialEntity<ProductSpecOption>,
+    );
     return this.optRepo.findOneOrFail({ where: { id } });
   }
 
@@ -404,61 +424,69 @@ export class ProductsService {
     return spec;
   }
 
-  private async assertValidParent(
-    parentId: number | null | undefined,
-    catalogLevel?: number,
-  ): Promise<void> {
-    if (parentId == null) return;
-    const parent = await this.catRepo.findOne({ where: { id: parentId } });
-    if (!parent) {
-      throw new BadRequestException(`Parent category ${parentId} not found`);
-    }
-    if (catalogLevel != null && catalogLevel <= parent.catalogLevel) {
-      throw new BadRequestException(
-        `catalogLevel ${catalogLevel} must be greater than parent level ${parent.catalogLevel}`,
-      );
-    }
-    if (parent.catalogLevel >= 3) {
-      throw new BadRequestException(
-        'Variant leaves cannot have children; pick a category or subgroup parent',
-      );
-    }
-  }
-
-  private normalizeCategoryDto(dto: CategoryInput): Partial<ProductCategory> {
+  private normalizeCategoryDto(
+    dto: CategoryInput,
+    partial = false,
+  ): Partial<ProductCategory> {
     const allowedExtensions =
       dto.allowedExtensions == null
         ? undefined
         : this.normalizeAllowedExtensions(dto.allowedExtensions);
-    const isOrderable =
-      (dto as Partial<ProductCategory>).isOrderable ??
-      ((dto as Partial<ProductCategory>).catalogLevel != null
-        ? (dto as Partial<ProductCategory>).catalogLevel === 3
-        : undefined);
-    return {
+    const normalized: Partial<ProductCategory> = {
       ...dto,
-      parentId:
-        (dto as Partial<ProductCategory>).parentId === undefined
-          ? undefined
-          : ((dto as Partial<ProductCategory>).parentId ?? null),
-      allowedExtensions:
-        allowedExtensions ??
-        (isOrderable === false ? [] : undefined),
+      allowedExtensions,
       fileProcessingType:
         (dto as Partial<ProductCategory>).fileProcessingType ??
-        this.defaultFileProcessingType(dto.slug),
+        (partial ? undefined : this.defaultFileProcessingType(dto.slug)),
       pricingModel:
         (dto as Partial<ProductCategory>).pricingModel ??
-        this.defaultPricingModel(dto.slug),
-      quantityUnit: (dto as Partial<ProductCategory>).quantityUnit ?? 'copy',
-      baseRate:
-        (dto as Partial<ProductCategory>).baseRate ??
-        (isOrderable === false ? 0 : undefined),
-      maxFileSizeMb:
-        (dto as Partial<ProductCategory>).maxFileSizeMb ??
-        (isOrderable === false ? 50 : undefined),
-      isOrderable,
+        (partial ? undefined : this.defaultPricingModel(dto.slug)),
+      quantityUnit:
+        (dto as Partial<ProductCategory>).quantityUnit ??
+        (partial ? undefined : 'copy'),
     };
+    if (!partial) return normalized;
+    return Object.fromEntries(
+      Object.entries(normalized).filter(([, value]) => value !== undefined),
+    ) as Partial<ProductCategory>;
+  }
+
+  private validateCategoryConfiguration(
+    category: Partial<ProductCategory>,
+  ): void {
+    const baseRate = Number(category.baseRate);
+    if (!Number.isFinite(baseRate) || baseRate < 0) {
+      throw new BadRequestException('baseRate must be at least 0');
+    }
+    if (
+      category.pricingModel !== PricingModel.QUOTE_REQUIRED &&
+      baseRate <= 0
+    ) {
+      throw new BadRequestException(
+        'baseRate must be greater than 0 for numeric pricing models',
+      );
+    }
+
+    const active = category.isActive ?? true;
+    if (!active || category.pricingModel !== PricingModel.QUOTE_REQUIRED) {
+      return;
+    }
+    const completeGroupMetadata =
+      this.hasText(category.groupSlug) &&
+      this.hasText(category.groupName) &&
+      this.hasText(category.groupDescription) &&
+      Number.isInteger(category.groupSortOrder);
+    if (!completeGroupMetadata) {
+      throw new BadRequestException({
+        code: 'RFQ_GROUP_METADATA_REQUIRED',
+        message:
+          'Active quote-required products require complete group metadata',
+      });
+    }
+  }
+
+  private hasText(value: string | null | undefined): boolean {
+    return typeof value === 'string' && value.trim().length > 0;
   }
 
   private normalizeAllowedExtensions(value: string | string[]): string[] {

@@ -20,6 +20,7 @@ import {
   ReconcileCodCollectionDto,
 } from './dto/cod-collection.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+import { CodCollectionStatus } from './entities/cod-collection.entity';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -110,9 +111,14 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ops_admin', 'super_admin')
   listCodCollections(@Query('status') status?: string) {
-    const allowed = new Set(['pending', 'collected', 'failed', 'reconciled']);
-    const normalized = status && allowed.has(status) ? status : 'collected';
-    return this.paymentsService.listCodCollections(normalized as any);
+    const allowed: ReadonlySet<string> = new Set(
+      Object.values(CodCollectionStatus),
+    );
+    const normalized =
+      status && allowed.has(status)
+        ? (status as CodCollectionStatus)
+        : CodCollectionStatus.COLLECTED;
+    return this.paymentsService.listCodCollections(normalized);
   }
 
   @Get('cod/:orderId')

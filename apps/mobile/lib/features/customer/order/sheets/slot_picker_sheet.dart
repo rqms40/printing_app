@@ -12,6 +12,7 @@ class SlotPickerSheet {
     final date =
         initialDate ?? DateTime.now().toIso8601String().substring(0, 10);
     return showModalBottomSheet<ScheduledSlot>(
+      barrierLabel: 'Dismiss delivery slot picker',
       context: context,
       isScrollControlled: true,
       builder: (_) => _SlotPickerBody(date: date),
@@ -76,7 +77,9 @@ class _SlotPickerBodyState extends ConsumerState<_SlotPickerBody> {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => ref.read(deliverySlotProvider(widget.date).notifier).refresh(),
+                    onPressed: () => ref
+                        .read(deliverySlotProvider(widget.date).notifier)
+                        .refresh(),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -85,7 +88,9 @@ class _SlotPickerBodyState extends ConsumerState<_SlotPickerBody> {
           else if (slotsState.slots.isEmpty)
             const Padding(
               padding: EdgeInsets.all(32.0),
-              child: Center(child: Text('No delivery slots available for this date.')),
+              child: Center(
+                child: Text('No delivery slots available for this date.'),
+              ),
             )
           else
             RadioGroup<int>(

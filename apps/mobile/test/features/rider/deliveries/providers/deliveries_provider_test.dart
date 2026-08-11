@@ -598,6 +598,7 @@ void main() {
         await realNotifier.completeDeliveryWithProof('101', {
           'type': 'signature',
           'signatureData': 'svg:path-data',
+          'otp': '123456',
         });
 
         expect(
@@ -693,6 +694,7 @@ void main() {
         await realNotifier.completeDeliveryWithProof('101', {
           'type': 'signature',
           'signatureData': 'svg:path-data',
+          'otp': '123456',
         });
 
         expect(
@@ -809,8 +811,21 @@ void main() {
         DeliveryStatus.accepted,
       );
 
-      // accepted -> pickedUp
+      // accepted -> pickedUp requires OTP + uploaded photo proof.
       await notifier.advanceCheckpoint(id);
+      expect(
+        notifier.state.assignments.firstWhere((a) => a.id == id).status,
+        DeliveryStatus.accepted,
+      );
+      expect(
+        notifier.state.errorMessage,
+        'Pickup OTP and photo proof are required before pickup',
+      );
+      await notifier.completePickupWithProof(id, {
+        'type': 'photo',
+        'fileId': 42,
+        'otp': '123456',
+      });
       expect(
         notifier.state.assignments.firstWhere((a) => a.id == id).status,
         DeliveryStatus.pickedUp,
@@ -847,13 +862,18 @@ void main() {
           .firstWhere((a) => a.status == DeliveryStatus.assigned)
           .id;
       await notifier.advanceCheckpoint(id);
-      await notifier.advanceCheckpoint(id);
+      await notifier.completePickupWithProof(id, {
+        'type': 'photo',
+        'fileId': 42,
+        'otp': '123456',
+      });
       await notifier.advanceCheckpoint(id);
       await notifier.advanceCheckpoint(id);
 
       await (notifier as dynamic).completeDeliveryWithProof(id, {
         'type': 'signature',
         'signatureData': 'svg:path-data',
+        'otp': '654321',
       });
 
       final delivered = notifier.state.assignments.firstWhere(
@@ -864,6 +884,7 @@ void main() {
       expect(lastStatusPatchData, {
         'status': 'delivered',
         'proof': {'type': 'signature', 'signatureData': 'svg:path-data'},
+        'otp': '654321',
       });
     });
 

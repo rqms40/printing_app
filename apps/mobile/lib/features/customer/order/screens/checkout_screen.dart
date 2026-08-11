@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,12 +11,14 @@ import 'package:printing_app/features/customer/address/providers/address_provide
 import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_order_limit_sheet.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/screens/order_success_screen.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_delivery_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_footer.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_items_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_payment_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_speed_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_summary_card.dart';
+import 'package:printing_app/features/customer/order/widgets/rfq_review_card.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
@@ -23,6 +27,23 @@ import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart'
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 import 'package:printing_app/features/tutorial/widgets/feature_overlay_card.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+
+PipelineStep checkoutTutorialStepAfterDelivery({required bool isRfq}) =>
+    isRfq ? PipelineStep.placeOrderButton : PipelineStep.checkoutPayment;
+
+({String title, String body}) checkoutSubmitTutorialCopy({
+  required bool isRfq,
+}) => isRfq
+    ? (
+        title: 'Submit quote request',
+        body:
+            "That's the Submit quote request button — tap it whenever you're ready to send your requirements.",
+      )
+    : (
+        title: 'Place Order',
+        body:
+            "That's the Place Order button — tap it whenever you're ready to send your order.",
+      );
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
@@ -110,6 +131,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   void _showAddAddressPrompt() {
     showModalBottomSheet(
+      barrierLabel: 'Dismiss checkout sheet',
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -193,9 +215,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ),
       ],
       () {
-        ref.read(pipelineTutorialProvider.notifier).advance();
+        final pipeline = ref.read(pipelineTutorialProvider.notifier);
+        pipeline.advance();
+        final next = checkoutTutorialStepAfterDelivery(
+          isRfq: ref.read(checkoutProvider).hasPendingQuoteItems,
+        );
+        if (next == PipelineStep.placeOrderButton) pipeline.advance();
         Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) _firePipelinePayment();
+          if (!mounted) return;
+          if (next == PipelineStep.placeOrderButton) {
+            _firePipelinePlaceOrder();
+          } else {
+            _firePipelinePayment();
+          }
         });
       },
       onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
@@ -233,15 +265,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (!mounted) return;
     await _ensureVisible(_placeOrderKey);
     if (!mounted) return;
+    final copy = checkoutSubmitTutorialCopy(
+      isRfq: ref.read(checkoutProvider).hasPendingQuoteItems,
+    );
     showCoachMark(
       context,
       [
         TutorialStep(
           targetKey: _placeOrderKey,
           icon: HugeIcons.strokeRoundedCheckmarkCircle02,
-          title: 'Place Order',
-          body:
-              "That's the Place Order button — tap it whenever you're ready to send your order.",
+          title: copy.title,
+          body: copy.body,
           align: ContentAlign.top,
           advanceOnSpotlightTap: false,
         ),
@@ -277,18 +311,28 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       () {
         // Mark Step A done for this session so the sheet knows to fire Step B.
         ref.read(checkoutMultidropSeenInSessionProvider.notifier).state = true;
-        // Hint the user to open the payment sheet for the next coach mark.
+        final isRfq = ref.read(checkoutProvider).hasPendingQuoteItems;
+        if (isRfq) {
+          unawaited(
+            ref
+                .read(tutorialProvider.notifier)
+                .markSeen(TutorialKey.checkoutFeatures),
+          );
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                "One more thing — tap 'Choose payment method' to see GRIDGO Credits.",
+                isRfq
+                    ? "One more thing — tap 'Submit quote request' when your requirements are ready."
+                    : "One more thing — tap 'Choose payment method' to see GRIDGO Credits.",
               ),
-              duration: Duration(seconds: 4),
+              duration: const Duration(seconds: 4),
             ),
           );
         }
-        // Do NOT mark checkoutFeatures seen here — Step B (in the sheet) does that.
+        // Priced checkout still completes Step B in the payment sheet. RFQs
+        // have no payment sheet, so Step A completes this standalone tutorial.
       },
     );
   }
@@ -306,6 +350,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final divider = Container(height: 8, color: colors.background);
 
     final isEmpty = state.items.isEmpty;
+    final isRfq = state.hasPendingQuoteItems;
 
     return Scaffold(
       backgroundColor: colors.surface,
@@ -359,11 +404,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     multiDropTabKey: _multiDropTabKey,
                   ),
                   divider,
-                  const CheckoutSpeedCard(),
-                  divider,
-                  CheckoutPaymentCard(methodPickerKey: _paymentMethodKey),
-                  divider,
-                  const CheckoutSummaryCard(),
+                  if (isRfq)
+                    const RfqReviewCard()
+                  else ...[
+                    const CheckoutSpeedCard(),
+                    divider,
+                    CheckoutPaymentCard(methodPickerKey: _paymentMethodKey),
+                    divider,
+                    const CheckoutSummaryCard(),
+                  ],
                   const SizedBox(height: 8),
                 ],
               ),
@@ -373,7 +422,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           : CheckoutFooter(
               onPlaceOrder: () => _placeOrder(context),
               placeOrderKey: _placeOrderKey,
-            ), // onPlaceOrder is Future-aware (awaited in footer)
+            ),
     );
   }
 
@@ -387,28 +436,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final notifier = ref.read(ordersProvider.notifier);
     try {
       final checkout = ref.read(checkoutProvider);
-      final placed = await notifier.placeCheckout(checkout);
-      if (!context.mounted) return;
-      ref.read(checkoutProvider.notifier).reset();
-      if (!context.mounted) return;
-      final refs = placed
-          .map((o) => o.orderId)
-          .where((ref) => ref.trim().isNotEmpty)
-          .toList(growable: false);
-      final firstNumericId = placed.isEmpty
-          ? null
-          : int.tryParse(placed.first.id);
-      // Defer navigation one frame so checkout rebuilds (and any realtime
-      // listeners) settle before we leave the route — avoids web RTI errors
-      // from disposing mid-callback.
-      await Future<void>.delayed(Duration.zero);
+      final submittedItemIds = checkout.items.map((item) => item.id).toSet();
+      final placed = checkout.hasPendingQuoteItems
+          ? await notifier.submitRfq(checkout)
+          : await notifier.placeCheckout(checkout);
+      ref
+          .read(checkoutProvider.notifier)
+          .removeSubmittedItems(submittedItemIds);
       if (!context.mounted) return;
       context.go(
         '/customer/order/success',
-        extra: <String, dynamic>{
-          'orderRefs': refs,
-          'firstOrderId': firstNumericId,
-        },
+        extra: OrderSuccessPayload(createdOrders: placed),
       );
     } on BetaOrderLimitException {
       if (!context.mounted) return;

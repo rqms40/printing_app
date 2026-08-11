@@ -6,6 +6,8 @@ import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
 import 'package:printing_app/features/customer/order/models/destination_group.dart';
+import 'package:printing_app/features/customer/order/models/product_catalog.dart';
+import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -31,7 +33,8 @@ void main() {
     captured = null;
     iw = InterceptorsWrapper(
       onRequest: (options, handler) {
-        if (options.path == '/orders/batch') {
+        if (options.path == '/orders/batch' ||
+            options.path == '/orders/requests/batch') {
           captured = Map<String, dynamic>.from(options.data as Map);
           handler.resolve(
             Response(
@@ -56,7 +59,11 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ordersProvider.overrideWith(
-          (ref) => OrdersNotifier(initialState: const [], skipBootstrap: true),
+          (ref) => OrdersNotifier(
+            initialState: const [],
+            skipBootstrap: true,
+            catalogStateResolver: _authoritativeCatalog,
+          ),
         ),
       ],
     );
@@ -89,6 +96,185 @@ void main() {
     expect(captured?['deliveryOption'], 'delivery');
     // Server's whitelist DTO rejects `priority`, so the field must NOT be sent.
     expect(captured?.containsKey('priority'), isFalse);
+  });
+
+  test('submitRfq posts exact pending-price DTO without fake totals', () async {
+    final container = ProviderContainer(
+      overrides: [
+        ordersProvider.overrideWith(
+          (ref) => OrdersNotifier(
+            initialState: const [],
+            skipBootstrap: true,
+            catalogStateResolver: _authoritativeCatalog,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final state = CheckoutState(
+      mode: DeliveryMode.delivery,
+      singleAddress: _address('9'),
+      items: [
+        CartItem(
+          id: 'rfq',
+          category: 'flyers',
+          categoryName: 'Flyers',
+          productSlug: 'flyers',
+          quoteRequired: true,
+          requiredDate: DateTime(2099, 12, 31),
+          catalogServerBacked: true,
+          fileName: 'flyer.pdf',
+          fileMetadataId: 41,
+          specs: const {'stock': 'matte', 'sides': 2},
+          quantity: 100,
+          pageCount: 1,
+          specialInstructions: 'Trim carefully',
+          createdAt: DateTime(2026),
+        ),
+        CartItem(
+          id: 'cad-rfq',
+          category: 'blueprint-cad-plotting',
+          categoryName: 'Blueprint & CAD Plotting',
+          productSlug: 'blueprint-cad-plotting',
+          quoteRequired: true,
+          requiredDate: DateTime(2099, 11, 30),
+          catalogServerBacked: true,
+          fileName: 'plans.dwg',
+          fileMetadataId: 42,
+          specs: const {'sheet_size': 'A1', 'color_mode': 'mono'},
+          quantity: 2,
+          pageCount: 1,
+          createdAt: DateTime(2026),
+        ),
+      ],
+    );
+
+    await container.read(ordersProvider.notifier).submitRfq(state);
+
+    expect(captured, {
+      'items': [
+        {
+          'categorySlug': 'flyers',
+          'quantity': 100,
+          'requiredDate': '2099-12-31',
+          'fileMetadataId': 41,
+          'specs': {'stock': 'matte', 'sides': 2},
+          'specialInstructions': 'Trim carefully',
+        },
+        {
+          'categorySlug': 'blueprint-cad-plotting',
+          'quantity': 2,
+          'requiredDate': '2099-11-30',
+          'fileMetadataId': 42,
+          'specs': {'sheet_size': 'A1', 'color_mode': 'mono'},
+        },
+      ],
+      'deliveryOption': 'delivery',
+      'deliveryAddressId': 9,
+    });
+    expect(captured?.toString(), isNot(contains('totalPrice')));
+    expect(captured?.toString(), isNot(contains('paymentMethod')));
+  });
+
+  test('submitRfq fails closed without current catalog authority', () async {
+    final container = ProviderContainer(
+      overrides: [
+        ordersProvider.overrideWith(
+          (ref) => OrdersNotifier(
+            initialState: const [],
+            skipBootstrap: true,
+            catalogStateResolver: _unauthorizedCatalog,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await expectLater(
+      container
+          .read(ordersProvider.notifier)
+          .submitRfq(
+            CheckoutState(
+              mode: DeliveryMode.pickup,
+              items: [
+                CartItem(
+                  id: 'rfq',
+                  category: 'flyers',
+                  productSlug: 'flyers',
+                  quoteRequired: true,
+                  requiredDate: DateTime(2099, 12, 31),
+                  catalogServerBacked: true,
+                  fileName: 'art.pdf',
+                  fileMetadataId: 4,
+                  specs: const {'stock': 'matte'},
+                  quantity: 1,
+                  pageCount: 1,
+                  createdAt: DateTime(2026),
+                ),
+              ],
+            ),
+          ),
+      throwsA(isA<StateError>()),
+    );
+    expect(captured, isNull);
+  });
+
+  test('submitRfq blocks a leaf removed by a refreshed catalog', () async {
+    var current = _authoritativeCatalog();
+    final container = ProviderContainer(
+      overrides: [
+        ordersProvider.overrideWith(
+          (ref) => OrdersNotifier(
+            initialState: const [],
+            skipBootstrap: true,
+            catalogStateResolver: () => current,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    current = _authoritativeCatalog(onlySlugs: {'blueprint-cad-plotting'});
+
+    await expectLater(
+      container
+          .read(ordersProvider.notifier)
+          .submitRfq(
+            CheckoutState(
+              mode: DeliveryMode.pickup,
+              items: [_rfqItem('flyers')],
+            ),
+          ),
+      throwsA(isA<StateError>()),
+    );
+    expect(captured, isNull);
+  });
+
+  test('submitRfq rejects mixed RFQ and priced items before network', () async {
+    final container = ProviderContainer(
+      overrides: [
+        ordersProvider.overrideWith(
+          (ref) => OrdersNotifier(
+            initialState: const [],
+            skipBootstrap: true,
+            catalogStateResolver: _authoritativeCatalog,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await expectLater(
+      container
+          .read(ordersProvider.notifier)
+          .submitRfq(
+            CheckoutState(
+              mode: DeliveryMode.pickup,
+              items: [_rfqItem('flyers'), _cartItem()],
+            ),
+          ),
+      throwsA(isA<StateError>()),
+    );
+    expect(captured, isNull);
   });
 
   test('placeCheckout omits stale scheduled slot for standard tier', () async {
@@ -432,6 +618,59 @@ CartItem _cartItem() => CartItem(
   pageCount: 1,
   printSubtotal: 100,
   createdAt: DateTime.now(),
+);
+
+CartItem _rfqItem(String slug) => CartItem(
+  id: 'rfq-$slug',
+  category: slug,
+  productSlug: slug,
+  quoteRequired: true,
+  requiredDate: DateTime(2099, 12, 31),
+  catalogServerBacked: true,
+  fileName: '$slug.pdf',
+  fileMetadataId: 41,
+  specs: const {'stock': 'matte'},
+  quantity: 1,
+  pageCount: 1,
+  createdAt: DateTime(2026),
+);
+
+ProductCatalogState _authoritativeCatalog({Set<String>? onlySlugs}) {
+  final snapshot = ProductCatalog.v110Snapshot();
+  final slugs =
+      onlySlugs ?? snapshot.categories.map((item) => item.slug).toSet();
+  final groups = snapshot.groups
+      .map(
+        (group) => ProductGroup(
+          slug: group.slug,
+          name: group.name,
+          description: group.description,
+          sortOrder: group.sortOrder,
+          products: group.products
+              .where((product) => slugs.contains(product.slug))
+              .toList(),
+        ),
+      )
+      .where((group) => group.products.isNotEmpty)
+      .toList();
+  return ProductCatalogState(
+    catalog: ProductCatalog(
+      version: snapshot.version,
+      groups: groups,
+      categories: snapshot.categories
+          .where((product) => slugs.contains(product.slug))
+          .toList(),
+    ),
+    isServerBacked: true,
+    isLoading: false,
+  );
+}
+
+ProductCatalogState _unauthorizedCatalog() => ProductCatalogState(
+  catalog: ProductCatalog.v110Snapshot(),
+  isServerBacked: false,
+  isLoading: false,
+  error: StateError('offline'),
 );
 
 Address _address(String id) => Address(

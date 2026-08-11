@@ -173,6 +173,7 @@ describe("admin users data", () => {
           created_at: "2026-04-12T11:00:00.000Z",
         },
       ],
+      supplier_profile: null,
     });
     expect(vi.mocked(apiClient.get)).toHaveBeenCalledWith("/admin/users/7");
   });

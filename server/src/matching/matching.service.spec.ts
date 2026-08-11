@@ -8,18 +8,30 @@ import {
   SupplierAssignment,
   SupplierAssignmentDecision,
 } from './entities/supplier-assignment.entity';
-import { Order, OrderStatus } from '../orders/entities/order.entity';
+import {
+  Order,
+  OrderStatus,
+  PricingStatus,
+} from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { SupplierProfile } from '../suppliers/entities/supplier-profile.entity';
+import { SupplierCapability } from '../suppliers/entities/supplier-capability.entity';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { SupplierVerificationStatus } from '../suppliers/entities/supplier-verification.entity';
+import {
+  SupplierVerification,
+  SupplierVerificationStatus,
+} from '../suppliers/entities/supplier-verification.entity';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import { PricingModel } from '../products/enums/catalog.enums';
+import { Address } from '../addresses/entities/address.entity';
 
 describe('MatchingService', () => {
   let service: MatchingService;
   let assignmentRepo: jest.Mocked<Partial<Repository<SupplierAssignment>>>;
   let ordersRepo: jest.Mocked<Partial<Repository<Order>>>;
   let supplierRepo: jest.Mocked<Partial<Repository<SupplierProfile>>>;
+  let categoryRepo: jest.Mocked<Partial<Repository<ProductCategory>>>;
   let auditService: jest.Mocked<
     Pick<AuditService, 'recordOrderStatusTransition' | 'append'>
   >;
@@ -30,6 +42,7 @@ describe('MatchingService', () => {
     update: jest.Mock;
   };
   let txAssignmentRepo: {
+    find: jest.Mock;
     findOne: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
@@ -38,8 +51,24 @@ describe('MatchingService', () => {
   let txHistoryRepo: {
     insert: jest.Mock;
   };
+  let txSupplierRepo: { find: jest.Mock; findOne: jest.Mock };
+  let txCapabilityRepo: { find: jest.Mock };
+  let txVerificationRepo: { find: jest.Mock; findOne: jest.Mock };
+  let txCategoryRepo: { findOne: jest.Mock };
+  let txAddressRepo: { findOne: jest.Mock };
 
   const actor = { userId: 7, role: 'ops_admin' as const };
+
+  const flyersCategory = {
+    id: 100,
+    slug: 'flyers',
+    isActive: true,
+    pricingModel: PricingModel.QUOTE_REQUIRED,
+    groupSlug: 'marketing-promo',
+    groupName: 'Marketing & Promotional Collateral',
+    groupDescription: 'Promotional print products.',
+    groupSortOrder: 1,
+  } as ProductCategory;
 
   function baseOrder(overrides: Partial<Order> = {}): Order {
     return {
@@ -49,7 +78,9 @@ describe('MatchingService', () => {
       orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
       category: 'paper',
       quantity: 10,
+      deliveryAddressId: 5,
       deliveryAddress: {
+        id: 5,
         city: 'Davao City',
         barangay: 'Poblacion',
       },
@@ -63,15 +94,27 @@ describe('MatchingService', () => {
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     txAssignmentRepo = {
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
-      create: jest.fn((data) => ({ id: 0, ...data })),
-      save: jest.fn(async (row) => ({ id: 99, ...row })),
+      create: jest.fn((data: Partial<SupplierAssignment>) => ({
+        id: 0,
+        ...data,
+      })),
+      save: jest.fn(async (row: Partial<SupplierAssignment>) => ({
+        id: 99,
+        ...row,
+      })),
       createQueryBuilder: jest.fn(() => {
         const qb = {
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
           update: jest.fn().mockReturnThis(),
           set: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
+          setParameters: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue([]),
           execute: jest.fn().mockResolvedValue({ affected: 0 }),
         };
         return qb;
@@ -79,6 +122,24 @@ describe('MatchingService', () => {
     };
     txHistoryRepo = {
       insert: jest.fn().mockResolvedValue(undefined),
+    };
+    txSupplierRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn(),
+    };
+    txCapabilityRepo = { find: jest.fn().mockResolvedValue([]) };
+    txVerificationRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn(),
+    };
+    txCategoryRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    txAddressRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 5,
+        city: 'Davao City',
+        barangay: 'Poblacion',
+        province: null,
+      }),
     };
 
     assignmentRepo = {
@@ -90,6 +151,7 @@ describe('MatchingService', () => {
           addSelect: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
+          setParameters: jest.fn().mockReturnThis(),
           groupBy: jest.fn().mockReturnThis(),
           getRawMany: jest.fn().mockResolvedValue([]),
         };
@@ -103,6 +165,9 @@ describe('MatchingService', () => {
 
     supplierRepo = {
       find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    categoryRepo = {
       findOne: jest.fn().mockResolvedValue(null),
     };
 
@@ -128,6 +193,10 @@ describe('MatchingService', () => {
           useValue: supplierRepo,
         },
         {
+          provide: getRepositoryToken(ProductCategory),
+          useValue: categoryRepo,
+        },
+        {
           provide: DataSource,
           useValue: {
             transaction: jest.fn(async (fn: (m: unknown) => unknown) =>
@@ -136,6 +205,12 @@ describe('MatchingService', () => {
                   if (entity === Order) return txOrdersRepo;
                   if (entity === SupplierAssignment) return txAssignmentRepo;
                   if (entity === OrderStatusHistory) return txHistoryRepo;
+                  if (entity === SupplierProfile) return txSupplierRepo;
+                  if (entity === SupplierCapability) return txCapabilityRepo;
+                  if (entity === SupplierVerification)
+                    return txVerificationRepo;
+                  if (entity === ProductCategory) return txCategoryRepo;
+                  if (entity === Address) return txAddressRepo;
                   return {};
                 },
               }),
@@ -183,6 +258,7 @@ describe('MatchingService', () => {
               id: 1,
               supplierId: 11,
               productFamily: 'paper',
+              isActive: true,
               materials: [],
               maxCapacity: 10,
               leadTimeDays: 1,
@@ -204,6 +280,7 @@ describe('MatchingService', () => {
               id: 2,
               supplierId: 12,
               productFamily: 'paper',
+              isActive: true,
               maxCapacity: 10,
               leadTimeDays: 1,
             },
@@ -220,10 +297,75 @@ describe('MatchingService', () => {
       expect(result.candidates[0].supplierId).toBe(11);
       expect(result.excludedCount).toBe(1);
       expect(result.order.orderStatus).toBe(OrderStatus.APPROVED_FOR_MATCHING);
+      expect(result.outcome).toEqual({
+        code: 'eligible_suppliers_found',
+        message: '1 eligible supplier found',
+      });
+    });
+
+    it('returns a stable unmet-coverage outcome when no supplier is eligible', async () => {
+      ordersRepo.findOne!.mockResolvedValue(
+        baseOrder({
+          category: 'flyers',
+          pricingStatus: PricingStatus.PENDING_QUOTE,
+        }),
+      );
+      categoryRepo.findOne!.mockResolvedValue(flyersCategory);
+      supplierRepo.find!.mockResolvedValue([]);
+
+      const result = await service.getCandidates(42);
+
+      expect(result.candidates).toEqual([]);
+      expect(result.outcome).toEqual({
+        code: 'no_eligible_supplier',
+        message: 'No eligible supplier covers order 42',
+      });
     });
   });
 
   describe('assign', () => {
+    it('uses only the locked pool when an existing supplier becomes eligible before the transaction', async () => {
+      const order = baseOrder();
+      supplierRepo.findOne!.mockResolvedValue({ id: 11 } as SupplierProfile);
+      ordersRepo.findOne!.mockRejectedValue(
+        new Error('unlocked order eligibility lookup'),
+      );
+      supplierRepo.find!.mockRejectedValue(
+        new Error('unlocked supplier eligibility lookup'),
+      );
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([
+        {
+          id: 11,
+          userId: 55,
+          businessName: 'Newly Eligible',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 4,
+        },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          supplierId: 11,
+          productFamily: 'paper',
+          isActive: true,
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+      ]);
+      txVerificationRepo.find.mockResolvedValue([
+        {
+          supplierId: 11,
+          status: SupplierVerificationStatus.VERIFIED,
+        },
+      ]);
+
+      const result = await service.assign(42, 11, actor);
+
+      expect(result.assignment.supplierId).toBe(11);
+    });
+
     it('creates assignment and transitions order to supplier_assigned', async () => {
       const order = baseOrder();
       ordersRepo.findOne!.mockResolvedValue(order);
@@ -240,6 +382,7 @@ describe('MatchingService', () => {
               id: 1,
               supplierId: 11,
               productFamily: 'paper',
+              isActive: true,
               maxCapacity: 0,
               leadTimeDays: 2,
             },
@@ -247,7 +390,34 @@ describe('MatchingService', () => {
           verification: { status: SupplierVerificationStatus.VERIFIED },
         } as unknown as SupplierProfile,
       ]);
+      supplierRepo.findOne!.mockResolvedValue({ id: 11 } as SupplierProfile);
       txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([
+        {
+          id: 11,
+          userId: 55,
+          businessName: 'PrintCo',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 4,
+        },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          supplierId: 11,
+          productFamily: 'paper',
+          isActive: true,
+          maxCapacity: 0,
+          leadTimeDays: 2,
+        },
+      ]);
+      txVerificationRepo.find.mockResolvedValue([
+        {
+          supplierId: 11,
+          status: SupplierVerificationStatus.VERIFIED,
+        },
+      ]);
 
       const result = await service.assign(42, 11, actor, 'manual pick');
 
@@ -257,6 +427,12 @@ describe('MatchingService', () => {
         SupplierAssignmentDecision.PENDING,
       );
       expect(result.assignment.acceptanceDeadline).toBeInstanceOf(Date);
+      expect(result.assignment.rankingInputs).toEqual(
+        expect.objectContaining({
+          matchedProductFamily: 'paper',
+          capabilityFit: 1,
+        }),
+      );
       expect(txOrdersRepo.update).toHaveBeenCalledWith(
         { id: 42, orderStatus: OrderStatus.APPROVED_FOR_MATCHING },
         { orderStatus: OrderStatus.SUPPLIER_ASSIGNED },
@@ -279,41 +455,85 @@ describe('MatchingService', () => {
       );
     });
 
-    it('rejects unknown supplier id on ops override path', async () => {
+    it('returns stable not-found for an unknown manual supplier id', async () => {
       ordersRepo.findOne!.mockResolvedValue(baseOrder());
       supplierRepo.find!.mockResolvedValue([]);
       supplierRepo.findOne!.mockResolvedValue(null);
 
       await expect(service.assign(42, 999, actor)).rejects.toThrow(
-        NotFoundException,
+        'Supplier 999 not found',
       );
     });
 
-    it('allows ops override assign of verified supplier not ranked by capability', async () => {
+    it('rejects an existing unverified manual supplier while another candidate exists', async () => {
       const order = baseOrder();
       ordersRepo.findOne!.mockResolvedValue(order);
-      // Ranked list empty (no capability match) but supplier is verified active.
-      supplierRepo.find!.mockResolvedValue([
+      supplierRepo.findOne!.mockResolvedValue({ id: 20 });
+      const profiles = [
         {
-          id: 20,
-          userId: 77,
-          businessName: 'Override Print',
+          id: 11,
+          userId: 55,
+          businessName: 'Eligible',
           serviceZones: [],
           isActive: true,
-          ratingAverage: 0,
+          ratingAverage: 4,
           capabilities: [
             {
-              id: 9,
-              supplierId: 20,
-              productFamily: 'shirts',
-              maxCapacity: 0,
+              id: 1,
+              supplierId: 11,
+              productFamily: 'paper',
+              isActive: true,
+              maxCapacity: 10,
               leadTimeDays: 1,
             },
           ],
           verification: { status: SupplierVerificationStatus.VERIFIED },
-        } as unknown as SupplierProfile,
+        },
+        {
+          id: 20,
+          userId: 77,
+          businessName: 'Unverified',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 5,
+          capabilities: [
+            {
+              id: 2,
+              supplierId: 20,
+              productFamily: 'paper',
+              isActive: true,
+              maxCapacity: 10,
+              leadTimeDays: 1,
+            },
+          ],
+          verification: { status: SupplierVerificationStatus.PENDING },
+        },
+      ] as unknown as SupplierProfile[];
+      supplierRepo.find!.mockResolvedValue(profiles);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue(
+        profiles.map(
+          ({ capabilities: _caps, verification: _verification, ...profile }) =>
+            profile,
+        ),
+      );
+      txCapabilityRepo.find.mockResolvedValue(
+        profiles.flatMap((profile) => profile.capabilities),
+      );
+      txVerificationRepo.find.mockResolvedValue([
+        { supplierId: 11, status: SupplierVerificationStatus.VERIFIED },
+        { supplierId: 20, status: SupplierVerificationStatus.PENDING },
       ]);
-      supplierRepo.findOne!.mockResolvedValue({
+
+      await expect(service.assign(42, 20, actor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'supplier_not_eligible' }),
+      });
+    });
+
+    it('rejects manual assignment of a verified supplier without the exact capability', async () => {
+      const order = baseOrder();
+      ordersRepo.findOne!.mockResolvedValue(order);
+      const profile = {
         id: 20,
         userId: 77,
         businessName: 'Override Print',
@@ -325,18 +545,119 @@ describe('MatchingService', () => {
             id: 9,
             supplierId: 20,
             productFamily: 'shirts',
+            isActive: true,
             maxCapacity: 0,
             leadTimeDays: 1,
           },
         ],
         verification: { status: SupplierVerificationStatus.VERIFIED },
-      } as unknown as SupplierProfile);
+      } as unknown as SupplierProfile;
+      supplierRepo.find!.mockResolvedValue([profile]);
+      supplierRepo.findOne!.mockResolvedValue({ id: 20 } as SupplierProfile);
       txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([
+        { ...profile, capabilities: undefined, verification: undefined },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue(profile.capabilities);
+      txVerificationRepo.find.mockResolvedValue([
+        { supplierId: 20, status: SupplierVerificationStatus.VERIFIED },
+      ]);
 
-      const result = await service.assign(42, 20, actor, 'ops override');
-      expect(result.toStatus).toBe(OrderStatus.SUPPLIER_ASSIGNED);
-      expect(result.assignment.supplierId).toBe(20);
-      expect(result.candidate.businessName).toBe('Override Print');
+      await expect(
+        service.assign(42, 20, actor, 'manual pick'),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'supplier_not_eligible' }),
+      });
+      expect(txAssignmentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a supplier whose capability is inactive in the locked rerank', async () => {
+      const order = baseOrder({
+        category: 'flyers',
+        pricingStatus: PricingStatus.PENDING_QUOTE,
+      });
+      ordersRepo.findOne!.mockResolvedValue(order);
+      categoryRepo.findOne!.mockResolvedValue(flyersCategory);
+      supplierRepo.find!.mockResolvedValue([
+        {
+          id: 11,
+          userId: 55,
+          businessName: 'PrintCo',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 4,
+          capabilities: [
+            {
+              id: 1,
+              supplierId: 11,
+              productFamily: 'flyers',
+              isActive: true,
+              maxCapacity: 10,
+              leadTimeDays: 2,
+            },
+          ],
+          verification: { status: SupplierVerificationStatus.VERIFIED },
+        } as unknown as SupplierProfile,
+      ]);
+      supplierRepo.findOne!.mockResolvedValue({ id: 11 } as SupplierProfile);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([
+        {
+          id: 11,
+          userId: 55,
+          businessName: 'PrintCo',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 4,
+        },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          supplierId: 11,
+          productFamily: 'flyers',
+          isActive: false,
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+      ]);
+      txVerificationRepo.find.mockResolvedValue([
+        {
+          supplierId: 11,
+          status: SupplierVerificationStatus.VERIFIED,
+        },
+      ]);
+      txCategoryRepo.findOne.mockResolvedValue(flyersCategory);
+
+      await expect(service.assign(42, 11, actor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'supplier_not_eligible' }),
+      });
+      expect(txAssignmentRepo.save).not.toHaveBeenCalled();
+      expect(txOrdersRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('does not newly assign an inactive legacy catalog category', async () => {
+      const order = baseOrder({ category: 'paper' });
+      ordersRepo.findOne!.mockResolvedValue(order);
+      categoryRepo.findOne!.mockResolvedValue({
+        ...flyersCategory,
+        slug: 'paper',
+        isActive: false,
+        pricingModel: PricingModel.PER_PAGE_MODIFIERS,
+      });
+      supplierRepo.find!.mockResolvedValue([]);
+      supplierRepo.findOne!.mockResolvedValue({ id: 11 } as SupplierProfile);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txCategoryRepo.findOne.mockResolvedValue({
+        ...flyersCategory,
+        slug: 'paper',
+        isActive: false,
+        pricingModel: PricingModel.PER_PAGE_MODIFIERS,
+      });
+
+      await expect(service.assign(42, 11, actor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'supplier_not_eligible' }),
+      });
     });
 
     it('rejects non-ops actors', async () => {
@@ -347,6 +668,47 @@ describe('MatchingService', () => {
   });
 
   describe('autoMatch', () => {
+    it('uses only the locked pool when coverage appears before the transaction', async () => {
+      const order = baseOrder();
+      ordersRepo.findOne!.mockRejectedValue(
+        new Error('unlocked order eligibility lookup'),
+      );
+      supplierRepo.find!.mockRejectedValue(
+        new Error('unlocked supplier eligibility lookup'),
+      );
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([
+        {
+          id: 11,
+          userId: 55,
+          businessName: 'Newly Eligible',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 4,
+        },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          supplierId: 11,
+          productFamily: 'paper',
+          isActive: true,
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+      ]);
+      txVerificationRepo.find.mockResolvedValue([
+        {
+          supplierId: 11,
+          status: SupplierVerificationStatus.VERIFIED,
+        },
+      ]);
+
+      const result = await service.autoMatch(42, actor);
+
+      expect(result.assignment.supplierId).toBe(11);
+    });
+
     it('assigns top candidate', async () => {
       const order = baseOrder();
       ordersRepo.findOne!.mockResolvedValue(order);
@@ -363,6 +725,7 @@ describe('MatchingService', () => {
               id: 1,
               supplierId: 11,
               productFamily: 'paper',
+              isActive: true,
               maxCapacity: 5,
               leadTimeDays: 1,
             },
@@ -371,6 +734,32 @@ describe('MatchingService', () => {
         } as unknown as SupplierProfile,
       ]);
       txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([
+        {
+          id: 11,
+          userId: 55,
+          businessName: 'PrintCo',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 3,
+        },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          supplierId: 11,
+          productFamily: 'paper',
+          isActive: true,
+          maxCapacity: 5,
+          leadTimeDays: 1,
+        },
+      ]);
+      txVerificationRepo.find.mockResolvedValue([
+        {
+          supplierId: 11,
+          status: SupplierVerificationStatus.VERIFIED,
+        },
+      ]);
 
       const result = await service.autoMatch(42, actor);
 
@@ -378,13 +767,259 @@ describe('MatchingService', () => {
       expect(result.toStatus).toBe(OrderStatus.SUPPLIER_ASSIGNED);
     });
 
-    it('throws when no eligible suppliers', async () => {
-      ordersRepo.findOne!.mockResolvedValue(baseOrder());
+    it('returns the stable no-coverage error when no eligible suppliers exist', async () => {
+      const order = baseOrder();
+      ordersRepo.findOne!.mockResolvedValue(order);
       supplierRepo.find!.mockResolvedValue([]);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([]);
 
-      await expect(service.autoMatch(42, actor)).rejects.toThrow(
-        /No eligible suppliers/,
+      await expect(service.autoMatch(42, actor)).rejects.toMatchObject({
+        response: {
+          code: 'no_eligible_supplier',
+          message: 'No eligible supplier covers order 42',
+        },
+      });
+    });
+
+    it('reranks the full locked pool and falls back when the former top is full', async () => {
+      const order = baseOrder();
+      const profiles = [
+        {
+          id: 11,
+          userId: 55,
+          businessName: 'Former Top',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 5,
+          capabilities: [
+            {
+              id: 1,
+              supplierId: 11,
+              productFamily: 'paper',
+              isActive: true,
+              maxCapacity: 1,
+              leadTimeDays: 1,
+            },
+          ],
+          verification: { status: SupplierVerificationStatus.VERIFIED },
+        },
+        {
+          id: 12,
+          userId: 56,
+          businessName: 'Current Top',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 4,
+          capabilities: [
+            {
+              id: 2,
+              supplierId: 12,
+              productFamily: 'paper',
+              isActive: true,
+              maxCapacity: 1,
+              leadTimeDays: 1,
+            },
+          ],
+          verification: { status: SupplierVerificationStatus.VERIFIED },
+        },
+      ] as unknown as SupplierProfile[];
+      ordersRepo.findOne!.mockResolvedValue(order);
+      supplierRepo.find!.mockResolvedValue(profiles);
+      txOrdersRepo.findOne.mockResolvedValue({
+        ...order,
+        deliveryAddress: undefined,
+      });
+      txSupplierRepo.find.mockResolvedValue(
+        profiles.map(
+          ({ capabilities: _caps, verification: _verification, ...profile }) =>
+            profile,
+        ),
       );
+      txCapabilityRepo.find.mockResolvedValue(
+        profiles.flatMap((profile) => profile.capabilities),
+      );
+      txVerificationRepo.find.mockResolvedValue(
+        profiles.map((profile) => ({
+          supplierId: profile.id,
+          status: SupplierVerificationStatus.VERIFIED,
+        })),
+      );
+      txAssignmentRepo.createQueryBuilder.mockImplementation(() => {
+        const qb = {
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          update: jest.fn().mockReturnThis(),
+          set: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          setParameters: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue([
+            {
+              supplierId: '11',
+              openLoad: '1',
+              accepted: '0',
+              declined: '0',
+              expired: '0',
+            },
+          ]),
+          execute: jest.fn().mockResolvedValue({ affected: 0 }),
+        };
+        return qb;
+      });
+
+      const result = await service.autoMatch(42, actor);
+
+      expect(result.candidate.supplierId).toBe(12);
+      expect(result.candidate.rankPosition).toBe(1);
+      expect(result.assignment.rankPosition).toBe(1);
+      expect(result.assignment.rankingInputs).toEqual(
+        expect.objectContaining({ openLoad: 0 }),
+      );
+    });
+
+    it('derives capacity and acceptance inputs from one aggregate query result', async () => {
+      const order = baseOrder();
+      const profile = {
+        id: 11,
+        userId: 55,
+        businessName: 'Coherent Stats',
+        serviceZones: [],
+        isActive: true,
+        ratingAverage: 4,
+      } as SupplierProfile;
+      ordersRepo.findOne!.mockResolvedValue(order);
+      supplierRepo.find!.mockResolvedValue([
+        {
+          ...profile,
+          capabilities: [
+            {
+              id: 1,
+              supplierId: 11,
+              productFamily: 'paper',
+              isActive: true,
+              maxCapacity: 10,
+              leadTimeDays: 2,
+            },
+          ],
+          verification: { status: SupplierVerificationStatus.VERIFIED },
+        },
+      ] as SupplierProfile[]);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txSupplierRepo.find.mockResolvedValue([profile]);
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          supplierId: 11,
+          productFamily: 'paper',
+          isActive: true,
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+      ]);
+      txVerificationRepo.find.mockResolvedValue([
+        {
+          supplierId: 11,
+          status: SupplierVerificationStatus.VERIFIED,
+        },
+      ]);
+      let query = 0;
+      const aggregateBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setParameters: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          {
+            supplierId: '11',
+            openLoad: '1',
+            accepted: '2',
+            declined: '1',
+            expired: '0',
+          },
+        ]),
+        execute: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      const updateBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setParameters: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+        execute: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      txAssignmentRepo.createQueryBuilder.mockImplementation(() => {
+        query += 1;
+        return query === 1 ? aggregateBuilder : updateBuilder;
+      });
+
+      const result = await service.autoMatch(42, actor);
+
+      expect(result.assignment.rankingInputs).toEqual(
+        expect.objectContaining({
+          openLoad: 1,
+          acceptanceStats: { accepted: 2, declined: 1, expired: 0 },
+        }),
+      );
+      expect(aggregateBuilder.getRawMany).toHaveBeenCalledTimes(1);
+      expect(aggregateBuilder.addSelect).toHaveBeenCalledTimes(4);
+      expect(txAssignmentRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('uses the locked delivery address and rejects the former zone match', async () => {
+      const order = baseOrder();
+      const profile = {
+        id: 11,
+        userId: 55,
+        businessName: 'Davao Only',
+        serviceZones: ['Davao City'],
+        isActive: true,
+        ratingAverage: 4,
+        capabilities: [
+          {
+            id: 1,
+            supplierId: 11,
+            productFamily: 'paper',
+            isActive: true,
+            maxCapacity: 10,
+            leadTimeDays: 1,
+          },
+        ],
+        verification: { status: SupplierVerificationStatus.VERIFIED },
+      } as unknown as SupplierProfile;
+      ordersRepo.findOne!.mockResolvedValue(order);
+      supplierRepo.find!.mockResolvedValue([profile]);
+      txOrdersRepo.findOne.mockResolvedValue({
+        ...order,
+        deliveryAddress: undefined,
+      });
+      txAddressRepo.findOne.mockResolvedValue({
+        id: 5,
+        city: 'Cebu City',
+        barangay: 'Lahug',
+        province: 'Cebu',
+      });
+      txSupplierRepo.find.mockResolvedValue([
+        { ...profile, capabilities: undefined, verification: undefined },
+      ]);
+      txCapabilityRepo.find.mockResolvedValue(profile.capabilities);
+      txVerificationRepo.find.mockResolvedValue([
+        { supplierId: 11, status: SupplierVerificationStatus.VERIFIED },
+      ]);
+
+      await expect(service.autoMatch(42, actor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'no_eligible_supplier' }),
+      });
+      expect(txAssignmentRepo.save).not.toHaveBeenCalled();
     });
   });
 

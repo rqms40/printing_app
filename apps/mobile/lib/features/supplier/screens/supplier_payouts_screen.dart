@@ -40,60 +40,62 @@ class SupplierPayoutsScreen extends ConsumerWidget {
         child: state.isLoading && state.payouts.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : state.errorMessage != null && state.payouts.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.xl),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Could not load payouts',
-                            style: AppTypography.h3
-                                .copyWith(color: colors.onBackground),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Text(
-                            state.errorMessage!,
-                            textAlign: TextAlign.center,
-                            style: AppTypography.body
-                                .copyWith(color: colors.onSurfaceDim),
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-                          FilledButton(
-                            onPressed: () => ref
-                                .read(supplierPayoutsProvider.notifier)
-                                .refresh(),
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : state.payouts.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(AppSpacing.xl),
-                        child: EmptyState(
-                          heading: 'No payouts yet',
-                          body:
-                              'When a job is delivered, a held payout appears here '
-                              'for 24 hours (issue window). Timely claims freeze settlement.',
-                          icon: HugeIcons.strokeRoundedWallet01,
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () =>
-                            ref.read(supplierPayoutsProvider.notifier).refresh(),
-                        child: ListView.separated(
-                          padding: const EdgeInsets.all(AppSpacing.xl),
-                          itemCount: state.payouts.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: AppSpacing.md),
-                          itemBuilder: (context, index) {
-                            final p = state.payouts[index];
-                            return _PayoutCard(payout: p, colors: colors);
-                          },
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Could not load payouts',
+                        style: AppTypography.h3.copyWith(
+                          color: colors.onBackground,
                         ),
                       ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        state.errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: AppTypography.body.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      FilledButton(
+                        onPressed: () => ref
+                            .read(supplierPayoutsProvider.notifier)
+                            .refresh(),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : state.payouts.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(AppSpacing.xl),
+                child: EmptyState(
+                  heading: 'No payouts yet',
+                  body:
+                      'When a job is delivered, a held payout appears here '
+                      'for 24 hours (issue window). Timely claims freeze settlement.',
+                  icon: HugeIcons.strokeRoundedWallet01,
+                ),
+              )
+            : RefreshIndicator(
+                onRefresh: () =>
+                    ref.read(supplierPayoutsProvider.notifier).refresh(),
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  itemCount: state.payouts.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: AppSpacing.md),
+                  itemBuilder: (context, index) {
+                    final p = state.payouts[index];
+                    return _PayoutCard(payout: p, colors: colors);
+                  },
+                ),
+              ),
       ),
     );
   }
@@ -122,8 +124,9 @@ class _PayoutCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   payout.orderRef,
-                  style: AppTypography.bodyBold
-                      .copyWith(color: colors.onBackground),
+                  style: AppTypography.bodyBold.copyWith(
+                    color: colors.onBackground,
+                  ),
                 ),
               ),
               StatusBadge(
@@ -146,14 +149,14 @@ class _PayoutCard extends StatelessWidget {
             if (payout.holdExpiresAt != null)
               Text(
                 'Window ends ${_fmt(payout.holdExpiresAt!)}',
-                style: AppTypography.caption
-                    .copyWith(color: colors.onSurfaceDim),
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                ),
               ),
           ] else
             Text(
               'No active hold',
-              style:
-                  AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
             ),
         ],
       ),
@@ -180,6 +183,6 @@ class _PayoutCard extends StatelessWidget {
     final dd = local.day.toString().padLeft(2, '0');
     final hh = local.hour.toString().padLeft(2, '0');
     final min = local.minute.toString().padLeft(2, '0');
-    return '$mm/$dd ${hh}:$min';
+    return '$mm/$dd $hh:$min';
   }
 }

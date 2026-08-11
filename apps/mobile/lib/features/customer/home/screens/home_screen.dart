@@ -15,6 +15,7 @@ import 'package:printing_app/features/customer/order/providers/checkout_provider
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
     show
         activeOrdersProvider,
+        ordersInitialLoadAuthoritativeProvider,
         ordersInitialLoadCompleteProvider,
         ordersProvider;
 import 'package:printing_app/features/customer/home/widgets/home_feed_tile.dart';
@@ -48,15 +49,35 @@ bool shouldDeferHomeTutorial({
       activeOrderStatuses.any(_activeDeliveryTutorialBlockingStatuses.contains);
 }
 
+bool shouldShowFirstOrderTutorial({
+  required bool ordersLoaded,
+  required bool orderHistoryAuthoritative,
+  required bool hasOrderHistory,
+  required bool pipelineSeen,
+  required Iterable<OrderStatus> activeOrderStatuses,
+}) {
+  return !pipelineSeen &&
+      orderHistoryAuthoritative &&
+      !hasOrderHistory &&
+      !shouldDeferHomeTutorial(
+        ordersLoaded: ordersLoaded,
+        activeOrderStatuses: activeOrderStatuses,
+      );
+}
+
 final homeTutorialReadyProvider = Provider<bool>((ref) {
   final ordersLoaded = ref.watch(ordersInitialLoadCompleteProvider);
+  final orderHistoryAuthoritative = ref.watch(
+    ordersInitialLoadAuthoritativeProvider,
+  );
   final activeStatuses = ref
       .watch(activeOrdersProvider)
       .map((order) => order.orderStatus);
-  return !shouldDeferHomeTutorial(
-    ordersLoaded: ordersLoaded,
-    activeOrderStatuses: activeStatuses,
-  );
+  return orderHistoryAuthoritative &&
+      !shouldDeferHomeTutorial(
+        ordersLoaded: ordersLoaded,
+        activeOrderStatuses: activeStatuses,
+      );
 });
 
 /// Customer home screen — editorial redesign.
@@ -149,8 +170,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
 
+    final activeOrderStatuses = ref
+        .read(activeOrdersProvider)
+        .map((order) => order.orderStatus);
+    final showFirstOrderTutorial = shouldShowFirstOrderTutorial(
+      ordersLoaded: ref.read(ordersInitialLoadCompleteProvider),
+      orderHistoryAuthoritative: ref.read(
+        ordersInitialLoadAuthoritativeProvider,
+      ),
+      hasOrderHistory: ref.read(ordersProvider).isNotEmpty,
+      pipelineSeen: ref.read(tutorialSeenProvider(TutorialKey.pipeline)),
+      activeOrderStatuses: activeOrderStatuses,
+    );
+
     // First-time pipeline: show welcome card → user taps "Show me how →" to start
-    if (!ref.read(tutorialSeenProvider(TutorialKey.pipeline))) {
+    if (showFirstOrderTutorial) {
       _homeTutorialAttempted = true;
       _showPipelineWelcomeCard();
       return;
@@ -170,6 +204,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
+      // The scrim is tappable, so it needs a name — otherwise it reaches the
+      // web semantics tree as a full-viewport button with nothing to announce.
+      barrierLabel: 'Dismiss first order guide',
       builder: (sheetCtx) {
         final media = MediaQuery.of(sheetCtx);
         // viewInsets covers keyboard; viewPadding covers system gestures/nav bar.
@@ -471,9 +508,11 @@ class _ResumeQueueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = cart.itemCount;
     final printJobLabel = count == 1 ? 'print job' : 'print jobs';
-    final formattedSubtotal = formatCurrency(cart.subtotal);
+    final formattedSubtotal = cart.subtotal == null
+        ? 'price pending review'
+        : '${formatCurrency(cart.subtotal!)} subtotal';
     final semanticsLabel =
-        'Resume your queue, $count $printJobLabel, $formattedSubtotal subtotal';
+        'Resume your queue, $count $printJobLabel, $formattedSubtotal';
 
     void openQueue() => context.push('/customer/order/checkout');
 
@@ -537,7 +576,7 @@ class _ResumeQueueCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '$formattedSubtotal subtotal',
+                          formattedSubtotal,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption.copyWith(
@@ -573,24 +612,34 @@ class _HeaderIconButton extends StatelessWidget {
     required this.onTap,
     required this.colors,
     required this.child,
+    required this.semanticLabel,
   });
 
   final VoidCallback onTap;
   final AppColorSet colors;
   final Widget child;
 
+  /// Required: the child is icon-only, so without this the button reaches
+  /// screen readers (and axe) as a control with no accessible name.
+  final String semanticLabel;
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: colors.surfaceVariant,
-          borderRadius: AppRadius.borderMd,
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      container: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: colors.surfaceVariant,
+            borderRadius: AppRadius.borderMd,
+          ),
+          child: Center(child: ExcludeSemantics(child: child)),
         ),
-        child: Center(child: child),
       ),
     );
   }
@@ -989,8 +1038,7 @@ class _CartWidgetState extends ConsumerState<_CartWidget>
           final anchorPos = anchorBox.localToGlobal(Offset.zero);
           final anchorSize = anchorBox.size;
           topPos = anchorPos.dy + anchorSize.height + 8;
-          final desiredRight =
-              screenWidth - (anchorPos.dx + anchorSize.width);
+          final desiredRight = screenWidth - (anchorPos.dx + anchorSize.width);
           rightInset = desiredRight.clamp(
             sideMargin,
             screenWidth - maxWidth - sideMargin,
@@ -1054,6 +1102,9 @@ class _CartWidgetState extends ConsumerState<_CartWidget>
       key: _anchorKey,
       onTap: _toggle,
       colors: colors,
+      semanticLabel: itemCount > 0
+          ? 'Cart, $itemCount ${itemCount == 1 ? 'item' : 'items'}'
+          : 'Cart, empty',
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -1291,7 +1342,9 @@ class _CartDropdown extends ConsumerWidget {
                         ),
                         const SizedBox(width: AppSpacing.sm),
                         Text(
-                          formatCurrency(item.printSubtotal),
+                          item.printSubtotal == null
+                              ? 'Price pending'
+                              : formatCurrency(item.printSubtotal!),
                           style: AppTypography.caption.copyWith(
                             color: colors.onSurface,
                             fontSize: 11,
@@ -1343,7 +1396,9 @@ class _CartDropdown extends ConsumerWidget {
                       ),
                       const Spacer(),
                       Text(
-                        formatCurrency(cart.subtotal),
+                        cart.subtotal == null
+                            ? 'Pending review'
+                            : formatCurrency(cart.subtotal!),
                         style: AppTypography.bodyBold.copyWith(
                           color: colors.onBackground,
                           fontSize: 13,
@@ -1549,4 +1604,3 @@ class _DataGridTile extends StatelessWidget {
     onTap: () => context.push('/customer/uploads'),
   );
 }
-

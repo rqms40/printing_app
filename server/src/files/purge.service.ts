@@ -1,12 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { FilesService } from './files.service';
+import { PendingUploadCleanupService } from './pending-upload-cleanup.service';
 
 @Injectable()
 export class PurgeService {
   private readonly logger = new Logger(PurgeService.name);
 
-  constructor(private readonly filesService: FilesService) {}
+  constructor(
+    private readonly filesService: FilesService,
+    private readonly pendingUploadCleanup: PendingUploadCleanupService,
+  ) {}
+
+  @Cron('*/15 * * * *')
+  async runPendingUploadCleanupSweep(): Promise<void> {
+    const result = await this.pendingUploadCleanup.retryDue();
+    this.logger.log(
+      `Pending upload cleanup: ${result.deleted} deleted, ${result.committed} committed, ${result.failed} failed of ${result.found} found`,
+    );
+  }
 
   @Cron('0 2 * * *')
   async runPurgeSweep(): Promise<void> {

@@ -11,6 +11,7 @@ import { NotificationsService } from '../src/notifications/notifications.service
 import { FirebaseService } from '../src/firebase/firebase.service';
 import { NotificationsGateway } from '../src/notifications/notifications.gateway';
 import { User } from '../src/users/entities/user.entity';
+import { CATALOG_V1_10_GROUPS } from '../src/products/catalog-v1-10.definition';
 
 type CountRow = { count: number };
 type LegacyCatalogRelationshipRow = {
@@ -38,6 +39,17 @@ type LegacySpecRelationshipRow = {
   option_group: string;
   option_value: string;
   category_slug: string;
+};
+type CatalogCounts = {
+  active_groups: number;
+  active_quote_products: number;
+  active_legacy_products: number;
+  categories: number;
+  specs: number;
+  options: number;
+  duplicate_categories: number;
+  duplicate_specs: number;
+  duplicate_options: number;
 };
 
 describe('production migration lifecycle (e2e)', () => {
@@ -635,6 +647,177 @@ describe('production migration lifecycle (e2e)', () => {
       await expect(tableExists(dataSource, 'three_d_specs')).resolves.toBe(
         true,
       );
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('consolidates identical capabilities and restores asymmetric legacy activation through catalog up/down/up', async () => {
+    const database = await createDatabase('catalog_v110_lifecycle');
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.runMigrations();
+      await dataSource.undoLastMigration();
+      await insertLegacyCatalogActivationFixture(dataSource);
+      const capabilityIds = await insertCapabilityFixture(dataSource, [
+        {
+          productFamily: 'flyers',
+          materials: ['matte'],
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+        {
+          productFamily: 'flyers',
+          materials: ['matte'],
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+      ]);
+
+      await expect(dataSource.runMigrations()).resolves.toHaveLength(1);
+      await expect(
+        dataSource.query(
+          `SELECT id, product_family
+           FROM supplier_capabilities
+           ORDER BY id`,
+        ),
+      ).resolves.toEqual([{ id: capabilityIds[0], product_family: 'flyers' }]);
+      await expectCatalogCounts(dataSource, {
+        active_groups: 4,
+        active_quote_products: 17,
+        active_legacy_products: 0,
+        categories: 21,
+        specs: 85,
+        options: 2,
+        duplicate_categories: 0,
+        duplicate_specs: 0,
+        duplicate_options: 0,
+      });
+      await expectStaleCatalogRowsDeactivated(dataSource);
+
+      await dataSource.undoLastMigration();
+      await expect(
+        dataSource.query(
+          `SELECT slug, is_active
+           FROM product_categories
+           WHERE slug IN ('paper', '3d')
+           ORDER BY slug`,
+        ),
+      ).resolves.toEqual([
+        { slug: '3d', is_active: false },
+        { slug: 'paper', is_active: true },
+      ]);
+
+      await expect(dataSource.runMigrations()).resolves.toHaveLength(1);
+      await expect(dataSource.showMigrations()).resolves.toBe(false);
+      await expectCatalogCounts(dataSource, {
+        active_groups: 4,
+        active_quote_products: 17,
+        active_legacy_products: 0,
+        categories: 21,
+        specs: 85,
+        options: 2,
+        duplicate_categories: 0,
+        duplicate_specs: 0,
+        duplicate_options: 0,
+      });
+      await expectStaleCatalogRowsDeactivated(dataSource);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('aborts catalog migration before deleting any capability when one duplicate pair conflicts', async () => {
+    const database = await createDatabase('catalog_v110_conflict');
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.runMigrations();
+      await dataSource.undoLastMigration();
+      const ids = await insertCapabilityFixture(dataSource, [
+        {
+          productFamily: 'flyers',
+          materials: ['matte'],
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+        {
+          productFamily: 'flyers',
+          materials: ['matte'],
+          maxCapacity: 10,
+          leadTimeDays: 2,
+        },
+        {
+          productFamily: 'brochures',
+          materials: ['matte'],
+          maxCapacity: 5,
+          leadTimeDays: 2,
+        },
+        {
+          productFamily: 'brochures',
+          materials: ['glossy'],
+          maxCapacity: 25,
+          leadTimeDays: 1,
+        },
+      ]);
+
+      await expect(dataSource.runMigrations()).rejects.toThrow(
+        `supplier_id=1, product_family="brochures", capability_ids=[${ids[2]}, ${ids[3]}]`,
+      );
+      await expect(
+        dataSource.query(
+          `SELECT id, product_family
+           FROM supplier_capabilities
+           ORDER BY id`,
+        ),
+      ).resolves.toEqual([
+        { id: ids[0], product_family: 'flyers' },
+        { id: ids[1], product_family: 'flyers' },
+        { id: ids[2], product_family: 'brochures' },
+        { id: ids[3], product_family: 'brochures' },
+      ]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('seeds and reseeds the exact catalog without duplicates or pending migrations', async () => {
+    const database = await createDatabase('catalog_v110_seed');
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.runMigrations();
+      const firstSeed = runSeed(database);
+      expect(`${firstSeed.stdout}\n${firstSeed.stderr}`).toContain(
+        'Seed complete!',
+      );
+      expect(firstSeed.status).toBe(0);
+
+      const firstCounts = await catalogCounts(dataSource);
+      expect(firstCounts).toEqual({
+        active_groups: 4,
+        active_quote_products: 17,
+        active_legacy_products: 0,
+        categories: 17,
+        specs: 83,
+        options: 0,
+        duplicate_categories: 0,
+        duplicate_specs: 0,
+        duplicate_options: 0,
+      });
+      await expectExactCatalog(dataSource);
+      await expectRfqDailyGrid(dataSource);
+
+      const secondSeed = runSeed(database);
+      expect(`${secondSeed.stdout}\n${secondSeed.stderr}`).toContain(
+        'Seed complete!',
+      );
+      expect(secondSeed.status).toBe(0);
+      await expect(catalogCounts(dataSource)).resolves.toEqual(firstCounts);
+      await expectExactCatalog(dataSource);
+      await expectRfqDailyGrid(dataSource);
+      await expect(dataSource.showMigrations()).resolves.toBe(false);
     } finally {
       await dataSource.destroy();
     }
@@ -1819,6 +2002,280 @@ describe('production migration lifecycle (e2e)', () => {
     }
   }
 
+  async function insertLegacyCatalogActivationFixture(
+    dataSource: DataSource,
+  ): Promise<void> {
+    await dataSource.query(`
+      ALTER TABLE product_categories
+      ADD COLUMN IF NOT EXISTS group_slug varchar(50)
+    `);
+    await dataSource.query(`
+      INSERT INTO product_categories (
+        name, slug, description, mobile_description, icon,
+        file_processing_type, pricing_model, base_rate, quantity_unit,
+        max_file_size_mb, allowed_extensions, is_active, sort_order,
+        group_slug
+      ) VALUES
+        ('Paper Printing', 'paper', 'Historical paper', NULL, NULL,
+         'document', 'per_page_modifiers', 2, 'copy', 50, '[]'::jsonb, true, 1,
+         NULL),
+        ('3D Printing', '3d', 'Historical 3D', NULL, NULL,
+         'model_3d', 'base_plus_material_estimate', 50, 'model', 200,
+         '[]'::jsonb, false, 2, NULL),
+        ('Removed v1.10 leaf', 'removed-v110-leaf', 'Stale canonical leaf',
+         NULL, NULL, 'generic_file', 'quote_required', 0, 'piece', 100,
+         '[]'::jsonb, true, 99, 'marketing-promo'),
+        ('Unrelated historical leaf', 'unrelated-historical-leaf',
+         'Unrelated historical catalog row', NULL, NULL, 'generic_file',
+         'per_page_modifiers', 5, 'piece', 50, '[]'::jsonb, true, 100, NULL)
+      ON CONFLICT (slug) DO UPDATE SET is_active = EXCLUDED.is_active
+    `);
+    await dataSource.query(`
+      INSERT INTO product_spec_definitions (
+        category_id, key, label, input_type, value_type, is_required,
+        is_active, pricing_role, sort_order
+      )
+      SELECT id, 'legacy_spec', 'Legacy spec', 'text', 'string', true, true,
+             'none', 1
+      FROM product_categories
+      WHERE slug IN ('removed-v110-leaf', 'unrelated-historical-leaf')
+    `);
+    await dataSource.query(`
+      INSERT INTO product_spec_options (
+        spec_definition_id, label, value, is_active, sort_order
+      )
+      SELECT spec.id, 'Legacy option', 'legacy-option', true, 1
+      FROM product_spec_definitions spec
+      JOIN product_categories category ON category.id = spec.category_id
+      WHERE category.slug IN (
+        'removed-v110-leaf',
+        'unrelated-historical-leaf'
+      )
+    `);
+  }
+
+  async function insertCapabilityFixture(
+    dataSource: DataSource,
+    capabilities: Array<{
+      productFamily: string;
+      materials: string[];
+      maxCapacity: number;
+      leadTimeDays: number;
+    }>,
+  ): Promise<number[]> {
+    const [user] = await dataSource.query<Array<{ id: number }>>(
+      `INSERT INTO users (email, password_hash, role)
+       VALUES ($1, 'not-used', 'supplier')
+       RETURNING id`,
+      [`catalog-supplier-${Date.now()}-${Math.random()}@example.test`],
+    );
+    const [supplier] = await dataSource.query<Array<{ id: number }>>(
+      `INSERT INTO supplier_profiles (user_id, business_name)
+       VALUES ($1, 'Catalog lifecycle supplier')
+       RETURNING id`,
+      [user.id],
+    );
+    const ids: number[] = [];
+    for (const capability of capabilities) {
+      const [row] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO supplier_capabilities (
+           supplier_id, product_family, materials, max_capacity,
+           lead_time_days
+         ) VALUES ($1, $2, $3::jsonb, $4, $5)
+         RETURNING id`,
+        [
+          supplier.id,
+          capability.productFamily,
+          JSON.stringify(capability.materials),
+          capability.maxCapacity,
+          capability.leadTimeDays,
+        ],
+      );
+      ids.push(row.id);
+    }
+    return ids;
+  }
+
+  async function catalogCounts(dataSource: DataSource): Promise<CatalogCounts> {
+    const [counts] = await dataSource.query<CatalogCounts[]>(`
+      SELECT
+        count(DISTINCT group_slug) FILTER (WHERE is_active)::int AS active_groups,
+        count(*) FILTER (
+          WHERE is_active AND pricing_model = 'quote_required'
+        )::int AS active_quote_products,
+        count(*) FILTER (
+          WHERE is_active AND slug IN ('paper', '3d')
+        )::int AS active_legacy_products,
+        count(*)::int AS categories,
+        (SELECT count(*)::int FROM product_spec_definitions) AS specs,
+        (SELECT count(*)::int FROM product_spec_options) AS options,
+        (
+          SELECT count(*)::int FROM (
+            SELECT slug FROM product_categories GROUP BY slug HAVING count(*) > 1
+          ) duplicate_category
+        ) AS duplicate_categories,
+        (
+          SELECT count(*)::int FROM (
+            SELECT category_id, key FROM product_spec_definitions
+            GROUP BY category_id, key HAVING count(*) > 1
+          ) duplicate_spec
+        ) AS duplicate_specs,
+        (
+          SELECT count(*)::int FROM (
+            SELECT spec_definition_id, value FROM product_spec_options
+            GROUP BY spec_definition_id, value HAVING count(*) > 1
+          ) duplicate_option
+        ) AS duplicate_options
+      FROM product_categories
+    `);
+    return counts;
+  }
+
+  async function expectCatalogCounts(
+    dataSource: DataSource,
+    expected: CatalogCounts,
+  ): Promise<void> {
+    await expect(catalogCounts(dataSource)).resolves.toEqual(expected);
+  }
+
+  async function expectExactCatalog(dataSource: DataSource): Promise<void> {
+    const products = await dataSource.query(`
+      SELECT
+        slug, name, description, mobile_description, examples, group_slug,
+        group_name, group_description, group_sort_order, file_processing_type,
+        pricing_model, base_rate::float8 AS base_rate, quantity_unit,
+        max_file_size_mb, allowed_extensions, is_active, sort_order
+      FROM product_categories
+      WHERE slug NOT IN ('paper', '3d')
+      ORDER BY group_sort_order, sort_order, slug
+    `);
+    expect(products).toEqual(
+      CATALOG_V1_10_GROUPS.flatMap((group) =>
+        group.products.map((product) => ({
+          slug: product.slug,
+          name: product.name,
+          description: product.description,
+          mobile_description: product.mobileDescription,
+          examples: [...product.examples],
+          group_slug: group.slug,
+          group_name: group.name,
+          group_description: group.description,
+          group_sort_order: group.sortOrder,
+          file_processing_type: product.fileProcessingType,
+          pricing_model: product.pricingModel,
+          base_rate: product.baseRate,
+          quantity_unit: product.quantityUnit,
+          max_file_size_mb: product.maxFileSizeMb,
+          allowed_extensions: [...product.allowedExtensions],
+          is_active: product.isActive,
+          sort_order: product.sortOrder,
+        })),
+      ),
+    );
+
+    const specs = await dataSource.query(`
+      SELECT
+        category.slug AS category_slug, spec.key, spec.label, spec.help_text,
+        spec.input_type, spec.value_type, spec.is_required, spec.is_active,
+        spec.default_value, spec.pricing_role, spec.unit_label,
+        spec.placeholder, spec.min_value::float8 AS min_value,
+        spec.max_value::float8 AS max_value,
+        spec.step_value::float8 AS step_value, spec.sort_order, spec.metadata
+      FROM product_spec_definitions spec
+      JOIN product_categories category ON category.id = spec.category_id
+      ORDER BY category.group_sort_order, category.sort_order,
+               spec.sort_order, spec.key
+    `);
+    expect(specs).toEqual(
+      CATALOG_V1_10_GROUPS.flatMap((group) =>
+        group.products.flatMap((product) =>
+          product.specs.map((spec) => ({
+            category_slug: product.slug,
+            key: spec.key,
+            label: spec.label,
+            help_text: 'helpText' in spec ? spec.helpText : null,
+            input_type: spec.inputType,
+            value_type: spec.valueType,
+            is_required: spec.isRequired,
+            is_active: true,
+            default_value: 'defaultValue' in spec ? spec.defaultValue : null,
+            pricing_role: spec.pricingRole,
+            unit_label: 'unitLabel' in spec ? spec.unitLabel : null,
+            placeholder: 'placeholder' in spec ? spec.placeholder : null,
+            min_value: 'minValue' in spec ? spec.minValue : null,
+            max_value: 'maxValue' in spec ? spec.maxValue : null,
+            step_value: 'stepValue' in spec ? spec.stepValue : null,
+            sort_order: spec.sortOrder,
+            metadata: 'metadata' in spec ? spec.metadata : null,
+          })),
+        ),
+      ),
+    );
+  }
+
+  async function expectRfqDailyGrid(dataSource: DataSource): Promise<void> {
+    await expect(
+      dataSource.query(`
+        SELECT card.category, card.subtitle, card.specs,
+               category.is_active AS category_is_active,
+               category.pricing_model
+        FROM daily_grid_cards card
+        JOIN product_categories category ON category.slug = card.category
+        WHERE card."isActive" = true
+        ORDER BY card."sortOrder", card.id
+      `),
+    ).resolves.toEqual(
+      [
+        'flyers',
+        'posters-standees',
+        '3d-printing-scale-models',
+        'tarpaulins-outdoor-banners',
+        'business-cards',
+      ].map((category) => ({
+        category,
+        subtitle: 'Quote required',
+        specs: {},
+        category_is_active: true,
+        pricing_model: 'quote_required',
+      })),
+    );
+  }
+
+  async function expectStaleCatalogRowsDeactivated(
+    dataSource: DataSource,
+  ): Promise<void> {
+    await expect(
+      dataSource.query(`
+        SELECT category.slug,
+               category.is_active AS category_active,
+               spec.is_active AS spec_active,
+               option_record.is_active AS option_active
+        FROM product_categories category
+        JOIN product_spec_definitions spec ON spec.category_id = category.id
+        JOIN product_spec_options option_record
+          ON option_record.spec_definition_id = spec.id
+        WHERE category.slug IN (
+          'removed-v110-leaf',
+          'unrelated-historical-leaf'
+        )
+        ORDER BY category.slug
+      `),
+    ).resolves.toEqual([
+      {
+        slug: 'removed-v110-leaf',
+        category_active: false,
+        spec_active: false,
+        option_active: false,
+      },
+      {
+        slug: 'unrelated-historical-leaf',
+        category_active: true,
+        spec_active: true,
+        option_active: true,
+      },
+    ]);
+  }
+
   async function undoAllMigrations(dataSource: DataSource): Promise<void> {
     const [row] = await dataSource.query<CountRow[]>(
       `SELECT count(*)::int AS count FROM migrations`,
@@ -1882,5 +2339,50 @@ describe('production migration lifecycle (e2e)', () => {
         JWT_SECRET: 'test-only',
       },
     });
+  }
+
+  function runSeed(database: string) {
+    const minioEndpoint = requiredLifecycleEnv(
+      'GRIDGO_LIFECYCLE_MINIO_ENDPOINT',
+    );
+    const minioPort = requiredLifecycleEnv('GRIDGO_LIFECYCLE_MINIO_PORT');
+    const minioAccessKey = requiredLifecycleEnv(
+      'GRIDGO_LIFECYCLE_MINIO_ACCESS_KEY',
+    );
+    const minioSecretKey = requiredLifecycleEnv(
+      'GRIDGO_LIFECYCLE_MINIO_SECRET_KEY',
+    );
+    const minioBucket = `gridgo-${database.replaceAll('_', '-')}`;
+    return spawnSync('npm', ['run', 'seed', '--silent'], {
+      cwd: join(__dirname, '..'),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        DATABASE_HOST: adminConfig.host,
+        DATABASE_PORT: String(adminConfig.port),
+        DATABASE_NAME: database,
+        DATABASE_USER: adminConfig.user,
+        DATABASE_PASSWORD: adminConfig.password,
+        JWT_SECRET: 'catalog-lifecycle-test-jwt-secret',
+        MINIO_ENDPOINT: minioEndpoint,
+        MINIO_PORT: minioPort,
+        MINIO_USE_SSL: 'false',
+        MINIO_ACCESS_KEY: minioAccessKey,
+        MINIO_SECRET_KEY: minioSecretKey,
+        MINIO_BUCKET: minioBucket,
+        GRIDGO_SEED_CUSTOMER_PASSWORD: 'catalog-test-customer-password',
+        GRIDGO_SEED_RIDER_PASSWORD: 'catalog-test-rider-password',
+        GRIDGO_SEED_ADMIN_PASSWORD: 'catalog-test-admin-password',
+      },
+    });
+  }
+
+  function requiredLifecycleEnv(name: string): string {
+    const value = process.env[name];
+    if (!value) {
+      throw new Error(`${name} is required for isolated seed lifecycle tests`);
+    }
+    return value;
   }
 });

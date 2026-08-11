@@ -107,12 +107,69 @@ describe("OrderShow", () => {
     });
     fireEvent.mouseDown(action);
 
-    expect(await screen.findByText("Approved for Matching")).toBeInTheDocument();
+    expect((await screen.findAllByText("Approved for Matching")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Cancelled")).not.toBeInTheDocument();
     expect(screen.getByText(/Actor #31/)).toBeInTheDocument();
     expect(screen.getByText(/Customer file is corrupted/)).toBeInTheDocument();
     expect(screen.getByText("Signature captured")).toBeInTheDocument();
     expect(screen.queryByText(/PRIVATE-SIGNATURE/)).not.toBeInTheDocument();
+  });
+
+  it("renders dynamic RFQ leaf/spec snapshots and never shows a pending zero price", async () => {
+    mockGet.mockImplementation((url: string) => Promise.resolve({
+      data: url === "/admin/riders" ? riders : {
+        ...baseOrder,
+        category: "flyers",
+        pricing_status: "pending_quote",
+        total_price: null,
+        delivery_fee: null,
+        unmet_coverage: true,
+        items: [{
+          id: 8, category: "flyers", category_name: "Flyers",
+          group_name: "Marketing & Promotional Collateral", quantity: 100,
+          total_price: null,
+          specs: [{ key: "finish", label: "UV-DTF / CMYK+W", value: "matte", display_value: "Soft-touch matte" }],
+        }],
+      },
+    }));
+    render(<OrderShow />);
+    expect((await screen.findAllByText("Flyers")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Marketing & Promotional Collateral")).toBeInTheDocument();
+    expect(screen.getByText("UV-DTF / CMYK+W")).toBeInTheDocument();
+    expect(screen.getByText("Soft-touch matte")).toBeInTheDocument();
+    expect(screen.getAllByText("Price pending quote").length).toBeGreaterThan(0);
+    expect(screen.getByText("Unmet supplier coverage")).toBeInTheDocument();
+    expect(screen.queryByText(/₱0\.00/)).not.toBeInTheDocument();
+  });
+
+  it("labels goods, delivery, and quoted total without losing bigint assignment money", async () => {
+    mockGet.mockImplementation((url: string) => Promise.resolve({
+      data: url === "/admin/riders" ? riders : {
+        ...baseOrder,
+        pricing_status: "quoted",
+        total_price: 900719925474099.4,
+        delivery_fee: 25,
+        quoted_total_minor: "90071992547410181",
+        current_supplier_assignment: {
+          id: 88,
+          supplier_id: 44,
+          decision: "accepted",
+          rank_position: 1,
+          acceptance_deadline: "2026-08-11T00:00:00.000Z",
+          final_price_minor: "90071992547409931",
+          promised_date: "2026-08-13T00:00:00.000Z",
+        },
+      },
+    }));
+
+    render(<OrderShow />);
+
+    expect(await screen.findByText("Goods quote")).toBeInTheDocument();
+    expect(screen.getByText("₱900,719,925,474,099.31")).toBeInTheDocument();
+    expect(screen.getByText("Quoted total")).toBeInTheDocument();
+    expect(screen.getByText("₱900,719,925,474,101.81")).toBeInTheDocument();
+    expect(screen.queryByText("Subtotal")).not.toBeInTheDocument();
+    expect(screen.getAllByText("₱25.00")).toHaveLength(1);
   });
 
   it("shows only server-eligible riders in the assignment dialog", async () => {

@@ -7,6 +7,7 @@
     "build:web": "cd ../../apps/mobile && fvm flutter build web --release --no-tree-shake-icons",
     "test": "playwright test",
     "test:beta:visual": "playwright test tests/beta-workflow-visual.spec.ts --project=beta-visual",
+    "test:catalog:visual": "playwright test tests/catalog-rfq-visual.spec.ts --project=catalog-rfq-visual",
     "test:headed": "playwright test --headed"
   },
   "devDependencies": {

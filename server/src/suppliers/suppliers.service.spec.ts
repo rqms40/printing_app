@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
@@ -16,6 +15,9 @@ import {
 } from './entities/supplier-verification.entity';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import { ProductCategory } from '../products/entities/product-category.entity';
+import { PricingModel } from '../products/enums/catalog.enums';
+import { DataSource } from 'typeorm';
 
 describe('SuppliersService', () => {
   let service: SuppliersService;
@@ -44,12 +46,66 @@ describe('SuppliersService', () => {
   const assignmentRepo = {
     createQueryBuilder: jest.fn(),
   };
+  const categoryRepo = {
+    findOne: jest.fn(),
+  };
+  const txProfileRepo = { findOne: jest.fn() };
+  const txCategoryRepo = { findOne: jest.fn() };
+  const txCapabilityRepo = {
+    find: jest.fn(),
+    create: jest.fn((value) => value),
+    save: jest.fn(),
+  };
+  const dataSource = {
+    transaction: jest.fn(async (work: (manager: unknown) => unknown) =>
+      work({
+        getRepository: (entity: unknown) => {
+          if (entity === SupplierProfile) return txProfileRepo;
+          if (entity === ProductCategory) return txCategoryRepo;
+          if (entity === SupplierCapability) return txCapabilityRepo;
+          return {};
+        },
+      }),
+    ),
+  };
+
+  const flyersCategory = {
+    id: 100,
+    slug: 'flyers',
+    isActive: true,
+    pricingModel: PricingModel.QUOTE_REQUIRED,
+    groupSlug: 'marketing-promo',
+    groupName: 'Marketing & Promotional Collateral',
+    groupDescription: 'Promotional print products.',
+    groupSortOrder: 1,
+  } as ProductCategory;
 
   beforeEach(async () => {
     jest.resetAllMocks();
     profileRepo.create.mockImplementation((x) => x);
     capabilityRepo.create.mockImplementation((x) => x);
+    capabilityRepo.find.mockResolvedValue([]);
     verificationRepo.create.mockImplementation((x) => x);
+    categoryRepo.findOne.mockResolvedValue(flyersCategory);
+    txProfileRepo.findOne.mockResolvedValue({ id: 1 });
+    txCategoryRepo.findOne.mockResolvedValue(flyersCategory);
+    txCapabilityRepo.find.mockResolvedValue([]);
+    txCapabilityRepo.create.mockImplementation((value) => value);
+    txCapabilityRepo.save.mockImplementation(async (value) => ({
+      ...value,
+      id: 7,
+    }));
+    dataSource.transaction.mockImplementation(
+      async (work: (manager: unknown) => unknown) =>
+        work({
+          getRepository: (entity: unknown) => {
+            if (entity === SupplierProfile) return txProfileRepo;
+            if (entity === ProductCategory) return txCategoryRepo;
+            if (entity === SupplierCapability) return txCapabilityRepo;
+            return {};
+          },
+        }),
+    );
     assignmentRepo.createQueryBuilder.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
@@ -75,6 +131,11 @@ describe('SuppliersService', () => {
           provide: getRepositoryToken(SupplierAssignment),
           useValue: assignmentRepo,
         },
+        {
+          provide: getRepositoryToken(ProductCategory),
+          useValue: categoryRepo,
+        },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
     service = mod.get(SuppliersService);
@@ -454,13 +515,113 @@ describe('SuppliersService', () => {
       capabilityRepo.save.mockImplementation(async (c) => ({ ...c, id: 7 }));
 
       const out = await service.addOwnCapability(10, {
-        productFamily: 'flyer',
+        productFamily: '  FLYERS  ',
         materials: ['glossy'],
         maxCapacity: 50,
         leadTimeDays: 2,
       });
-      expect(out.productFamily).toBe('flyer');
-      expect(capabilityRepo.save).toHaveBeenCalled();
+      expect(out.productFamily).toBe('flyers');
+      expect(txCapabilityRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ productFamily: 'flyers', isActive: true }),
+      );
+    });
+
+    it('validates and creates a capability in one locked transaction', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+
+      await service.addOwnCapability(10, {
+        productFamily: ' FLYERS ',
+      });
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(txCategoryRepo.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+      );
+      expect(txCapabilityRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ productFamily: 'flyers', isActive: true }),
+      );
+    });
+
+    it.each([
+      [
+        'browsing group',
+        'marketing-promo',
+        {
+          ...flyersCategory,
+          slug: 'marketing-promo',
+          groupSlug: null,
+          groupName: null,
+          groupDescription: null,
+          groupSortOrder: null,
+        },
+      ],
+      [
+        'inactive legacy category',
+        'paper',
+        {
+          ...flyersCategory,
+          slug: 'paper',
+          isActive: false,
+          pricingModel: PricingModel.PER_PAGE_MODIFIERS,
+          groupSlug: null,
+          groupName: null,
+          groupDescription: null,
+          groupSortOrder: null,
+        },
+      ],
+      ['singular synonym', 'flyer', null],
+      ['free-form value', 'rush-printing', null],
+    ])('rejects a %s as a capability', async (_label, slug, category) => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      txCategoryRepo.findOne.mockResolvedValue(category);
+
+      await expect(
+        service.addOwnCapability(10, { productFamily: slug }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'invalid_supplier_capability_product',
+        }),
+      });
+      expect(txCapabilityRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects an existing normalized supplier/product capability', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      txCapabilityRepo.find.mockResolvedValue([
+        {
+          id: 7,
+          supplierId: 1,
+          productFamily: ' FLYERS ',
+        },
+      ]);
+
+      await expect(
+        service.addOwnCapability(10, { productFamily: ' FLYERS ' }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'supplier_capability_exists',
+        }),
+      });
+      expect(txCapabilityRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('maps a concurrent capability unique violation to the same conflict', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      txCapabilityRepo.find.mockResolvedValue([]);
+      txCapabilityRepo.save.mockRejectedValue({
+        driverError: {
+          code: '23505',
+          constraint: 'uq_supplier_capability_product',
+        },
+      });
+
+      await expect(
+        service.addOwnCapability(10, { productFamily: 'flyers' }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'supplier_capability_exists',
+        }),
+      });
     });
 
     it('removes only own capability', async () => {
@@ -483,5 +644,48 @@ describe('SuppliersService', () => {
         NotFoundException,
       );
     });
+  });
+
+  it('filters inactive capabilities from the Operations supplier projection', () => {
+    const result = service.toAdminSupplierSnapshot({
+      id: 1,
+      userId: 10,
+      businessName: 'PrintCo',
+      serviceZones: [],
+      serviceFocusRanks: [],
+      isActive: true,
+      ratingAverage: 0,
+      ratingCount: 0,
+      capabilities: [
+        { id: 1, productFamily: 'flyers', isActive: true },
+        { id: 2, productFamily: 'brochures', isActive: false },
+      ],
+      updatedAt: new Date(),
+    } as unknown as SupplierProfile);
+
+    expect(result.capabilities).toEqual([
+      expect.objectContaining({ product_family: 'flyers' }),
+    ]);
+  });
+
+  it('filters inactive capabilities from the Operations supplier list', async () => {
+    profileRepo.find.mockResolvedValue([
+      {
+        id: 1,
+        userId: 10,
+        businessName: 'PrintCo',
+        logoFileId: null,
+        capabilities: [
+          { id: 1, productFamily: 'flyers', isActive: true },
+          { id: 2, productFamily: 'brochures', isActive: false },
+        ],
+      },
+    ]);
+
+    const result = await service.findAll();
+
+    expect(result[0].capabilities.map((capability) => capability.id)).toEqual([
+      1,
+    ]);
   });
 });

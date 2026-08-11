@@ -4,7 +4,9 @@ import { chromiumSecureContextArgs } from "./fixtures/browser-security";
 const port = Number(process.env.MOBILE_WEB_E2E_PORT ?? 8091);
 const baseURL = process.env.MOBILE_WEB_E2E_URL ?? `http://127.0.0.1:${port}`;
 const startWebServer = process.env.MOBILE_WEB_E2E_NO_SERVER !== "1";
-const visualWorkflow = process.env.GRIDGO_RUN_BETA_FLOW_VISUAL === "1";
+const betaVisualWorkflow = process.env.GRIDGO_RUN_BETA_FLOW_VISUAL === "1";
+const catalogVisualWorkflow = process.env.GRIDGO_RUN_CATALOG_RFQ_VISUAL === "1";
+const visualWorkflow = betaVisualWorkflow || catalogVisualWorkflow;
 
 export default defineConfig({
   testDir: "./tests",
@@ -15,10 +17,13 @@ export default defineConfig({
   fullyParallel: false,
   workers: visualWorkflow ? 1 : undefined,
   reporter: [["list"]],
-  outputDir: visualWorkflow
-    ? (process.env.GRIDGO_BETA_PLAYWRIGHT_OUTPUT ??
-      "/tmp/gridgo-beta-visual/playwright")
-    : "test-results",
+  outputDir: catalogVisualWorkflow
+    ? (process.env.GRIDGO_CATALOG_RFQ_PLAYWRIGHT_OUTPUT ??
+      "/tmp/gridgo-catalog-rfq-visual/playwright")
+    : betaVisualWorkflow
+      ? (process.env.GRIDGO_BETA_PLAYWRIGHT_OUTPUT ??
+        "/tmp/gridgo-beta-visual/playwright")
+      : "test-results",
   use: {
     baseURL,
     trace: visualWorkflow ? "off" : "retain-on-failure",
@@ -48,16 +53,42 @@ export default defineConfig({
         viewport: { width: 393, height: 727 },
       },
     },
-    ...(visualWorkflow
+    ...(betaVisualWorkflow
       ? [
           {
             name: "beta-visual",
+            outputDir:
+              process.env.GRIDGO_BETA_PLAYWRIGHT_OUTPUT ??
+              "/tmp/gridgo-beta-visual/playwright",
             use: {
               ...devices["Desktop Chrome"],
               viewport: { width: 1440, height: 900 },
               launchOptions: {
                 // The full bundled Chromium honors secure-origin test
                 // allowlists; chrome-headless-shell does not.
+                channel: "chromium",
+                args: [
+                  "--disable-background-timer-throttling",
+                  "--disable-renderer-backgrounding",
+                  "--disable-backgrounding-occluded-windows",
+                  ...chromiumSecureContextArgs(baseURL),
+                ],
+              },
+            },
+          },
+        ]
+      : []),
+    ...(catalogVisualWorkflow
+      ? [
+          {
+            name: "catalog-rfq-visual",
+            outputDir:
+              process.env.GRIDGO_CATALOG_RFQ_PLAYWRIGHT_OUTPUT ??
+              "/tmp/gridgo-catalog-rfq-visual/playwright",
+            use: {
+              ...devices["Desktop Chrome"],
+              viewport: { width: 1440, height: 900 },
+              launchOptions: {
                 channel: "chromium",
                 args: [
                   "--disable-background-timer-throttling",

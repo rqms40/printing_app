@@ -439,13 +439,15 @@ describe('Rider dispatch workflow (e2e)', () => {
     ];
 
     for (const [deliveryStatus, orderStatus] of transitions) {
-      await advanceStatus(assignment.id, riderToken, deliveryStatus)
-        .expect(200)
-        .expect((res) => {
-          expect(res.body.status).toBe(deliveryStatus);
-          expect(res.body.pickupOtpCode).toBeUndefined();
-          expect(res.body.deliveryOtpCode).toBeUndefined();
-        });
+      const response = await advanceStatus(
+        assignment.id,
+        riderToken,
+        deliveryStatus,
+      );
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(deliveryStatus);
+      expect(response.body.pickupOtpCode).toBeUndefined();
+      expect(response.body.deliveryOtpCode).toBeUndefined();
 
       await expect(
         ordersRepo.findOneOrFail({ where: { id: order.id } }),
@@ -478,30 +480,44 @@ describe('Rider dispatch workflow (e2e)', () => {
         expect(res.body.message).toBe('Invalid OTP');
       });
 
-    await advanceStatus(assignment.id, riderToken, DeliveryStatus.DELIVERED, {
-      proof: {
-        type: ProofOfDeliveryType.SIGNATURE,
-        signatureData: signatureProof,
+    const deliveredResponse = await advanceStatus(
+      assignment.id,
+      riderToken,
+      DeliveryStatus.DELIVERED,
+      {
+        proof: {
+          type: ProofOfDeliveryType.SIGNATURE,
+          signatureData: signatureProof,
+        },
       },
-    })
-      .expect(200)
-      .expect((res) => {
-        expect(res.body.status).toBe(DeliveryStatus.DELIVERED);
-        expect(res.body.proofType).toBe(ProofOfDeliveryType.SIGNATURE);
-        expect(res.body.proofSignatureData).toBe(signatureProof);
-      });
+    );
+    expect(deliveredResponse.status).toBe(200);
+    expect(deliveredResponse.body.status).toBe(DeliveryStatus.DELIVERED);
+    expect(deliveredResponse.body.proofType).toBe(
+      ProofOfDeliveryType.SIGNATURE,
+    );
+    expect(deliveredResponse.body.proofSignatureData).toBe(signatureProof);
 
     // Double-complete is rejected.
-    await advanceStatus(assignment.id, riderToken, DeliveryStatus.DELIVERED, {
-      proof: {
-        type: ProofOfDeliveryType.SIGNATURE,
-        signatureData: signatureProof,
-      },
-    }).expect(400);
+    expect(
+      (
+        await advanceStatus(
+          assignment.id,
+          riderToken,
+          DeliveryStatus.DELIVERED,
+          {
+            proof: {
+              type: ProofOfDeliveryType.SIGNATURE,
+              signatureData: signatureProof,
+            },
+          },
+        )
+      ).status,
+    ).toBe(400);
 
     await expect(
       ordersRepo.findOneOrFail({ where: { id: order.id } }),
-    ).resolves.toMatchObject({ orderStatus: OrderStatus.DELIVERED });
+    ).resolves.toMatchObject({ orderStatus: OrderStatus.ISSUE_WINDOW_OPEN });
 
     const history = await statusHistoryRepo.find({
       where: { orderId: order.id },
@@ -541,12 +557,12 @@ describe('Rider dispatch workflow (e2e)', () => {
       },
       {
         from: OrderStatus.OUT_FOR_DELIVERY,
-        to: OrderStatus.OUT_FOR_DELIVERY,
+        to: OrderStatus.DELIVERED,
         actor: rider.id,
       },
       {
-        from: OrderStatus.OUT_FOR_DELIVERY,
-        to: OrderStatus.DELIVERED,
+        from: OrderStatus.DELIVERED,
+        to: OrderStatus.ISSUE_WINDOW_OPEN,
         actor: rider.id,
       },
     ]);
@@ -714,7 +730,9 @@ describe('Rider dispatch workflow (e2e)', () => {
       DeliveryStatus.PICKED_UP,
       DeliveryStatus.ON_THE_WAY,
     ]) {
-      await advanceStatus(farAssignment.id, riderToken, status).expect(200);
+      expect(
+        (await advanceStatus(farAssignment.id, riderToken, status)).status,
+      ).toBe(200);
     }
     await request(app.getHttpServer())
       .get(`/api/orders/${farOrder.id}`)
@@ -1400,7 +1418,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         deliveryFee: 0,
         paymentMethod: 'cod',
         deliveryOption: 'pickup',
-        orderStatus: OrderStatus.SUBMITTED,
+        orderStatus: OrderStatus.NEEDS_QA,
       }),
     );
     const adminToken = jwtService.sign({
@@ -1434,7 +1452,7 @@ describe('Rider dispatch workflow (e2e)', () => {
 
       await expect(
         ordersRepo.findOneOrFail({ where: { id: order.id } }),
-      ).resolves.toMatchObject({ orderStatus: OrderStatus.SUBMITTED });
+      ).resolves.toMatchObject({ orderStatus: OrderStatus.NEEDS_QA });
       await expect(
         statusHistoryRepo.countBy({ orderId: order.id }),
       ).resolves.toBe(0);
@@ -1543,7 +1561,9 @@ describe('Rider dispatch workflow (e2e)', () => {
       DeliveryStatus.ON_THE_WAY,
       DeliveryStatus.ARRIVED,
     ]) {
-      await advanceStatus(assignment.id, riderToken, status).expect(200);
+      expect(
+        (await advanceStatus(assignment.id, riderToken, status)).status,
+      ).toBe(200);
     }
 
     const notificationCount = await notificationsRepo.countBy({

@@ -80,9 +80,9 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
   },
   {
     id: 7,
-    slug: "paper-print-selected",
+    slug: "catalog-flyers-selected",
     actor: "mark",
-    assertion: "Paper-print category selected",
+    assertion: "Marketing group and Flyers leaf selected",
   },
   {
     id: 8,
@@ -93,9 +93,9 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
   },
   {
     id: 9,
-    slug: "mark-paper-specifications",
+    slug: "mark-catalog-requirements",
     actor: "mark",
-    assertion: "Mark paper specifications completed",
+    assertion: "Mark catalog requirements completed",
   },
   {
     id: 10,
@@ -105,16 +105,16 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
   },
   {
     id: 11,
-    slug: "credits-only-payment",
+    slug: "rfq-pending-no-payment",
     actor: "mark",
-    assertion: "GRIDGO Credits is the only enabled beta payment option",
+    assertion: "Pending RFQ shows no payment control or fabricated zero price",
     axe: true,
   },
   {
     id: 12,
-    slug: "mark-order-summary",
+    slug: "mark-rfq-submitted",
     actor: "mark",
-    assertion: "Print and delivery mode summary matches checkout",
+    assertion: "Mark receives a durable RFQ submission confirmation",
   },
   {
     id: 13,
@@ -126,13 +126,13 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
     id: 14,
     slug: "mark-order-details",
     actor: "mark",
-    assertion: "Mark order list and detail show the exact reference",
+    assertion: "Mark accepts the real supplier quote before payment approval",
   },
   {
     id: 15,
     slug: "mark-production-progress",
     actor: "admin",
-    assertion: "Mark progressed through every allowed production state",
+    assertion: "Mark passed payment approval, supplier production, and self-QC",
   },
   {
     id: 16,
@@ -150,9 +150,9 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
   },
   {
     id: 18,
-    slug: "ven-order-placed",
+    slug: "ven-quote-accepted",
     actor: "ven",
-    assertion: "Ven registered after Mark and placed a credits order",
+    assertion: "Ven registered after Mark and accepted the real supplier quote",
   },
   {
     id: 19,
@@ -280,10 +280,17 @@ export function requiredEvidenceNetworkIssues(
       return false;
     }
   };
+  const isNavigationMediaAbort = (entry: ActorNetworkEntry) =>
+    entry.method === "GET" &&
+    entry.failure === "net::ERR_ABORTED" &&
+    /\.(?:mp3|m4a|ogg|wav)(?:[?#]|$)/i.test(entry.url);
 
   return {
     transportFailures: network.filter(
-      (entry) => Boolean(entry.failure) && isRequiredOrigin(entry),
+      (entry) =>
+        Boolean(entry.failure) &&
+        isRequiredOrigin(entry) &&
+        !isNavigationMediaAbort(entry),
     ),
     serverResponses: network.filter(
       (entry) => (entry.status ?? 0) >= 500 && isRequiredOrigin(entry),
@@ -603,10 +610,10 @@ export async function captureStep(options: {
     )
     .toBe(0);
   await expect
-    .poll(
-      () => visibleCount(".ant-message-notice, .ant-notification-notice"),
-      { message: "accepted evidence transient notifications", timeout: 15_000 },
-    )
+    .poll(() => visibleCount(".ant-message-notice, .ant-notification-notice"), {
+      message: "accepted evidence transient notifications",
+      timeout: 15_000,
+    })
     .toBe(0);
   expect(
     relevantConsoleErrors(console),

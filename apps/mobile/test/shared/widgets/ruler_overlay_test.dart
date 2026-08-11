@@ -3,75 +3,52 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/shared/widgets/ruler_overlay.dart';
 
 void main() {
-  group('architect scale calibration', () {
-    test('uses architect-only triangular scale labels', () {
-      final labels = kArchitectScales.map((scale) => scale.label).toList();
-
+  group('metric scale calibration', () {
+    test('offers the supported metric presets with 1:100 as default', () {
+      expect(kMetricScales.map((scale) => scale.denominator), [
+        20,
+        25,
+        50,
+        75,
+        100,
+        125,
+        200,
+      ]);
+      expect(kDefaultMetricScale.denominator, 100);
+      expect(kMetricScales.map((scale) => scale.label), [
+        '1:20',
+        '1:25',
+        '1:50',
+        '1:75',
+        '1:100',
+        '1:125',
+        '1:200',
+      ]);
       expect(
-        labels,
-        containsAll(<String>[
-          '3/32" = 1\'-0"',
-          '3/16" = 1\'-0"',
-          '1/8" = 1\'-0"',
-          '1/4" = 1\'-0"',
-          '1/2" = 1\'-0"',
-          '3/8" = 1\'-0"',
-          '3/4" = 1\'-0"',
-          '1" = 1\'-0"',
-          '1 1/2" = 1\'-0"',
-          '3" = 1\'-0"',
-          'Full size (1/16")',
-        ]),
-      );
-      expect(labels.any((label) => label.startsWith('1:')), isFalse);
-    });
-
-    test('maps 1/4 inch architect scale to real feet accurately', () {
-      final quarterScale = kArchitectScales.singleWhere(
-        (scale) => scale.label == '1/4" = 1\'-0"',
-      );
-
-      expect(
-        pixelsForRealFeet(
-          scale: quarterScale,
-          realFeet: 4,
-          pxPerDrawingInch: 100,
+        kMetricScales.any(
+          (scale) => scale.label.contains('"') || scale.label.contains("'"),
         ),
-        closeTo(100, 0.001),
+        isFalse,
       );
-      expect(quarterScale.realFeetForDrawingInches(1), closeTo(4, 0.001));
     });
 
-    test('full-size triangular face uses sixteenth-inch increments', () {
-      final fullSizeScale = kArchitectScales.singleWhere(
-        (scale) => scale.isFullSize,
-      );
+    test('maps real metres to drawing millimetres at metric ratios', () {
+      const oneToOneHundred = MetricScale(denominator: 100);
+      const oneToFifty = MetricScale(denominator: 50);
 
-      expect(fullSizeScale.label, 'Full size (1/16")');
       expect(
-        pixelsForDrawingInches(drawingInches: 1 / 16, pxPerDrawingInch: 160),
+        oneToOneHundred.drawingMillimetresForRealMetres(1),
         closeTo(10, 0.001),
       );
-    });
-
-    test('all supported architect scales convert feet to drawing inches', () {
-      for (final scale in kArchitectScales) {
-        expect(
-          scale.drawingInchesForRealFeet(12),
-          closeTo(12 * scale.inchesPerFoot, 0.001),
-          reason: scale.label,
-        );
-        expect(
-          scale.realFeetForDrawingInches(scale.inchesPerFoot * 8),
-          closeTo(8, 0.001),
-          reason: scale.label,
-        );
-        expect(
-          pixelsForRealFeet(scale: scale, realFeet: 1, pxPerDrawingInch: 96),
-          closeTo(scale.inchesPerFoot * 96, 0.001),
-          reason: scale.label,
-        );
-      }
+      expect(oneToFifty.drawingMillimetresForRealMetres(1), closeTo(20, 0.001));
+      expect(
+        pixelsForRealMetres(
+          scale: oneToOneHundred,
+          realMetres: 1,
+          pxPerDrawingMillimetre: 4,
+        ),
+        closeTo(40, 0.001),
+      );
     });
 
     test(
@@ -88,12 +65,12 @@ void main() {
         expect(rect.width, closeTo(1000, 0.001));
         expect(rect.height, closeTo(500, 0.001));
         expect(
-          drawingPixelsPerInchForViewport(
+          drawingPixelsPerMillimetreForViewport(
             viewportSize: const Size(1000, 800),
             drawingWidthMm: 254,
             drawingHeightMm: 127,
           ),
-          closeTo(100, 0.001),
+          closeTo(1000 / 254, 0.001),
         );
       },
     );
@@ -156,7 +133,7 @@ void main() {
 
       expect(rect, Offset.zero & const Size(320, 240));
       expect(
-        drawingPixelsPerInchForViewport(
+        drawingPixelsPerMillimetreForViewport(
           viewportSize: const Size(320, 240),
           drawingWidthMm: 0,
           drawingHeightMm: 297,
@@ -192,12 +169,10 @@ void main() {
     });
   });
 
-  testWidgets('RulerOverlay renders the selected architect scale label', (
+  testWidgets('RulerOverlay renders the selected metric scale label', (
     tester,
   ) async {
-    final quarterScale = kArchitectScales.singleWhere(
-      (scale) => scale.label == '1/4" = 1\'-0"',
-    );
+    const scale = MetricScale(denominator: 50);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -205,18 +180,13 @@ void main() {
           body: SizedBox(
             width: 600,
             height: 400,
-            child: RulerOverlay(
-              widthMm: 254,
-              heightMm: 127,
-              scale: quarterScale,
-            ),
+            child: RulerOverlay(widthMm: 254, heightMm: 127, scale: scale),
           ),
         ),
       ),
     );
 
-    expect(find.text('1/4" = 1\'-0"'), findsOneWidget);
-    expect(find.text('1:100'), findsNothing);
+    expect(find.text('1:50'), findsOneWidget);
   });
 
   testWidgets('RulerOverlay explains calibration and exposes touch controls', (

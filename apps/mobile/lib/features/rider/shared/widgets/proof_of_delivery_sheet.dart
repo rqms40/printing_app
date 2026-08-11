@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -193,6 +191,7 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Close',
                     icon: HugeIcon(
                       icon: HugeIcons.strokeRoundedCancel01,
                       color: colors.onSurfaceDim,
@@ -218,11 +217,11 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
               Text(
                 isPickup
                     ? (_otpPrefixed
-                        ? 'Pickup OTP is prefilled from the server. Confirm with the print shop, then capture the photo.'
-                        : 'Ask the print shop or ops for the pickup OTP shown on the admin order.')
+                          ? 'Pickup OTP is prefilled from the server. Confirm with the print shop, then capture the photo.'
+                          : 'Ask the print shop or ops for the pickup OTP shown on the admin order.')
                     : (_otpPrefixed
-                        ? 'Delivery OTP is prefilled and also shown to the customer on their order. Confirm at the door, then capture proof.'
-                        : 'Use the delivery OTP shared with the customer after pickup.'),
+                          ? 'Delivery OTP is prefilled and also shown to the customer on their order. Confirm at the door, then capture proof.'
+                          : 'Use the delivery OTP shared with the customer after pickup.'),
                 style: AppTypography.caption.copyWith(
                   color: colors.onSurfaceDim,
                 ),

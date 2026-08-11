@@ -41,12 +41,11 @@ class ConfirmationDialog extends StatelessWidget {
     Widget? content,
   }) {
     return showModalBottomSheet<void>(
+      barrierLabel: 'Dismiss confirmation',
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppRadius.lg),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
       ),
       builder: (_) => ConfirmationDialog(
         title: title,
@@ -115,9 +114,7 @@ class ConfirmationDialog extends StatelessWidget {
                   child: Center(
                     child: Text(
                       confirmLabel,
-                      style: AppTypography.button.copyWith(
-                        color: Colors.white,
-                      ),
+                      style: AppTypography.button.copyWith(color: Colors.white),
                     ),
                   ),
                 ),

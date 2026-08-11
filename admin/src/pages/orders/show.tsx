@@ -1,4 +1,5 @@
 import {
+  Alert,
   Card,
   Descriptions,
   Typography,
@@ -49,6 +50,9 @@ import {
 } from "@/utils/api-normalizers";
 import { loadOrderFilePreview, type OrderFilePreview } from "./preview";
 import { ManualStatusCard } from "./components/manual-status-card";
+import { OrderPrice } from "./components/order-price";
+import { OrderProductLabel, productDisplayName } from "./components/order-product-label";
+import { OrderSpecifications } from "./components/order-specifications";
 import {
   adminOrderProgressPipeline,
   isPickupDeliveryOption,
@@ -213,7 +217,7 @@ function getOrderLineItems(order: Order): OrderItem[] {
   return [
     {
       id: order.id,
-      category: order.category === "3d" ? "3d" : "paper",
+      category: order.category === "batch" ? "paper" : order.category,
       file_name: order.file_name,
       quantity: order.quantity,
       total_price: order.total_price,
@@ -224,8 +228,13 @@ function getOrderLineItems(order: Order): OrderItem[] {
 }
 
 function getOrderTypeLabel(order: Order) {
+  const lineItems = getOrderLineItems(order);
+  if (lineItems.some((item) => item.category_name || !['paper', '3d'].includes(item.category))) {
+    const labels = lineItems.slice(0, 2).map(productDisplayName);
+    return lineItems.length > 2 ? `${labels.join(' + ')} +${lineItems.length - 2}` : labels.join(' + ');
+  }
   const categories = new Set(
-    getOrderLineItems(order)
+    lineItems
       .map((item) => item.category)
       .filter(
         (category): category is "paper" | "3d" =>
@@ -696,6 +705,9 @@ export function OrderShow() {
         </Card>
 
         {/* Order Items */}
+        {order.unmet_coverage ? (
+          <Alert type="warning" showIcon message="Unmet supplier coverage" description={order.matching_outcome?.message ?? "No verified active supplier currently covers this leaf product."} />
+        ) : null}
         <Card
           title="Order Items"
           extra={
@@ -713,11 +725,7 @@ export function OrderShow() {
           <Table dataSource={items} rowKey="id" pagination={false} size="small">
             <Table.Column
               title="Type"
-              render={(_: unknown, item: any) => (
-                <Tag color={item.category === "paper" ? "blue" : "purple"}>
-                  {item.category === "paper" ? "Paper" : "3D"}
-                </Tag>
-              )}
+              render={(_: unknown, item: OrderItem) => <OrderProductLabel item={item} />}
             />
             <Table.Column
               title="File"
@@ -762,22 +770,12 @@ export function OrderShow() {
             <Table.Column title="Qty" dataIndex="quantity" width={80} />
             <Table.Column
               title="Specs"
-              render={(_: unknown, item: any) => {
-                if (item.paper_specs) {
-                  return `${item.paper_specs.paper_size?.toUpperCase()} · ${humanizeEnumValue(item.paper_specs.color_mode)} · ${humanizeEnumValue(item.paper_specs.print_sides)}`;
-                }
-                if (item.three_d_specs) {
-                  return `${item.three_d_specs.file_format?.toUpperCase()} · ${item.three_d_specs.material?.toUpperCase()} · ${item.three_d_specs.infill_percentage}% infill`;
-                }
-                return "—";
-              }}
+              render={(_: unknown, item: OrderItem) => <OrderSpecifications item={item} />}
             />
             <Table.Column
               title="Amount"
               align="right"
-              render={(_: unknown, item: any) =>
-                formatCurrency(item.total_price ?? 0)
-              }
+              render={(_: unknown, item: OrderItem) => <OrderPrice pricingStatus={order.pricing_status} legacyAmount={item.total_price} />}
             />
           </Table>
         </Card>
@@ -785,14 +783,20 @@ export function OrderShow() {
         {/* Price Breakdown */}
         <Card title="Price Breakdown">
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="Subtotal">
-              {formatCurrency(order.total_price)}
+            <Descriptions.Item label="Goods quote">
+              <OrderPrice
+                pricingStatus={order.pricing_status}
+                minor={order.current_supplier_assignment?.final_price_minor}
+                legacyAmount={order.total_price}
+              />
             </Descriptions.Item>
             <Descriptions.Item label="Delivery Fee">
-              {formatCurrency(order.delivery_fee)}
+              {order.pricing_status === "pending_quote" || order.delivery_fee == null
+                ? "Pending quote"
+                : formatCurrency(order.delivery_fee)}
             </Descriptions.Item>
-            <Descriptions.Item label="Total">
-              {formatCurrency(order.total_price + order.delivery_fee)}
+            <Descriptions.Item label="Quoted total">
+              <OrderPrice pricingStatus={order.pricing_status} minor={order.quoted_total_minor} legacyAmount={order.total_price == null || order.delivery_fee == null ? null : order.total_price + order.delivery_fee} />
             </Descriptions.Item>
             <Descriptions.Item label="Payment Method">
               <span style={{ textTransform: "uppercase" }}>

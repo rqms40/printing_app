@@ -5,6 +5,7 @@ import {
   SupplierVerificationStatus,
 } from '../suppliers/entities/supplier-verification.entity';
 import { SupplierAssignmentDecision } from './entities/supplier-assignment.entity';
+import { findExactActiveLeafCapability } from './exact-leaf-capability';
 
 /**
  * Matching score formula (Task 4.2 — simple weighted sum):
@@ -18,7 +19,8 @@ import { SupplierAssignmentDecision } from './entities/supplier-assignment.entit
  * Hard filters (candidate excluded, not scored):
  * - inactive supplier profile
  * - verification.status !== verified
- * - no capability with productFamily matching order.category (case-insensitive)
+ * - no active capability with productFamily exactly matching order.category
+ *   after case/whitespace normalization
  * - zone mismatch when both order zone and supplier serviceZones are non-empty
  * - capacity exhausted (openLoad >= maxCapacity when maxCapacity > 0)
  *
@@ -114,12 +116,7 @@ function findMatchingCapability(
   capabilities: SupplierCapability[] | undefined,
   category: string,
 ): SupplierCapability | null {
-  if (!capabilities?.length) return null;
-  const target = normalizeToken(category);
-  if (!target) return null;
-  return (
-    capabilities.find((c) => normalizeToken(c.productFamily) === target) ?? null
-  );
+  return findExactActiveLeafCapability(capabilities, category);
 }
 
 function zoneFitScore(

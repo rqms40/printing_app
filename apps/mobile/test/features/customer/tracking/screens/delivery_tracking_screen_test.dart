@@ -51,7 +51,7 @@ void main() {
         _order(
           id: '4',
           orderId: 'ORD-10004',
-          status: OrderStatus.onTheWay,
+          status: OrderStatus.outForDelivery,
           rider: rider,
           assignedRiderId: '2',
           deliveryAssignmentId: '1',
@@ -67,11 +67,11 @@ void main() {
 
     test('selects the active assigned delivery when route id is absent', () {
       final orders = [
-        _order(id: '1', orderId: 'ORD-10001', status: OrderStatus.orderPlaced),
+        _order(id: '1', orderId: 'ORD-10001', status: OrderStatus.submitted),
         _order(
           id: '4',
           orderId: 'ORD-10004',
-          status: OrderStatus.onTheWay,
+          status: OrderStatus.outForDelivery,
           rider: rider,
           assignedRiderId: '2',
           deliveryAssignmentId: '1',
@@ -86,7 +86,11 @@ void main() {
 
     test('does not select an on-the-way order without tracking access', () {
       final orders = [
-        _order(id: '4', orderId: 'ORD-10004', status: OrderStatus.onTheWay),
+        _order(
+          id: '4',
+          orderId: 'ORD-10004',
+          status: OrderStatus.outForDelivery,
+        ),
       ];
 
       expect(selectDeliveryTrackingOrder(orders, null), isNull);

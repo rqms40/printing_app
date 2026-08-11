@@ -9,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/shared/repositories/ruler_scale_preferences.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/file_type_icon.dart';
 import 'package:printing_app/shared/widgets/ruler_overlay.dart';
@@ -42,6 +44,7 @@ class FilePreviewSheet extends ConsumerStatefulWidget {
     double? heightMm,
   }) {
     return showModalBottomSheet<void>(
+      barrierLabel: 'Dismiss file preview',
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -61,6 +64,142 @@ class FilePreviewSheet extends ConsumerStatefulWidget {
   ConsumerState<FilePreviewSheet> createState() => _FilePreviewSheetState();
 }
 
+class MetricScalePicker extends StatefulWidget {
+  const MetricScalePicker({
+    super.key,
+    required this.initialDenominator,
+    required this.onSelected,
+  });
+
+  final int initialDenominator;
+  final ValueChanged<int> onSelected;
+
+  @override
+  State<MetricScalePicker> createState() => _MetricScalePickerState();
+}
+
+class _MetricScalePickerState extends State<MetricScalePicker> {
+  final _customController = TextEditingController();
+  bool _showCustom = false;
+  String? _customError;
+
+  @override
+  void dispose() {
+    _customController.dispose();
+    super.dispose();
+  }
+
+  void _applyCustom() {
+    final raw = _customController.text.trim();
+    final value = int.tryParse(raw);
+    if (value == null || value <= 0 || raw.contains('.')) {
+      setState(() => _customError = 'Enter a positive whole number');
+      return;
+    }
+    if (!isSupportedMetricScaleDenominator(value)) {
+      setState(
+        () => _customError =
+            'Enter a scale between 1:1 and 1:$kMaxMetricScaleDenominator',
+      );
+      return;
+    }
+    setState(() => _customError = null);
+    widget.onSelected(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Metric scale',
+                style: AppTypography.h3.copyWith(color: colors.onBackground),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Calibrated to the fitted document preview.',
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final scale in kMetricScales)
+                    ChoiceChip(
+                      label: Text(scale.label),
+                      selected:
+                          scale.denominator == widget.initialDenominator &&
+                          !_showCustom,
+                      onSelected: (_) => widget.onSelected(scale.denominator),
+                    ),
+                  ChoiceChip(
+                    label: const Text('Custom'),
+                    selected: _showCustom,
+                    onSelected: (_) => setState(() {
+                      _showCustom = true;
+                      _customError = null;
+                    }),
+                  ),
+                ],
+              ),
+              if (_showCustom) ...[
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 14),
+                      child: Text('1:'),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: TextField(
+                        controller: _customController,
+                        autofocus: true,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Scale denominator',
+                          errorText: _customError,
+                        ),
+                        onSubmitted: (_) => _applyCustom(),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: FilledButton(
+                        onPressed: _applyCustom,
+                        child: const Text('Apply'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
     with SingleTickerProviderStateMixin {
   String? _presignedUrl;
@@ -69,113 +208,34 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
   bool _showRuler = false;
-  int _rulerScaleIndex = 0;
+  int _rulerScaleDenominator = RulerScalePreferences.defaultDenominator;
   PdfController? _pdfController;
   double? _widthMm;
   double? _heightMm;
 
-  ArchitectScale get _rulerScale => kArchitectScales[_rulerScaleIndex];
+  MetricScale get _rulerScale =>
+      MetricScale(denominator: _rulerScaleDenominator);
 
   Future<void> _openRulerScalePicker() async {
-    final selectedIndex = await showModalBottomSheet<int>(
+    final selectedDenominator = await showModalBottomSheet<int>(
+      barrierLabel: 'Dismiss metric scale picker',
       context: context,
       backgroundColor: Colors.transparent,
       useSafeArea: true,
-      builder: (context) {
-        final colors = _colors(context);
-        return Container(
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colors.outline.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    AppSpacing.lg,
-                    AppSpacing.lg,
-                    AppSpacing.sm,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Architect scale',
-                        style: AppTypography.h3.copyWith(
-                          color: colors.onBackground,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Calibrated to the fitted document preview, not physical screen inches.',
-                        style: AppTypography.caption.copyWith(
-                          color: colors.onSurfaceDim,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: kArchitectScales.length,
-                    itemBuilder: (context, index) {
-                      final scale = kArchitectScales[index];
-                      final selected = index == _rulerScaleIndex;
-                      return ListTile(
-                        minLeadingWidth: 24,
-                        leading: Icon(
-                          selected
-                              ? Icons.radio_button_checked_rounded
-                              : Icons.radio_button_unchecked_rounded,
-                          color: selected ? colors.accent : colors.onSurfaceDim,
-                        ),
-                        title: Text(
-                          scale.label,
-                          style: AppTypography.body.copyWith(
-                            color: colors.onBackground,
-                            fontWeight: selected
-                                ? FontWeight.w800
-                                : FontWeight.w500,
-                          ),
-                        ),
-                        subtitle: Text(
-                          scale.isFullSize
-                              ? 'Full-size inch face with 1/16" marks'
-                              : '${scale.inchesPerFoot}" drawing = 1 real foot',
-                          style: AppTypography.caption.copyWith(
-                            color: colors.onSurfaceDim,
-                          ),
-                        ),
-                        onTap: () => Navigator.of(context).pop(index),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (context) => MetricScalePicker(
+        initialDenominator: _rulerScaleDenominator,
+        onSelected: (value) => Navigator.of(context).pop(value),
+      ),
     );
 
-    if (selectedIndex == null || !mounted) return;
+    if (selectedDenominator == null || !mounted) return;
     setState(() {
-      _rulerScaleIndex = selectedIndex;
+      _rulerScaleDenominator = selectedDenominator;
     });
+    await RulerScalePreferences().save(
+      ref.read(authProvider).user?.id,
+      selectedDenominator,
+    );
   }
 
   AppColorSet _colors(BuildContext context) =>
@@ -193,7 +253,16 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
       duration: const Duration(milliseconds: 300),
     );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    _restoreRulerScale();
     _fetchPresignedUrl();
+  }
+
+  Future<void> _restoreRulerScale() async {
+    final denominator = await RulerScalePreferences().load(
+      ref.read(authProvider).user?.id,
+    );
+    if (!mounted) return;
+    setState(() => _rulerScaleDenominator = denominator);
   }
 
   @override

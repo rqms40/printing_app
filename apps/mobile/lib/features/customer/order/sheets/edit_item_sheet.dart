@@ -66,6 +66,7 @@ class EditItemSheet {
     EditItemReplacementUploader? uploadReplacementFile,
   }) {
     return showModalBottomSheet<CartItem>(
+      barrierLabel: 'Dismiss item editor',
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

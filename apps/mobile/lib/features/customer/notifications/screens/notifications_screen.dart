@@ -11,6 +11,8 @@ import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:go_router/go_router.dart';
+import 'package:printing_app/features/customer/notifications/notification_route.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -222,7 +224,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             ...items.asMap().entries.map((entry) {
               final index = entry.key;
               final notification = entry.value;
-              
+
               final notificationWidget = _NotificationItem(
                 notification: notification,
                 isLast: index == items.length - 1,
@@ -266,7 +268,9 @@ class _NotificationItem extends ConsumerWidget {
           colors.error,
         );
       }
-      if (type.contains('deliver') || type.contains('complet') || type.contains('ready')) {
+      if (type.contains('deliver') ||
+          type.contains('complet') ||
+          type.contains('ready')) {
         return _NotificationVisual(
           HugeIcons.strokeRoundedFile02,
           colors.success.withValues(alpha: 0.12),
@@ -370,6 +374,11 @@ class _NotificationItem extends ConsumerWidget {
             ref
                 .read(notificationsProvider.notifier)
                 .markAsRead(notification.id);
+            final route = riderMessageRouteForPayload({
+              'type': notification.type,
+              'metadata': notification.metadata,
+            });
+            if (route != null) context.push(route);
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(

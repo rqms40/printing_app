@@ -103,4 +103,37 @@ void main() {
     expect(opened, isFalse);
     semantics.dispose();
   });
+
+  testWidgets('pending quote card never renders a fabricated zero amount', (
+    tester,
+  ) async {
+    final order = Order(
+      id: '201',
+      orderId: 'ORD-RFQ-1',
+      userId: '1',
+      category: 'future-fabrication',
+      categoryName: 'Future Fabrication',
+      quantity: 1,
+      totalPrice: 0,
+      deliveryFee: 0,
+      pricingStatus: PricingStatus.pendingQuote,
+      paymentMethod: PaymentMethod.gridCredits,
+      paymentStatus: PaymentStatus.pending,
+      orderStatus: OrderStatus.submitted,
+      deliveryOption: 'delivery',
+      createdAt: DateTime(2026, 8, 12),
+      updatedAt: DateTime(2026, 8, 12),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: OrderCard(order: order)),
+      ),
+    );
+
+    expect(find.text('FUTURE FABRICATION'), findsOneWidget);
+    expect(find.text('Quote pending'), findsOneWidget);
+    expect(find.textContaining('₱0'), findsNothing);
+    expect(find.bySemanticsLabel(RegExp(r'Quote pending')), findsOneWidget);
+  });
 }

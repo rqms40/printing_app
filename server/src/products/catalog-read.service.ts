@@ -2,13 +2,41 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { CATALOG_VERSION } from './catalog-v1-10.definition';
 import { ProductCategory } from './entities/product-category.entity';
+import { PricingModel } from './enums/catalog.enums';
 
-export type CatalogCategory = ProductCategory;
+type CatalogCategoryBase = Omit<ProductCategory, 'baseRate' | 'pricingModel'>;
 
-export type CatalogCategoryNode = CatalogCategory & {
-  children: CatalogCategoryNode[];
+export type NumericCatalogCategory = CatalogCategoryBase & {
+  pricingModel:
+    | PricingModel.PER_PAGE_MODIFIERS
+    | PricingModel.BASE_PLUS_MATERIAL_ESTIMATE;
+  baseRate: number;
+  pricingStatus?: never;
 };
+
+export type RfqCatalogCategory = CatalogCategoryBase & {
+  pricingModel: PricingModel.QUOTE_REQUIRED;
+  pricingStatus: 'pending_quote';
+  baseRate: null;
+};
+
+export type CatalogCategory = NumericCatalogCategory | RfqCatalogCategory;
+
+export interface CatalogGroup {
+  slug: string;
+  name: string;
+  description: string;
+  sortOrder: number;
+  products: CatalogCategory[];
+}
+
+export interface CatalogResponse {
+  version: typeof CATALOG_VERSION;
+  groups: CatalogGroup[];
+  categories: CatalogCategory[];
+}
 
 @Injectable()
 export class CatalogReadService {
@@ -17,12 +45,7 @@ export class CatalogReadService {
     private readonly categoryRepo: Repository<ProductCategory>,
   ) {}
 
-  async getPublicCatalog(includeInactive = false): Promise<{
-    /** Flat list (all levels) for lookup, admin, and mobile tree building. */
-    categories: CatalogCategory[];
-    /** Nested Category → Subgroup → Variant tree (roots only at top). */
-    tree: CatalogCategoryNode[];
-  }> {
+  async getPublicCatalog(includeInactive = false): Promise<CatalogResponse> {
     const categories = await this.categoryRepo.find({
       relations: {
         specs: { options: true },
@@ -40,27 +63,84 @@ export class CatalogReadService {
       },
     });
 
-    const mapped = categories
+    const publicCategories = categories
       .filter((category) => includeInactive || category.isActive)
-      .map((category) => ({
-        ...category,
-        specs: (category.specs ?? [])
-          .filter((spec) => includeInactive || spec.isActive)
-          .map((spec) => ({
-            ...spec,
-            options: (spec.options ?? []).filter(
-              (option) => includeInactive || option.isActive,
-            ),
-          })),
-        addons: (category.addons ?? []).filter(
-          (addon) => includeInactive || addon.isActive,
+      .map((category) =>
+        this.serializePublicCategory(category, includeInactive),
+      );
+
+    const grouped = new Map<string, CatalogGroup>();
+    for (const category of publicCategories) {
+      if (
+        !category.groupSlug ||
+        !category.groupName ||
+        !category.groupDescription ||
+        category.groupSortOrder == null
+      ) {
+        continue;
+      }
+      const existing = grouped.get(category.groupSlug);
+      if (existing) {
+        existing.products.push(category);
+        continue;
+      }
+      grouped.set(category.groupSlug, {
+        slug: category.groupSlug,
+        name: category.groupName,
+        description: category.groupDescription,
+        sortOrder: category.groupSortOrder,
+        products: [category],
+      });
+    }
+
+    const groups = [...grouped.values()]
+      .map((group) => ({
+        ...group,
+        products: group.products.sort(
+          (left, right) =>
+            left.sortOrder - right.sortOrder || left.id - right.id,
         ),
-      }));
+      }))
+      .sort(
+        (left, right) =>
+          left.sortOrder - right.sortOrder ||
+          left.slug.localeCompare(right.slug),
+      );
 
     return {
-      categories: mapped,
-      tree: this.buildTree(mapped),
+      version: CATALOG_VERSION,
+      groups,
+      categories: publicCategories,
     };
+  }
+
+  private serializePublicCategory(
+    category: ProductCategory,
+    includeInactive: boolean,
+  ): CatalogCategory {
+    const serialized = {
+      ...category,
+      specs: (category.specs ?? [])
+        .filter((spec) => includeInactive || spec.isActive)
+        .map((spec) => ({
+          ...spec,
+          options: (spec.options ?? []).filter(
+            (option) => includeInactive || option.isActive,
+          ),
+        })),
+      addons: (category.addons ?? []).filter(
+        (addon) => includeInactive || addon.isActive,
+      ),
+    };
+    if (category.pricingModel === PricingModel.QUOTE_REQUIRED) {
+      return {
+        ...serialized,
+        pricingModel: PricingModel.QUOTE_REQUIRED,
+        pricingStatus: 'pending_quote',
+        baseRate: null,
+      };
+    }
+    return serialized as NumericCatalogCategory;
   }
 
   async getPublicCategoryBySlug(slug: string): Promise<CatalogCategory> {
@@ -69,30 +149,6 @@ export class CatalogReadService {
     if (!category) {
       throw new NotFoundException(`Category '${slug}' is not available`);
     }
-    if (!category.isOrderable) {
-      throw new NotFoundException(
-        `Category '${slug}' is a browse-only group, not an orderable product`,
-      );
-    }
     return category;
   }
-
-  private buildTree(categories: CatalogCategory[]): CatalogCategoryNode[] {
-    const byParent = new Map<number | null, CatalogCategory[]>();
-    for (const category of categories) {
-      const key = category.parentId ?? null;
-      const bucket = byParent.get(key) ?? [];
-      bucket.push(category);
-      byParent.set(key, bucket);
-    }
-
-    const attach = (parentId: number | null): CatalogCategoryNode[] =>
-      (byParent.get(parentId) ?? []).map((category) => ({
-        ...category,
-        children: attach(category.id),
-      }));
-
-    return attach(null);
-  }
 }
-
