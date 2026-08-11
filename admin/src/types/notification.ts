@@ -23,4 +23,5 @@ export interface Notification {
 export interface BadgeCounts {
   newOrders: number;
   pendingTopUps: number;
+  pendingQrPayments?: number;
 }

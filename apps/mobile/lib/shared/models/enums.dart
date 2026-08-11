@@ -574,7 +574,7 @@ extension DeliveryStatusX on DeliveryStatus {
   }
 }
 
-enum PaymentMethod { gcash, maya, cod, gridCredits }
+enum PaymentMethod { gcash, maya, cod, gridCredits, qrPhInstapay }
 
 extension PaymentMethodX on PaymentMethod {
   String get displayName {
@@ -587,11 +587,13 @@ extension PaymentMethodX on PaymentMethod {
         return 'Cash on Delivery';
       case PaymentMethod.gridCredits:
         return 'Pilot Credits';
+      case PaymentMethod.qrPhInstapay:
+        return 'QR Ph (Instapay)';
     }
   }
 
   /// Wire value for order create / batch checkout (server marketplace rails).
-  /// Server expects `pilot_credit` | `cod` (| sandbox `gcash`/`maya`).
+  /// Server expects `pilot_credit` | `cod` | `qr_ph_instapay` (| sandbox `gcash`/`maya`).
   String get orderApiValue {
     switch (this) {
       case PaymentMethod.gridCredits:
@@ -602,6 +604,8 @@ extension PaymentMethodX on PaymentMethod {
         return 'gcash';
       case PaymentMethod.maya:
         return 'maya';
+      case PaymentMethod.qrPhInstapay:
+        return 'qr_ph_instapay';
     }
   }
 
@@ -617,11 +621,15 @@ extension PaymentMethodX on PaymentMethod {
         return 'gcash';
       case PaymentMethod.maya:
         return 'maya';
+      case PaymentMethod.qrPhInstapay:
+        return 'qr_ph_instapay';
     }
   }
 
   bool get isLiveWallet =>
       this == PaymentMethod.gcash || this == PaymentMethod.maya;
+
+  bool get requiresPaymentReceipt => this == PaymentMethod.qrPhInstapay;
 }
 
 enum PaymentStatus { pending, paid, failed, refunded }

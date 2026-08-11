@@ -91,6 +91,9 @@ flutter:
   uses-material-design: true
 
   assets:
+    # Payment QR lives under images/ (not assets/images/) so Flutter web
+    # serves it as assets/images/… instead of assets/assets/images/…
+    - images/Payment_QR.jpg
     - assets/images/
     - assets/icons/
     - assets/animations/

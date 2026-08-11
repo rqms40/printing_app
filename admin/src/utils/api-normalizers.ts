@@ -10,10 +10,10 @@ import type {
   DeliveryProof,
   Order,
   OrderItem,
+  OrderItemSpec,
   OrderStatusHistory,
   PaperSpecs,
   ThreeDSpecs,
-  PricingStatus,
 } from "@/types/order";
 import type {
   DispatchPlan,
@@ -839,6 +839,47 @@ function normalizeProductionMilestones(
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 }
 
+function normalizeOrderItemSpecs(value: unknown): OrderItemSpec[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const specs = value
+    .map((entry) => {
+      const record = asRecord(entry);
+      const key = toOptionalString(record, "key", "spec_key", "specKey");
+      if (!key) return null;
+
+      const label =
+        toOptionalString(record, "label", "spec_label", "specLabel") ?? key;
+      const rawValue = toOptionalString(record, "value") ?? "";
+      const display =
+        toOptionalString(
+          record,
+          "display_value",
+          "displayValue",
+          "option_label",
+          "optionLabel",
+        ) ?? rawValue;
+
+      return {
+        key,
+        label,
+        value: rawValue,
+        display_value: display || rawValue,
+        option_id:
+          read(record, "option_id", "optionId") == null
+            ? null
+            : toNumberValue(record, 0, "option_id", "optionId"),
+        option_label:
+          toOptionalString(record, "option_label", "optionLabel") ?? null,
+      } satisfies OrderItemSpec;
+    })
+    .filter((entry): entry is OrderItemSpec => entry != null);
+
+  return specs.length > 0 ? specs : undefined;
+}
+
 function normalizeOrderItems(value: unknown): OrderItem[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -847,72 +888,44 @@ function normalizeOrderItems(value: unknown): OrderItem[] | undefined {
   return value.map((item) => {
     const record = asRecord(item);
     const category = toRequiredString(record, "paper", "category");
+    const categorySlug =
+      toOptionalString(record, "category_slug", "categorySlug") ?? null;
+    const categoryName =
+      toOptionalString(record, "category_name", "categoryName") ?? null;
 
     return {
       id: toRequiredString(record, "", "id"),
       order_id: toOptionalString(record, "order_id", "orderId"),
-      category,
+      // Keep real slug when present so business catalog orders stay identifiable.
+      category: category,
       category_id:
         read(record, "category_id", "categoryId") == null
           ? null
           : toNumberValue(record, 0, "category_id", "categoryId"),
-      category_slug:
-        toOptionalString(record, "category_slug", "categorySlug") ?? category,
-      category_name:
-        toOptionalString(record, "category_name", "categoryName") ?? null,
-      group_slug: toOptionalString(record, "group_slug", "groupSlug") ?? null,
-      group_name: toOptionalString(record, "group_name", "groupName") ?? null,
-      group_description:
-        toOptionalString(record, "group_description", "groupDescription") ?? null,
-      examples: toStringArray(read(record, "examples")),
-      pricing_model:
-        toOptionalString(record, "pricing_model", "pricingModel") ?? null,
-      required_at: toOptionalString(record, "required_at", "requiredAt") ?? null,
-      special_instructions:
-        toOptionalString(record, "special_instructions", "specialInstructions") ?? null,
-      specs: Array.isArray(read(record, "specs"))
-        ? (read(record, "specs") as unknown[]).map((raw) => {
-            const spec = asRecord(raw);
-            return {
-              key: toRequiredString(spec, "", "key", "spec_key", "specKey"),
-              label: toRequiredString(spec, "", "label", "spec_label", "specLabel"),
-              input_type:
-                toOptionalString(spec, "input_type", "inputType") ?? null,
-              value: toRequiredString(spec, "", "value"),
-              display_value: toRequiredString(
-                spec,
-                toRequiredString(spec, "", "value"),
-                "display_value",
-                "displayValue",
-              ),
-              option_id:
-                read(spec, "option_id", "optionId") == null
-                  ? null
-                  : toNumberValue(spec, 0, "option_id", "optionId"),
-              option_label:
-                toOptionalString(spec, "option_label", "optionLabel") ?? null,
-            };
-          })
-        : [],
+      category_slug: categorySlug,
+      category_name: categoryName,
       file_url: toOptionalString(record, "file_url", "fileUrl"),
       file_name: toOptionalString(record, "file_name", "fileName"),
       file_metadata_id:
         read(record, "file_metadata_id", "fileMetadataId") !== undefined
           ? toNumberValue(record, 0, "file_metadata_id", "fileMetadataId")
           : undefined,
-      paper_specs:
-        category === "paper"
-          ? normalizePaperSpecs(read(record, "paper_specs", "paperSpec"))
-          : undefined,
-      three_d_specs:
-        category === "3d"
-          ? normalizeThreeDSpecs(read(record, "three_d_specs", "threeDSpec"))
-          : undefined,
+      specs: normalizeOrderItemSpecs(
+        read(record, "specs", "spec_values", "specValues"),
+      ),
+      paper_specs: normalizePaperSpecs(
+        read(record, "paper_specs", "paperSpec"),
+      ),
+      three_d_specs: normalizeThreeDSpecs(
+        read(record, "three_d_specs", "threeDSpec"),
+      ),
+      special_instructions: toOptionalString(
+        record,
+        "special_instructions",
+        "specialInstructions",
+      ),
       quantity: toNumberValue(record, 1, "quantity"),
-      total_price:
-        read(record, "total_price", "totalPrice") == null
-          ? null
-          : toNumberValue(record, 0, "total_price", "totalPrice"),
+      total_price: toNumberValue(record, 0, "total_price", "totalPrice"),
       delivery_address:
         normalizeOrderDestination(
           read(record, "delivery_address", "deliveryAddress", "destination"),
@@ -936,6 +949,104 @@ export function humanizeEnumValue(
     .join(" ");
 }
 
+/** Spec keys that are internal/noisy for ops display. */
+const HIDDEN_ORDER_SPEC_KEYS = new Set(["page_count"]);
+
+/**
+ * Human-readable lines for an order item's catalog specs.
+ * Prefers dynamic `specs` snapshots; falls back to legacy paper/3d structs.
+ */
+export function formatOrderItemSpecLines(item: {
+  specs?: OrderItemSpec[] | null;
+  paper_specs?: PaperSpecs | null;
+  three_d_specs?: ThreeDSpecs | null;
+}): string[] {
+  if (item.specs && item.specs.length > 0) {
+    return item.specs
+      .filter((spec) => !HIDDEN_ORDER_SPEC_KEYS.has(spec.key))
+      .map((spec) => {
+        const value =
+          spec.display_value ||
+          spec.option_label ||
+          humanizeEnumValue(spec.value, "");
+        if (!value) return null;
+        return `${spec.label}: ${value}`;
+      })
+      .filter((line): line is string => Boolean(line));
+  }
+
+  if (item.paper_specs) {
+    const lines = [
+      item.paper_specs.paper_size
+        ? `Size: ${String(item.paper_specs.paper_size).toUpperCase()}`
+        : null,
+      item.paper_specs.color_mode
+        ? `Color: ${humanizeEnumValue(item.paper_specs.color_mode)}`
+        : null,
+      item.paper_specs.media_type
+        ? `Media: ${humanizeEnumValue(item.paper_specs.media_type)}`
+        : null,
+      item.paper_specs.print_sides
+        ? `Sides: ${humanizeEnumValue(item.paper_specs.print_sides)}`
+        : null,
+      item.paper_specs.binding && item.paper_specs.binding !== "none"
+        ? `Binding: ${humanizeEnumValue(item.paper_specs.binding)}`
+        : null,
+    ].filter((line): line is string => Boolean(line));
+    if (lines.length > 0) return lines;
+  }
+
+  if (item.three_d_specs) {
+    const lines = [
+      item.three_d_specs.file_format
+        ? `Format: ${String(item.three_d_specs.file_format).toUpperCase()}`
+        : null,
+      item.three_d_specs.material
+        ? `Material: ${String(item.three_d_specs.material).toUpperCase()}`
+        : null,
+      item.three_d_specs.color
+        ? `Color: ${humanizeEnumValue(item.three_d_specs.color)}`
+        : null,
+      item.three_d_specs.infill_percentage != null
+        ? `Infill: ${item.three_d_specs.infill_percentage}%`
+        : null,
+      item.three_d_specs.layer_height != null
+        ? `Layer: ${item.three_d_specs.layer_height}mm`
+        : null,
+      item.three_d_specs.supports != null
+        ? `Supports: ${item.three_d_specs.supports ? "Yes" : "No"}`
+        : null,
+    ].filter((line): line is string => Boolean(line));
+    if (lines.length > 0) return lines;
+  }
+
+  return [];
+}
+
+export function formatOrderItemSpecsSummary(item: {
+  specs?: OrderItemSpec[] | null;
+  paper_specs?: PaperSpecs | null;
+  three_d_specs?: ThreeDSpecs | null;
+}): string {
+  const lines = formatOrderItemSpecLines(item);
+  return lines.length > 0 ? lines.join(" · ") : "—";
+}
+
+export function orderItemTypeLabel(item: {
+  category?: string | null;
+  category_name?: string | null;
+  category_slug?: string | null;
+}): string {
+  if (item.category_name?.trim()) return item.category_name.trim();
+  if (item.category_slug?.trim()) {
+    return humanizeEnumValue(item.category_slug);
+  }
+  if (item.category === "3d") return "3D Printing";
+  if (item.category === "paper") return "Paper Printing";
+  if (item.category?.trim()) return humanizeEnumValue(item.category);
+  return "Item";
+}
+
 export function normalizeOrder(input: unknown): Order & {
   status_history?: OrderStatusHistory[];
 } {
@@ -945,49 +1056,25 @@ export function normalizeOrder(input: unknown): Order & {
     id: toRequiredString(record, "", "id"),
     order_id: toRequiredString(record, "", "order_id", "orderId"),
     user_id: toRequiredString(record, "", "user_id", "userId"),
-    category: toRequiredString(record, "paper", "category"),
+    category: (() => {
+      const category = toRequiredString(record, "paper", "category");
+      if (category === "3d") return "3d";
+      if (category === "batch") return "batch";
+      return "paper";
+    })(),
     file_url: toOptionalString(record, "file_url", "fileUrl"),
     file_name: toOptionalString(record, "file_name", "fileName"),
     file_metadata_id:
       read(record, "file_metadata_id", "fileMetadataId") != null
         ? toNumberValue(record, 0, "file_metadata_id", "fileMetadataId") || null
         : null,
-    paper_specs:
-      toRequiredString(record, "paper", "category") === "paper"
-        ? normalizePaperSpecs(read(record, "paper_specs", "paperSpec"))
-        : undefined,
-    three_d_specs:
-      toRequiredString(record, "paper", "category") === "3d"
-        ? normalizeThreeDSpecs(read(record, "three_d_specs", "threeDSpec"))
-        : undefined,
+    paper_specs: normalizePaperSpecs(read(record, "paper_specs", "paperSpec")),
+    three_d_specs: normalizeThreeDSpecs(
+      read(record, "three_d_specs", "threeDSpec"),
+    ),
     quantity: toNumberValue(record, 0, "quantity"),
-    total_price:
-      read(record, "total_price", "totalPrice") == null
-        ? null
-        : toNumberValue(record, 0, "total_price", "totalPrice"),
-    delivery_fee:
-      read(record, "delivery_fee", "deliveryFee") == null
-        ? null
-        : toNumberValue(record, 0, "delivery_fee", "deliveryFee"),
-    pricing_status:
-      (toOptionalString(record, "pricing_status", "pricingStatus") as PricingStatus | undefined),
-    quoted_total_minor:
-      toOptionalString(record, "quoted_total_minor", "quotedTotalMinor") ?? null,
-    quoted_at: toOptionalString(record, "quoted_at", "quotedAt") ?? null,
-    quote_accepted_at:
-      toOptionalString(record, "quote_accepted_at", "quoteAcceptedAt") ?? null,
-    quoted_by_user_id:
-      toOptionalString(record, "quoted_by_user_id", "quotedByUserId") ?? null,
-    promised_completion_at:
-      toOptionalString(record, "promised_completion_at", "promisedCompletionAt") ?? null,
-    unmet_coverage: toBooleanValue(record, false, "unmet_coverage", "unmetCoverage"),
-    matching_outcome: (() => {
-      const raw = read(record, "matching_outcome", "matchingOutcome");
-      if (raw == null) return null;
-      const outcome = asRecord(raw);
-      const code = toOptionalString(outcome, "code");
-      return code ? { code, message: toOptionalString(outcome, "message") ?? null } : null;
-    })(),
+    total_price: toNumberValue(record, 0, "total_price", "totalPrice"),
+    delivery_fee: toNumberValue(record, 0, "delivery_fee", "deliveryFee"),
     payment_method: toRequiredString(
       record,
       "cod",
@@ -1083,47 +1170,6 @@ export function normalizeOrder(input: unknown): Order & {
           toOptionalString(c, "broad_address", "broadAddress") ?? null,
         self_qc_evidence_urls: evidenceUrls,
         self_qc_evidence_file_ids: evidenceIds,
-      };
-    })(),
-    current_supplier_assignment: (() => {
-      const raw = read(
-        record,
-        "current_supplier_assignment",
-        "currentSupplierAssignment",
-      );
-      if (raw == null) return null;
-      const assignment = asRecord(raw);
-      return {
-        id:
-          read(assignment, "id", "assignment_id", "assignmentId") == null
-            ? null
-            : toNumberValue(assignment, 0, "id", "assignment_id", "assignmentId"),
-        supplier_id:
-          read(assignment, "supplier_id", "supplierId") == null
-            ? null
-            : toNumberValue(assignment, 0, "supplier_id", "supplierId"),
-        decision: toOptionalString(assignment, "decision") ?? null,
-        rank_position:
-          read(assignment, "rank_position", "rankPosition") == null
-            ? null
-            : toNumberValue(assignment, 0, "rank_position", "rankPosition"),
-        acceptance_deadline:
-          toOptionalString(
-            assignment,
-            "acceptance_deadline",
-            "acceptanceDeadline",
-          ) ?? null,
-        final_price_minor:
-          toOptionalString(
-            assignment,
-            "final_price_minor",
-            "finalPriceMinor",
-          ) ?? null,
-        promised_date:
-          toOptionalString(assignment, "promised_date", "promisedDate") ??
-          null,
-        decided_at:
-          toOptionalString(assignment, "decided_at", "decidedAt") ?? null,
       };
     })(),
     assigned_rider_contact: normalizeAssignedRiderContact(
@@ -1529,18 +1575,6 @@ export function normalizeServiceCategory(input: unknown): ServiceCategory {
     id: toRequiredString(record, "", "id"),
     name: toRequiredString(record, "", "name"),
     slug: toRequiredString(record, "", "slug"),
-    group_slug: toOptionalString(record, "group_slug", "groupSlug"),
-    group_name: toOptionalString(record, "group_name", "groupName"),
-    group_description: toOptionalString(
-      record,
-      "group_description",
-      "groupDescription",
-    ),
-    group_sort_order:
-      read(record, "group_sort_order", "groupSortOrder") == null
-        ? undefined
-        : toNumberValue(record, 0, "group_sort_order", "groupSortOrder"),
-    examples: toStringArray(read(record, "examples")),
     description: toOptionalString(record, "description"),
     mobile_description: toOptionalString(
       record,

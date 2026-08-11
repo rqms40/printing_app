@@ -35,8 +35,7 @@ describe('catalog entity metadata', () => {
     const columns = getMetadataArgsStorage().columns;
     const parentId = columns.find(
       (column) =>
-        column.target === ProductCategory &&
-        column.propertyName === 'parentId',
+        column.target === ProductCategory && column.propertyName === 'parentId',
     );
     const catalogLevel = columns.find(
       (column) =>

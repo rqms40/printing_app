@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -268,12 +269,13 @@ class SupplierJobDetailNotifier extends StateNotifier<SupplierJobDetailState> {
     });
   }
 
-  /// Submits self-QC evidence. Evidence file bytes are required — notes-only
-  /// posts are rejected client-side (server also returns `self_qc_evidence_required`).
+  /// Submits Pickup QA checklist + self-QC evidence.
+  /// All checklist lines must pass; evidence file is required.
   Future<bool> submitSelfQc({
     String? notes,
     Uint8List? fileBytes,
     String? fileName,
+    Map<String, dynamic>? checklist,
   }) async {
     if (fileBytes == null ||
         fileBytes.isEmpty ||
@@ -282,6 +284,14 @@ class SupplierJobDetailNotifier extends StateNotifier<SupplierJobDetailState> {
       state = state.copyWith(
         isSubmitting: false,
         errorMessage: () => 'Self-QC evidence file is required',
+        actionMessage: () => null,
+      );
+      return false;
+    }
+    if (checklist == null || checklist.isEmpty) {
+      state = state.copyWith(
+        isSubmitting: false,
+        errorMessage: () => 'Complete every Pickup QA checklist line',
         actionMessage: () => null,
       );
       return false;
@@ -297,6 +307,7 @@ class SupplierJobDetailNotifier extends StateNotifier<SupplierJobDetailState> {
           filename: fileName,
           contentType: contentType,
         ),
+        'checklist': jsonEncode(checklist),
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       });
       // Do not set Content-Type manually — Dio must attach multipart boundary.
@@ -304,7 +315,7 @@ class SupplierJobDetailNotifier extends StateNotifier<SupplierJobDetailState> {
         '/supplier/jobs/$jobId/self-qc',
         data: form,
       );
-      return 'Self-QC submitted';
+      return 'Pickup QA submitted';
     });
   }
 

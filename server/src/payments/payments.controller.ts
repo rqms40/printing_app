@@ -19,6 +19,7 @@ import {
   RecordCodCollectionDto,
   ReconcileCodCollectionDto,
 } from './dto/cod-collection.dto';
+import { RejectQrPaymentDto } from './dto/qr-payment.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 import { CodCollectionStatus } from './entities/cod-collection.entity';
 
@@ -127,5 +128,54 @@ export class PaymentsController {
   @Roles('ops_admin', 'super_admin', 'rider')
   getCodCollection(@Param('orderId', ParseIntPipe) orderId: number) {
     return this.paymentsService.getCodCollectionByOrder(orderId);
+  }
+
+  /**
+   * Ops/Super Admin: list QR Ph (Instapay) payment receipts for verification.
+   * Query: status=pending|verified|rejected (default: all).
+   */
+  @Get('qr-receipts')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ops_admin', 'super_admin')
+  listQrReceipts(@Query('status') status?: string) {
+    return this.paymentsService.listQrPaymentReceipts(status);
+  }
+
+  @Get('qr-receipts/pending-count')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ops_admin', 'super_admin')
+  pendingQrReceiptCount() {
+    return this.paymentsService
+      .getPendingQrReceiptCount()
+      .then((count) => ({ count }));
+  }
+
+  @Post('qr-receipts/:id/verify')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ops_admin', 'super_admin')
+  verifyQrReceipt(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.paymentsService.verifyQrPaymentReceipt(id, req.user.sub);
+  }
+
+  @Post('qr-receipts/:id/reject')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ops_admin', 'super_admin')
+  rejectQrReceipt(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RejectQrPaymentDto,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.paymentsService.rejectQrPaymentReceipt(
+      id,
+      req.user.sub,
+      dto?.reason,
+    );
   }
 }

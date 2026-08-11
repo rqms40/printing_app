@@ -37,6 +37,7 @@ import {
   CheckSquareOutlined,
   MoreOutlined,
   TrophyOutlined,
+  CustomerServiceOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -60,6 +61,7 @@ import { ProductList } from "@/pages/products/list";
 import { ProductOptionsPage } from "@/pages/products/options";
 import { AddonList } from "@/pages/products-addons/list";
 import { CreditRequestsPage } from "@/pages/credit-requests";
+import { QrPaymentsPage } from "@/pages/qr-payments";
 import { NotificationsPage } from "@/pages/notifications";
 import { TamSurveyList } from "@/pages/tam-surveys/list";
 import { TamSurveyShow } from "@/pages/tam-surveys/show";
@@ -77,6 +79,7 @@ import { QaWorkspacePage } from '@/pages/qa/workspace';
 import { SupplierJobsListPage } from '@/pages/supplier/jobs-list';
 import { SupplierJobShowPage } from '@/pages/supplier/job-show';
 import { SupplierPayoutsListPage } from '@/pages/supplier/payouts-list';
+import { SupplierSupportPage } from '@/pages/supplier/support';
 import { SuperVerificationPage } from '@/pages/super/verification';
 import { SuperZonesPage } from '@/pages/super/zones';
 import { SuperAuditPage } from '@/pages/super/audit';
@@ -156,6 +159,15 @@ function App() {
                 meta: {
                   label: "Payouts",
                   icon: <DollarOutlined />,
+                  portal: "supplier",
+                },
+              },
+              {
+                name: "supplier-support",
+                list: "/supplier/support",
+                meta: {
+                  label: "Support",
+                  icon: <CustomerServiceOutlined />,
                   portal: "supplier",
                 },
               },
@@ -245,6 +257,15 @@ function App() {
                 name: "credit-requests",
                 list: "/credit-requests",
                 meta: { label: "Pilot Credits", parent: "others" },
+              },
+              {
+                name: "qr-payments",
+                list: "/qr-payments",
+                meta: {
+                  label: "QR Payments",
+                  parent: "others",
+                  icon: <DollarOutlined />,
+                },
               },
               {
                 name: "products",
@@ -380,6 +401,7 @@ function App() {
                   <Route path=":id" element={<SupplierJobShowPage />} />
                 </Route>
                 <Route path="/supplier/payouts" element={<SupplierPayoutsListPage />} />
+                <Route path="/supplier/support" element={<SupplierSupportPage />} />
                 <Route path="/orders">
                   <Route index element={<OrderList />} />
                   <Route path="show/:id" element={<OrderShow />} />
@@ -405,6 +427,7 @@ function App() {
                 </Route>
                 <Route path="/products-addons" element={<AddonList />} />
                 <Route path="/credit-requests" element={<CreditRequestsPage />} />
+                <Route path="/qr-payments" element={<QrPaymentsPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/tam-surveys">
                   <Route index element={<TamSurveyList />} />

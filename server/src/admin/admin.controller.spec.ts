@@ -8,14 +8,10 @@ import { OrdersService } from '../orders/orders.service';
 import { RidersService } from '../riders/riders.service';
 import { OrdersGateway } from '../orders/orders.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
-import {
-  Order,
-  OrderStatus,
-  PaymentAuthorizationStatus,
-  PricingStatus,
-} from '../orders/entities/order.entity';
+import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
+import { PaymentsService } from '../payments/payments.service';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
 import { RiderProfile } from '../riders/entities/rider-profile.entity';
@@ -24,10 +20,8 @@ import {
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
 import { SuppliersService } from '../suppliers/suppliers.service';
-import {
-  SupplierAssignment,
-  SupplierAssignmentDecision,
-} from '../matching/entities/supplier-assignment.entity';
+import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import { AuditEvent } from '../audit/entities/audit-event.entity';
 import { In } from 'typeorm';
 import * as userInsights from './user-insights';
 
@@ -44,13 +38,9 @@ describe('AdminController analytics', () => {
   let usersRepo: jest.Mocked<Partial<Repository<User>>>;
   let riderProfilesRepo: jest.Mocked<Partial<Repository<RiderProfile>>>;
   let assignmentsRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
-  let supplierAssignmentsRepo: jest.Mocked<
-    Partial<Repository<SupplierAssignment>>
-  >;
   let creditsService: jest.Mocked<Partial<CreditsService>>;
-  let ordersService: jest.Mocked<
-    Pick<OrdersService, 'updateStatus' | 'attachCatalogSnapshots' | 'findById'>
-  >;
+  let paymentsService: jest.Mocked<Partial<PaymentsService>>;
+  let ordersService: jest.Mocked<Pick<OrdersService, 'updateStatus'>>;
   let ridersService: {
     getAllRidersWithUser: jest.Mock;
     assignOrderToRider: jest.Mock;
@@ -74,14 +64,10 @@ describe('AdminController analytics', () => {
       findOne: jest.fn(),
       save: jest.fn(),
     };
-    supplierAssignmentsRepo = {
-      find: jest.fn().mockResolvedValue([]),
-    };
     creditsService = { getPendingCount: jest.fn() };
+    paymentsService = { getPendingQrReceiptCount: jest.fn() };
     ordersService = {
       updateStatus: jest.fn(),
-      attachCatalogSnapshots: jest.fn(async (orders) => orders),
-      findById: jest.fn(),
     };
     ridersService = {
       getAllRidersWithUser: jest.fn(),
@@ -108,6 +94,7 @@ describe('AdminController analytics', () => {
           useValue: ridersService,
         },
         { provide: CreditsService, useValue: creditsService },
+        { provide: PaymentsService, useValue: paymentsService },
         { provide: OrdersGateway, useValue: ordersGateway },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: SuppliersService, useValue: suppliersService },
@@ -123,7 +110,11 @@ describe('AdminController analytics', () => {
         },
         {
           provide: getRepositoryToken(SupplierAssignment),
-          useValue: supplierAssignmentsRepo,
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(AuditEvent),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         { provide: getRepositoryToken(TamSurvey), useValue: mockRepo() },
         {
@@ -343,6 +334,11 @@ describe('AdminController analytics', () => {
       (
         creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>
       ).getPendingCount.mockResolvedValue(2);
+      (
+        paymentsService as jest.Mocked<
+          Pick<PaymentsService, 'getPendingQrReceiptCount'>
+        >
+      ).getPendingQrReceiptCount.mockResolvedValue(4);
 
       const result = await controller.getBadgeCounts();
 
@@ -355,7 +351,11 @@ describe('AdminController analytics', () => {
           ]),
         },
       });
-      expect(result).toEqual({ newOrders: 3, pendingTopUps: 2 });
+      expect(result).toEqual({
+        newOrders: 3,
+        pendingTopUps: 2,
+        pendingQrPayments: 4,
+      });
     });
 
     it('returns 0 for both when nothing is pending', async () => {
@@ -363,300 +363,23 @@ describe('AdminController analytics', () => {
       (
         creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>
       ).getPendingCount.mockResolvedValue(0);
+      (
+        paymentsService as jest.Mocked<
+          Pick<PaymentsService, 'getPendingQrReceiptCount'>
+        >
+      ).getPendingQrReceiptCount.mockResolvedValue(0);
 
       const result = await controller.getBadgeCounts();
 
-      expect(result).toEqual({ newOrders: 0, pendingTopUps: 0 });
+      expect(result).toEqual({
+        newOrders: 0,
+        pendingTopUps: 0,
+        pendingQrPayments: 0,
+      });
     });
   });
 
   describe('mapOrder', () => {
-    it('projects an arbitrary pending RFQ leaf without Paper/3D coercion or compatibility zeros', () => {
-      const promisedAt = new Date('2026-08-14T09:00:00.000Z');
-      const createdAt = new Date('2026-08-10T09:00:00.000Z');
-      const order = {
-        id: 17,
-        orderId: 'ORD-10017',
-        userId: 2,
-        category: 'business-store-signages',
-        quantity: 2,
-        totalPrice: 0,
-        deliveryFee: 0,
-        finalTotalMinor: null,
-        deliveryFeeMinor: null,
-        quotedTotalMinor: null,
-        pricingStatus: PricingStatus.PENDING_QUOTE,
-        quotedAt: null,
-        quoteAcceptedAt: null,
-        quotedByUserId: null,
-        promisedCompletionAt: null,
-        paymentMethod: 'unselected',
-        paymentStatus: 'pending',
-        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
-        orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
-        deliveryOption: 'delivery',
-        batchOrder: {
-          subtotal: 0,
-          deliveryFee: 250,
-          totalPrice: 0,
-          priorityFee: 0,
-          extraDestinationFee: 0,
-        },
-        currentSupplierAssignment: null,
-        matchingOutcome: {
-          code: 'no_eligible_supplier',
-          message: 'No eligible supplier covers order 17',
-        },
-        items: [
-          {
-            id: 21,
-            orderId: 17,
-            category: 'business-store-signages',
-            categoryId: 31,
-            categorySlug: 'business-store-signages',
-            categoryName: 'Business & Store Signages',
-            pricingModel: 'quote_required',
-            requiredAt: promisedAt,
-            quantity: 2,
-            totalPrice: 0,
-            catalogProduct: {
-              slug: 'business-store-signages',
-              name: 'Business & Store Signages',
-              groupSlug: 'awards-signages',
-              groupName: 'Recognition, Awards & Signage',
-              groupDescription: 'Recognition and visible brand spaces.',
-              examples: ['Acrylic build-up letters', 'LED neon flex'],
-            },
-            specValues: [
-              {
-                specKey: 'material',
-                specLabel: 'Material',
-                inputType: 'text',
-                value: 'acrylic',
-                displayValue: 'Premium acrylic',
-                optionId: null,
-                optionLabel: null,
-                fixedFee: 0,
-                unitCost: 0,
-              },
-            ],
-          },
-        ],
-        statusHistory: [],
-        createdAt,
-        updatedAt: createdAt,
-      } as unknown as Order;
-
-      const projected = (controller as any).mapOrder(order);
-
-      expect(projected).toMatchObject({
-        category: 'business-store-signages',
-        pricing_status: 'pending_quote',
-        quoted_total_minor: null,
-        quoted_at: null,
-        quote_accepted_at: null,
-        quoted_by_user_id: null,
-        promised_completion_at: null,
-        current_supplier_assignment: null,
-        matching_outcome: { code: 'no_eligible_supplier' },
-        unmet_coverage: true,
-        total_price: null,
-        delivery_fee: null,
-        priority_fee: null,
-        extra_destination_fee: null,
-      });
-      expect(projected.items[0]).toMatchObject({
-        category: 'business-store-signages',
-        category_slug: 'business-store-signages',
-        category_name: 'Business & Store Signages',
-        group_slug: 'awards-signages',
-        group_name: 'Recognition, Awards & Signage',
-        group_description: 'Recognition and visible brand spaces.',
-        examples: ['Acrylic build-up letters', 'LED neon flex'],
-        required_at: promisedAt,
-        total_price: null,
-        specs: [
-          expect.objectContaining({
-            key: 'material',
-            label: 'Material',
-            value: 'acrylic',
-            display_value: 'Premium acrylic',
-          }),
-        ],
-        paper_specs: null,
-        three_d_specs: null,
-      });
-      expect(projected.items[0].specs[0]).not.toHaveProperty('fixed_fee');
-      expect(projected.items[0].specs[0]).not.toHaveProperty('unit_cost');
-    });
-
-    it('keeps quoted minor-unit money string-safe and exposes the current assignment terms', () => {
-      const quotedAt = new Date('2026-08-10T09:00:00.000Z');
-      const promisedAt = new Date('2026-08-14T09:00:00.000Z');
-      const order = {
-        id: 18,
-        orderId: 'ORD-10018',
-        userId: 2,
-        category: 'custom-apparel',
-        quantity: 12,
-        totalPrice: 0,
-        deliveryFee: 0,
-        quotedTotalMinor: '9007199254740993',
-        pricingStatus: PricingStatus.QUOTED,
-        quotedAt,
-        quoteAcceptedAt: null,
-        quotedByUserId: 77,
-        promisedCompletionAt: promisedAt,
-        paymentMethod: 'unselected',
-        paymentStatus: 'pending',
-        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
-        orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
-        deliveryOption: 'delivery',
-        currentSupplierAssignment: {
-          id: 91,
-          supplierId: 12,
-          decision: 'accepted',
-          rankPosition: 1,
-          acceptanceDeadline: new Date('2026-08-11T09:00:00.000Z'),
-          finalPriceMinor: '9007199254740993',
-          promisedDate: promisedAt,
-          decidedAt: quotedAt,
-        },
-        items: [],
-        statusHistory: [],
-        createdAt: quotedAt,
-        updatedAt: quotedAt,
-      } as unknown as Order;
-
-      const projected = (controller as any).mapOrder(order);
-
-      expect(projected.quoted_total_minor).toBe('9007199254740993');
-      expect(projected.current_supplier_assignment).toMatchObject({
-        id: 91,
-        supplier_id: 12,
-        decision: 'accepted',
-        final_price_minor: '9007199254740993',
-        promised_date: promisedAt,
-      });
-    });
-
-    it('merges signed supplier media into the full Admin contact without replacing private fields', async () => {
-      const acceptanceDeadline = new Date('2026-08-11T09:00:00.000Z');
-      const now = new Date('2026-08-10T09:00:00.000Z');
-      const order = {
-        id: 22,
-        orderId: 'ORD-10022',
-        userId: 2,
-        category: 'custom-apparel',
-        quantity: 12,
-        totalPrice: 100,
-        deliveryFee: 0,
-        pricingStatus: PricingStatus.QUOTED,
-        paymentMethod: 'unselected',
-        paymentStatus: 'pending',
-        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
-        orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
-        deliveryOption: 'delivery',
-        items: [],
-        statusHistory: [],
-        createdAt: now,
-        updatedAt: now,
-      } as unknown as Order;
-      const assignment = {
-        id: 91,
-        orderId: 22,
-        supplierId: 12,
-        decision: SupplierAssignmentDecision.ACCEPTED,
-        rankPosition: 1,
-        acceptanceDeadline,
-        finalPriceMinor: '10000',
-        promisedDate: now,
-        decidedAt: now,
-        selfQcEvidenceFileIds: [501],
-        supplier: {
-          id: 12,
-          businessName: 'Full Admin Print Co',
-          address: '789 Exact Supplier Address, Davao City',
-        },
-      } as SupplierAssignment;
-      ordersRepo.findOneOrFail.mockResolvedValue(order);
-      supplierAssignmentsRepo.find!.mockResolvedValue([assignment]);
-      ordersService.findById.mockResolvedValue({
-        ...order,
-        assignedSupplierContact: {
-          businessName: 'Full Admin Print Co',
-          logoUrl: 'https://signed/logo',
-          broadAddress: 'Exact Supplier, Davao City',
-          selfQcEvidenceUrls: ['https://signed/evidence'],
-        },
-      } as Order);
-
-      const result = await controller.getOrder(order.id);
-
-      expect(result.assigned_supplier_contact).toEqual({
-        supplier_id: 12,
-        business_name: 'Full Admin Print Co',
-        decision: SupplierAssignmentDecision.ACCEPTED,
-        acceptance_deadline: acceptanceDeadline,
-        assignment_id: 91,
-        logo_url: 'https://signed/logo',
-        address: '789 Exact Supplier Address, Davao City',
-        broad_address: 'Exact Supplier, Davao City',
-        self_qc_evidence_urls: ['https://signed/evidence'],
-        self_qc_evidence_file_ids: [501],
-      });
-    });
-
-    it('preserves legacy spec branches only for exact paper and 3d leaves', () => {
-      const base = {
-        id: 19,
-        orderId: 'ORD-10019',
-        userId: 2,
-        quantity: 1,
-        totalPrice: 10,
-        deliveryFee: 0,
-        quotedTotalMinor: null,
-        pricingStatus: PricingStatus.ACCEPTED,
-        paymentMethod: 'cash',
-        paymentStatus: 'paid',
-        paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
-        orderStatus: OrderStatus.COMPLETED,
-        deliveryOption: 'pickup',
-        statusHistory: [],
-        createdAt: new Date('2026-08-01T09:00:00.000Z'),
-        updatedAt: new Date('2026-08-01T09:00:00.000Z'),
-      };
-      const values = [
-        {
-          specKey: 'file_format',
-          specLabel: 'File Format',
-          value: 'stl',
-          displayValue: 'STL',
-          optionId: null,
-          optionLabel: null,
-        },
-      ];
-
-      const unknown = (controller as any).mapOrder({
-        ...base,
-        category: 'future-model-service',
-        items: [{ category: 'future-model-service', specValues: values }],
-      } as unknown as Order);
-      const legacy = (controller as any).mapOrder({
-        ...base,
-        category: '3d',
-        items: [{ category: '3d', categorySlug: '3d', specValues: values }],
-      } as unknown as Order);
-
-      expect(unknown.category).toBe('future-model-service');
-      expect(unknown.three_d_specs).toBeNull();
-      expect(unknown.items[0].three_d_specs).toBeNull();
-      expect(legacy.three_d_specs).toMatchObject({ file_format: 'stl' });
-      expect(legacy.items[0].three_d_specs).toMatchObject({
-        file_format: 'stl',
-      });
-    });
-
     it('includes pinned delivery coordinates and unique multidrop destinations', () => {
       const order = {
         id: 7,
@@ -855,41 +578,44 @@ describe('AdminController analytics', () => {
         captured_by_rider_id: 10,
       });
     });
-  });
 
-  describe('matching outcome enrichment', () => {
-    it('bounds candidate lookups to four concurrent orders', async () => {
-      let active = 0;
-      let peak = 0;
-      const matchingService = {
-        getCandidates: jest.fn(async () => {
-          active += 1;
-          peak = Math.max(peak, active);
-          await new Promise((resolve) => setTimeout(resolve, 10));
-          active -= 1;
-          return {
-            outcome: { code: 'no_eligible_supplier', message: 'No coverage' },
-            candidates: [],
-          };
-        }),
-      };
-      Object.defineProperty(controller, 'matchingService', {
-        value: matchingService,
+    it('includes proof of pickup photo metadata for admin order review', () => {
+      const order = {
+        id: 8,
+        orderId: 'ORD-10008',
+        userId: 1,
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 12,
+        deliveryFee: 0,
+        paymentMethod: 'gcash',
+        paymentStatus: 'paid',
+        orderStatus: OrderStatus.PICKED_UP,
+        deliveryOption: 'delivery',
+        assignedRiderId: 70,
+        pickupProof: {
+          type: 'photo',
+          fileId: 25,
+          objectKey: 'uploads/proof_of_delivery/pickup-25.jpg',
+          signatureData: null,
+          capturedAt: new Date('2026-05-02T18:00:00.000Z'),
+          capturedByRiderId: 10,
+        },
+        statusHistory: [],
+        createdAt: new Date('2026-05-02T17:00:00.000Z'),
+        updatedAt: new Date('2026-05-02T18:00:00.000Z'),
+      } as unknown as Order;
+
+      const mapped = (controller as any).mapOrder(order);
+
+      expect(mapped.pickup_proof).toEqual({
+        type: 'photo',
+        file_id: 25,
+        object_key: 'uploads/proof_of_delivery/pickup-25.jpg',
+        signature_data: null,
+        captured_at: new Date('2026-05-02T18:00:00.000Z'),
+        captured_by_rider_id: 10,
       });
-      const orders = Array.from({ length: 9 }, (_, index) => ({
-        id: index + 1,
-        orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
-      })) as Order[];
-
-      const resultPromise = (controller as any).attachMatchingOutcomes(orders);
-      await jest.runAllTimersAsync();
-      const result = (await resultPromise) as Array<
-        Order & { unmetCoverage?: boolean }
-      >;
-
-      expect(peak).toBe(4);
-      expect(matchingService.getCandidates).toHaveBeenCalledTimes(9);
-      expect(result.every((order) => order.unmetCoverage === true)).toBe(true);
     });
   });
 

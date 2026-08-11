@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,7 +9,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
-import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
+import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 class CheckoutFooter extends ConsumerWidget {
@@ -17,15 +18,16 @@ class CheckoutFooter extends ConsumerWidget {
     required this.onPlaceOrder,
     this.placeOrderKey,
   });
-  final VoidCallback onPlaceOrder;
+
+  /// Async place-order handler. Footer awaits it so Flutter web does not log
+  /// uncaught promise rejections (`T[_eval] is not a function`).
+  final Future<void> Function() onPlaceOrder;
   final GlobalKey? placeOrderKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final fees = ref.watch(checkoutFeesProvider);
     final state = ref.watch(checkoutProvider);
-    final isRfq = state.hasPendingQuoteItems;
-    final catalogState = isRfq ? ref.watch(productCatalogProvider) : null;
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
@@ -41,19 +43,14 @@ class CheckoutFooter extends ConsumerWidget {
       DeliveryMode.delivery => hasDeliveryAddress,
       DeliveryMode.multidrop => hasMultidropDestinations,
     };
-    final rfqCatalogAuthorized =
-        catalogState != null &&
-        catalogState.canSubmit &&
-        state.items.where((item) => item.quoteRequired).every((item) {
-          final product = catalogState.catalog.productBySlug(item.productSlug);
-          return product != null && product.pricingModel == 'quote_required';
-        });
+    final needsQrReceipt =
+        state.paymentMethod == PaymentMethod.qrPhInstapay &&
+        state.qrReceiptFileId == null;
     final canPlace =
         state.items.isNotEmpty &&
-        !state.hasMixedPricingModes &&
-        (!isRfq || rfqCatalogAuthorized) &&
-        (isRfq || state.paymentMethod != null) &&
-        hasRequiredDestination;
+        state.paymentMethod != null &&
+        hasRequiredDestination &&
+        !needsQrReceipt;
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -79,82 +76,67 @@ class CheckoutFooter extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!isRfq)
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total',
-                      style: AppTypography.caption.copyWith(
-                        color: colors.onSurfaceDim,
-                        fontSize: 11,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      formatCurrency(fees.total),
-                      style: AppTypography.h2.copyWith(
-                        color: colors.onBackground,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        height: 1.0,
-                      ),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => context.go('/customer/home'),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        HugeIcon(
-                          icon: HugeIcons.strokeRoundedHome01,
-                          size: 16,
-                          color: colors.onSurfaceDim,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          'Home',
-                          style: AppTypography.caption.copyWith(
-                            color: colors.onSurfaceDim,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+          Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Total',
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
+                      fontSize: 11,
+                      letterSpacing: 0.5,
                     ),
                   ),
-                ),
-              ],
-            ),
-          if (isRfq) ...[
-            Text(
-              state.hasMixedPricingModes
-                  ? 'Submit priced and quote-request items separately.'
-                  : !rfqCatalogAuthorized
-                  ? 'Refresh the catalog to submit this request.'
-                  : 'Price and turnaround pending review',
-              style: AppTypography.bodyBold.copyWith(
-                color: colors.onBackground,
+                  const SizedBox(height: 2),
+                  Text(
+                    formatCurrency(fees.total),
+                    style: AppTypography.h2.copyWith(
+                      color: colors.onBackground,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      height: 1.0,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-          ] else
-            const SizedBox(height: AppSpacing.md),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => context.go('/customer/home'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      HugeIcon(
+                        icon: HugeIcons.strokeRoundedHome01,
+                        size: 16,
+                        color: colors.onSurfaceDim,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Home',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
           KeyedSubtree(
             key: placeOrderKey,
             child: _PlaceOrderButton(
               enabled: canPlace,
-              label: isRfq ? 'Submit quote request' : 'Place Order',
-              onTap: canPlace ? onPlaceOrder : null,
+              onPlaceOrder: canPlace ? onPlaceOrder : null,
               colors: colors,
             ),
           ),
@@ -164,25 +146,46 @@ class CheckoutFooter extends ConsumerWidget {
   }
 }
 
-class _PlaceOrderButton extends StatelessWidget {
+class _PlaceOrderButton extends StatefulWidget {
   const _PlaceOrderButton({
     required this.enabled,
-    required this.onTap,
+    required this.onPlaceOrder,
     required this.colors,
-    required this.label,
   });
   final bool enabled;
-  final VoidCallback? onTap;
+  final Future<void> Function()? onPlaceOrder;
   final AppColorSet colors;
-  final String label;
+
+  @override
+  State<_PlaceOrderButton> createState() => _PlaceOrderButtonState();
+}
+
+class _PlaceOrderButtonState extends State<_PlaceOrderButton> {
+  bool _submitting = false;
+
+  Future<void> _handleTap() async {
+    final action = widget.onPlaceOrder;
+    if (!widget.enabled || _submitting || action == null) return;
+    setState(() => _submitting = true);
+    try {
+      await action();
+    } catch (e) {
+      // Parent already surfaces errors; keep web free of uncaught promises.
+      debugPrint('Place order button error: $e');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final enabled = widget.enabled && !_submitting;
+    final colors = widget.colors;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: AppRadius.borderXl,
-        onTap: onTap,
+        onTap: enabled ? _handleTap : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           height: 56,
@@ -203,8 +206,19 @@ class _PlaceOrderButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              if (_submitting) ...[
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.background,
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
               Text(
-                label,
+                _submitting ? 'Placing…' : 'Place Order',
                 style: AppTypography.bodyBold.copyWith(
                   color: colors.background,
                   fontSize: 16,
@@ -212,12 +226,14 @@ class _PlaceOrderButton extends StatelessWidget {
                   letterSpacing: 0.3,
                 ),
               ),
-              const SizedBox(width: 8),
-              HugeIcon(
-                icon: HugeIcons.strokeRoundedArrowRight01,
-                size: 20,
-                color: colors.background,
-              ),
+              if (!_submitting) ...[
+                const SizedBox(width: 8),
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedArrowRight01,
+                  size: 20,
+                  color: colors.background,
+                ),
+              ],
             ],
           ),
         ),

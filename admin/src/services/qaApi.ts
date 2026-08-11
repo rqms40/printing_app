@@ -123,6 +123,39 @@ export interface QaWorkspaceDetail {
   allowedDecisions: QaDecision[];
 }
 
+export interface PickupQaSubmissionItem {
+  id: number;
+  orderId: number;
+  orderPublicId: string | null;
+  orderStatus: string | null;
+  actorRole: "supplier" | "rider" | string;
+  actorUserId: number;
+  actorName: string | null;
+  actorEmail: string | null;
+  supplierAssignmentId: number | null;
+  deliveryAssignmentId: number | null;
+  checklistResults: Record<string, { pass?: boolean } | boolean>;
+  notes: string | null;
+  evidenceFileIds: number[];
+  createdAt: string;
+  clientName: string | null;
+  clientEmail: string | null;
+}
+
+export async function fetchPickupQaQueue(): Promise<PickupQaSubmissionItem[]> {
+  const res = await apiClient.get<PickupQaSubmissionItem[]>(
+    "/ops/qa/pickup-submissions",
+  );
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function fetchPickupQaSubmission(
+  id: number,
+): Promise<PickupQaSubmissionItem & { checklistDefinition?: unknown }> {
+  const res = await apiClient.get(`/ops/qa/pickup-submissions/${id}`);
+  return res.data;
+}
+
 export interface QaDecisionPayload {
   decision: QaDecision;
   checklist: Record<string, boolean | string>;

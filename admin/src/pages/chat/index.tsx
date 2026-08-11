@@ -20,7 +20,7 @@ export function ChatInboxPage() {
         items={[
           {
             key: "1",
-            label: "Live Chat",
+            label: "Live Chat / Support",
             children: <div style={{ height: "calc(100vh - 64px - 60px)" }}><LiveChatTab /></div>,
           },
           {

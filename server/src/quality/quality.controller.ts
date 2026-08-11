@@ -18,20 +18,49 @@ import { QualityService } from './quality.service';
 
 @ApiTags('ops-qa')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ops_admin', 'super_admin')
+@UseGuards(JwtAuthGuard)
 @Controller('ops/qa')
 export class QualityController {
   constructor(private readonly qualityService: QualityService) {}
 
+  /**
+   * Shared Pickup QA checklist definition (supplier, rider, ops).
+   * Authenticated so mobile/web clients can render the same lines the server enforces.
+   */
+  @Get('pickup-checklist')
+  @Roles('ops_admin', 'super_admin', 'supplier', 'rider')
+  @UseGuards(RolesGuard)
+  getPickupChecklistDefinition() {
+    return this.qualityService.getPickupQaChecklistDefinition();
+  }
+
+  /** Supplier + rider pickup QA submissions for ops/superadmin review. */
+  @Get('pickup-submissions')
+  @Roles('ops_admin', 'super_admin')
+  @UseGuards(RolesGuard)
+  getPickupQaQueue() {
+    return this.qualityService.getPickupQaQueue();
+  }
+
+  @Get('pickup-submissions/:id')
+  @Roles('ops_admin', 'super_admin')
+  @UseGuards(RolesGuard)
+  getPickupQaSubmission(@Param('id', ParseIntPipe) id: number) {
+    return this.qualityService.getPickupQaSubmission(id);
+  }
+
   /** Orders awaiting Ops QA (`submitted` + `needs_qa`). */
   @Get('queue')
+  @Roles('ops_admin', 'super_admin')
+  @UseGuards(RolesGuard)
   getQueue() {
     return this.qualityService.getQueue();
   }
 
   /** Workspace detail with signed artwork URL (ops only). */
   @Get(':orderId')
+  @Roles('ops_admin', 'super_admin')
+  @UseGuards(RolesGuard)
   getWorkspace(
     @Param('orderId', ParseIntPipe) orderId: number,
     @Request() req: RequestWithUser,
@@ -48,6 +77,8 @@ export class QualityController {
 
   /** Record QA decision, QualityReview row, status history + audit. */
   @Post(':orderId/decision')
+  @Roles('ops_admin', 'super_admin')
+  @UseGuards(RolesGuard)
   recordDecision(
     @Param('orderId', ParseIntPipe) orderId: number,
     @Body() dto: QualityDecisionDto,

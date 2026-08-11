@@ -106,6 +106,12 @@ export interface SupplierJobDetail {
     }>;
   };
   allowedActions: SupplierJobAction[] | string[];
+  /** Milestones already recorded (omit from selectable list). */
+  productionMilestones?: Array<{
+    milestone: string;
+    reachedAt?: string;
+    notes?: string | null;
+  }>;
 }
 
 export interface SupplierJobActionResult {

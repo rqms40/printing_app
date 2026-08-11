@@ -316,6 +316,7 @@ class SupplierJobDetail {
     this.artworkFileMetadataId,
     this.artworkFileName,
     this.artworkSignedUrl,
+    this.productionMilestones = const [],
     this.rankPosition = 0,
     this.decidedAt,
     this.createdAt,
@@ -351,8 +352,27 @@ class SupplierJobDetail {
 
   final List<SupplierJobItemSpecs> items;
   final List<String> allowedActions;
+  /// Milestone keys already recorded (e.g. materials_setup).
+  final List<String> productionMilestones;
 
   bool hasAction(String action) => allowedActions.contains(action);
+
+  bool hasReachedMilestone(ProductionMilestone m) {
+    if (productionMilestones.contains(m.apiValue)) return true;
+    final targetIndex = ProductionMilestone.values.indexOf(m);
+    for (final rm in productionMilestones) {
+      final reachedIndex = ProductionMilestone.values
+          .indexWhere((e) => e.apiValue == rm);
+      if (reachedIndex >= targetIndex) return true;
+    }
+    return false;
+  }
+
+  /// Remaining milestones the supplier can still set.
+  List<ProductionMilestone> get availableMilestones => ProductionMilestone
+      .values
+      .where((m) => !hasReachedMilestone(m))
+      .toList();
 
   bool get canAccept => hasAction(SupplierJobAction.accept);
   bool get canDecline => hasAction(SupplierJobAction.decline);
@@ -395,6 +415,20 @@ class SupplierJobDetail {
     );
     final rawItems = specs['items'];
     final rawActions = json['allowedActions'];
+    final rawMilestones = json['productionMilestones'];
+    final reached = <String>[];
+    if (rawMilestones is List) {
+      for (final entry in rawMilestones) {
+        if (entry is Map) {
+          final m = entry['milestone'] ?? entry['key'];
+          if (m != null && m.toString().trim().isNotEmpty) {
+            reached.add(m.toString().trim().toLowerCase());
+          }
+        } else if (entry != null) {
+          reached.add(entry.toString().trim().toLowerCase());
+        }
+      }
+    }
 
     return SupplierJobDetail(
       assignmentId: _asInt(assignment['id']),
@@ -442,6 +476,7 @@ class SupplierJobDetail {
       allowedActions: rawActions is List
           ? rawActions.map((e) => e.toString()).toList()
           : const [],
+      productionMilestones: reached,
     );
   }
 }

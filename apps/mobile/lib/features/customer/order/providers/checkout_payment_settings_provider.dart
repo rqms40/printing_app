@@ -36,6 +36,7 @@ class CheckoutPaymentSettings {
     }
     final methods = <PaymentMethod>[
       PaymentMethod.gridCredits,
+      PaymentMethod.qrPhInstapay,
       PaymentMethod.cod,
     ];
     if (showLiveWallets) {

@@ -306,11 +306,16 @@ export class ChatGateway implements OnGatewayConnection {
       });
   }
 
-  notifyNewConversation(conv: Conversation, customerName: string) {
+  notifyNewConversation(
+    conv: Conversation,
+    customerName: string,
+    participantRole?: string | null,
+  ) {
     this.server.to('admin_inbox').emit('new-conversation', {
       conversationId: conv.id,
       customerId: conv.customerId,
       customerName,
+      participantRole: participantRole ?? null,
       type: conv.type,
       orderId: conv.orderId ?? null,
     });

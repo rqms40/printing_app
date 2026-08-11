@@ -15,11 +15,8 @@ import {
   QualityReviewDecision,
   QualityReviewRiskLevel,
 } from './entities/quality-review.entity';
-import {
-  Order,
-  OrderStatus,
-  PricingStatus,
-} from '../orders/entities/order.entity';
+import { PickupQaSubmission } from './entities/pickup-qa-submission.entity';
+import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { AuditService } from '../audit/audit.service';
 import { FilesService } from '../files/files.service';
@@ -31,7 +28,6 @@ import {
   QualityDecisionDto,
   QualityDecisionInput,
 } from './dto/quality-decision.dto';
-import { MatchingService } from '../matching/matching.service';
 
 describe('qualityDecisionToOrderStatus', () => {
   it('maps needs_correction → client_correction', () => {
@@ -67,9 +63,6 @@ describe('QualityService', () => {
     Pick<AuditService, 'recordOrderStatusTransition' | 'append'>
   >;
   let filesService: jest.Mocked<Pick<FilesService, 'getPresignedUrl'>>;
-  let matchingService: {
-    getCoverageOutcomes: jest.Mock;
-  };
 
   let txOrdersRepo: {
     findOne: jest.Mock;
@@ -156,19 +149,6 @@ describe('QualityService', () => {
         .fn()
         .mockResolvedValue('https://minio.example/signed'),
     };
-    matchingService = {
-      getCoverageOutcomes: jest.fn().mockResolvedValue(
-        new Map([
-          [
-            42,
-            {
-              code: 'eligible_suppliers_found',
-              message: '1 eligible supplier found',
-            },
-          ],
-        ]),
-      ),
-    };
 
     const dataSource = {
       transaction: jest.fn(async (fn: (m: unknown) => Promise<unknown>) =>
@@ -188,11 +168,19 @@ describe('QualityService', () => {
       providers: [
         QualityService,
         { provide: getRepositoryToken(QualityReview), useValue: reviewRepo },
+        {
+          provide: getRepositoryToken(PickupQaSubmission),
+          useValue: {
+            find: jest.fn().mockResolvedValue([]),
+            findOne: jest.fn(),
+            save: jest.fn(),
+            create: jest.fn((x) => x),
+          },
+        },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: DataSource, useValue: dataSource },
         { provide: AuditService, useValue: auditService },
         { provide: FilesService, useValue: filesService },
-        { provide: MatchingService, useValue: matchingService },
       ],
     }).compile();
 
@@ -425,11 +413,6 @@ describe('QualityService', () => {
         { id: 42, orderStatus: OrderStatus.SUBMITTED },
         { orderStatus: OrderStatus.NEEDS_QA },
       );
-      expect(txOrdersRepo.findOne).toHaveBeenCalledWith(
-        expect.objectContaining({
-          relations: ['user', 'items', 'items.specValues', 'deliveryAddress'],
-        }),
-      );
     });
   });
 
@@ -453,87 +436,6 @@ describe('QualityService', () => {
           },
         }),
       );
-    });
-
-    it('returns a bounded dynamic RFQ projection and authoritative coverage in one batch', async () => {
-      const order = baseOrder({
-        pricingStatus: PricingStatus.PENDING_QUOTE,
-        totalPrice: 0,
-        deliveryFee: 0,
-        quotedTotalMinor: null,
-        items: [
-          {
-            id: 501,
-            orderId: 42,
-            category: 'flyers',
-            categorySlug: 'flyers',
-            categoryName: 'Flyers',
-            quantity: 100,
-            totalPrice: 0,
-            specValues: [
-              {
-                specKey: 'size',
-                specLabel: 'Size',
-                value: 'a5',
-                displayValue: 'A5',
-              },
-            ],
-          },
-          {
-            id: 502,
-            orderId: 42,
-            category: 'custom-apparel',
-            categorySlug: 'custom-apparel',
-            categoryName: 'Custom Apparel',
-            quantity: 12,
-            totalPrice: 0,
-            specValues: [],
-          },
-        ],
-      } as Partial<Order>);
-      ordersRepo.find = jest.fn().mockResolvedValue([order]);
-      reviewRepo.find = jest.fn().mockResolvedValue([]);
-      matchingService.getCoverageOutcomes.mockResolvedValue(
-        new Map([
-          [
-            42,
-            {
-              code: 'no_eligible_supplier',
-              message: 'No eligible supplier covers order 42',
-            },
-          ],
-        ]),
-      );
-
-      const [row] = await service.getQueue();
-
-      expect(ordersRepo.find).toHaveBeenCalledWith(
-        expect.objectContaining({
-          take: 100,
-          relations: ['user', 'items', 'items.specValues', 'deliveryAddress'],
-        }),
-      );
-      expect(matchingService.getCoverageOutcomes).toHaveBeenCalledTimes(1);
-      expect(matchingService.getCoverageOutcomes).toHaveBeenCalledWith([order]);
-      expect(row).toMatchObject({
-        totalPrice: null,
-        pricingStatus: PricingStatus.PENDING_QUOTE,
-        quotedTotalMinor: null,
-        unmetCoverage: true,
-        matchingOutcome: {
-          code: 'no_eligible_supplier',
-          message: 'No eligible supplier covers order 42',
-        },
-        items: [
-          {
-            category: 'flyers',
-            categoryName: 'Flyers',
-            totalPrice: null,
-            specs: [{ key: 'size', label: 'Size', displayValue: 'A5' }],
-          },
-          { category: 'custom-apparel', categoryName: 'Custom Apparel' },
-        ],
-      });
     });
   });
 

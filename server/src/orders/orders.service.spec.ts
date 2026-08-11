@@ -236,6 +236,9 @@ describe('OrdersService', () => {
     evaluateCodEligibilityForUser: jest.Mock;
     evaluateCodEligibilityForOrders: jest.Mock;
     ensurePendingCodCollection: jest.Mock;
+    assertQrPaymentVerifiedForAuthorization: jest.Mock;
+    assertOwnedPaymentReceiptFile: jest.Mock;
+    createPendingQrReceipt: jest.Mock;
   };
   let notificationsService: Partial<NotificationsService>;
   let catalogPricingService: { quote: jest.Mock };
@@ -422,6 +425,9 @@ describe('OrdersService', () => {
         .mockResolvedValue({ eligible: false }),
       evaluateCodEligibilityForOrders: jest.fn().mockResolvedValue(new Map()),
       ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
+      assertQrPaymentVerifiedForAuthorization: jest.fn().mockResolvedValue(undefined),
+      assertOwnedPaymentReceiptFile: jest.fn().mockResolvedValue({ id: 1 }),
+      createPendingQrReceipt: jest.fn().mockResolvedValue({ id: 1 }),
     };
     notificationsService = {
       create: jest.fn().mockResolvedValue(undefined),

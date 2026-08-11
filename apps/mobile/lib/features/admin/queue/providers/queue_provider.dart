@@ -75,6 +75,11 @@ OrderStatus _parseOrderStatus(String value) {
 
 PaymentMethod _parsePaymentMethod(String value) {
   final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
+  if (normalized == 'qrphinstapay' ||
+      normalized == 'qrph' ||
+      normalized == 'instapayqr') {
+    return PaymentMethod.qrPhInstapay;
+  }
   if (normalized == 'credits' ||
       normalized == 'gridcredit' ||
       normalized == 'gridcredits' ||

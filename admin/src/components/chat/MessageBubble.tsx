@@ -314,10 +314,42 @@ function MarkdownContent({
   );
 }
 
-export function MessageBubble({ message }: { message: ChatMessage }) {
+export function MessageBubble({
+  message,
+  /** When true, participant (customer/supplier) messages are right-aligned. */
+  viewerIsParticipant = false,
+}: {
+  message: ChatMessage;
+  viewerIsParticipant?: boolean;
+}) {
   const { token } = theme.useToken();
   const roleConfigs = useRoleConfigs();
-  const cfg = roleConfigs[message.senderRole];
+  const baseCfg = roleConfigs[message.senderRole] ?? roleConfigs.customer;
+
+  // From the participant's view, own messages (customer) should sit on the right
+  // and admin replies on the left — opposite of the ops inbox.
+  let cfg = baseCfg;
+  if (viewerIsParticipant) {
+    if (message.senderRole === "customer") {
+      cfg = {
+        ...baseCfg,
+        align: "flex-end",
+        bg: "#FFDE58",
+        color: "#141414",
+        borderRadius: "14px 14px 4px 14px",
+        shadow: "0 2px 10px rgba(255,222,88,0.18)",
+      };
+    } else if (message.senderRole === "admin") {
+      cfg = {
+        ...baseCfg,
+        align: "flex-start",
+        bg: token.colorBgElevated,
+        color: token.colorText,
+        borderRadius: "14px 14px 14px 4px",
+        label: "GRIDGO Support",
+      };
+    }
+  }
 
   const hasImage =
     message.attachmentFileId != null &&

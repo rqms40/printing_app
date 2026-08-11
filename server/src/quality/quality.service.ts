@@ -6,11 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import {
-  Order,
-  OrderStatus,
-  PricingStatus,
-} from '../orders/entities/order.entity';
+import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import {
   assertTransition,
@@ -33,27 +29,14 @@ import {
 } from './dto/quality-decision.dto';
 import { ResubmitCorrectionDto } from './dto/resubmit-correction.dto';
 import { RejectProofDto } from './dto/reject-proof.dto';
+import { PickupQaSubmission } from './entities/pickup-qa-submission.entity';
 import {
-  MatchingService,
-  type MatchingCoverageOutcome,
-} from '../matching/matching.service';
-
-const QA_QUEUE_LIMIT = 100;
-
-type QaProjectedItem = {
-  id: number;
-  category: string;
-  categoryName: string | null;
-  groupName: string | null;
-  quantity: number;
-  totalPrice: number | null;
-  specs: Array<{
-    key: string;
-    label: string;
-    value: string;
-    displayValue: string;
-  }>;
-};
+  assertPickupQaChecklistPassed,
+  PICKUP_QA_CHECKLIST_ITEMS,
+  type PickupQaActorRole,
+  type PickupQaChecklistResults,
+} from './pickup-qa-checklist';
+import type { EntityManager } from 'typeorm';
 
 /** Queue statuses — submitted is auto-promoted into needs_qa on workspace/decision. */
 const QA_QUEUE_STATUSES: OrderStatus[] = [
@@ -88,12 +71,7 @@ export type QaQueueItem = {
   orderStatus: OrderStatus;
   category: string;
   quantity: number;
-  totalPrice: number | null;
-  pricingStatus: PricingStatus;
-  quotedTotalMinor: string | null;
-  items: QaProjectedItem[];
-  matchingOutcome: MatchingCoverageOutcome | null;
-  unmetCoverage: boolean;
+  totalPrice: number;
   fileName: string | null;
   fileMetadataId: number | null;
   userId: number;
@@ -116,13 +94,8 @@ export type QaWorkspaceDetail = {
     orderStatus: OrderStatus;
     category: string;
     quantity: number;
-    totalPrice: number | null;
-    deliveryFee: number | null;
-    pricingStatus: PricingStatus;
-    quotedTotalMinor: string | null;
-    items: QaProjectedItem[];
-    matchingOutcome: MatchingCoverageOutcome | null;
-    unmetCoverage: boolean;
+    totalPrice: number;
+    deliveryFee: number;
     paymentMethod: string;
     deliveryOption: string;
     fileName: string | null;
@@ -202,9 +175,7 @@ function mapDecisionInput(input: QualityDecisionInput): QualityReviewDecision {
       return QualityReviewDecision.BLOCKED;
     default: {
       const _exhaustive: never = input;
-      throw new BadRequestException(
-        `Unknown QA decision: ${String(_exhaustive)}`,
-      );
+      throw new BadRequestException(`Unknown QA decision: ${_exhaustive}`);
     }
   }
 }
@@ -266,33 +237,171 @@ export class QualityService {
   constructor(
     @InjectRepository(QualityReview)
     private readonly reviewRepo: Repository<QualityReview>,
+    @InjectRepository(PickupQaSubmission)
+    private readonly pickupQaRepo: Repository<PickupQaSubmission>,
     @InjectRepository(Order)
     private readonly ordersRepo: Repository<Order>,
     private readonly dataSource: DataSource,
     private readonly auditService: AuditService,
     private readonly filesService: FilesService,
-    private readonly matchingService: MatchingService,
   ) {}
 
-  private projectItems(order: Order): QaProjectedItem[] {
-    const pending = order.pricingStatus === PricingStatus.PENDING_QUOTE;
-    return (order.items ?? []).map((item) => {
-      const dynamic = item as typeof item & { groupName?: string | null };
-      return {
-        id: item.id,
-        category: item.categorySlug ?? item.category,
-        categoryName: item.categoryName ?? null,
-        groupName: dynamic.groupName ?? null,
-        quantity: item.quantity,
-        totalPrice: pending ? null : Number(item.totalPrice),
-        specs: (item.specValues ?? []).map((spec) => ({
-          key: spec.specKey,
-          label: spec.specLabel,
-          value: spec.value,
-          displayValue: spec.displayValue,
-        })),
-      };
+  /** Canonical Pickup QA checklist definition for clients / admin UI. */
+  getPickupQaChecklistDefinition() {
+    return {
+      title: 'Pickup QA Checklist',
+      description:
+        'Physical quality gate before an order leaves supplier custody. Do not accept an order that fails any line without flagging it first.',
+      items: PICKUP_QA_CHECKLIST_ITEMS,
+    };
+  }
+
+  /**
+   * Persist a fully-passed supplier/rider pickup QA checklist.
+   * Call inside an existing transaction via `manager`, or without for standalone.
+   */
+  async recordPickupQaSubmission(
+    input: {
+      orderId: number;
+      actorRole: PickupQaActorRole;
+      actorUserId: number;
+      checklist: Record<string, unknown>;
+      notes?: string | null;
+      evidenceFileIds?: number[];
+      supplierAssignmentId?: number | null;
+      deliveryAssignmentId?: number | null;
+    },
+    manager?: EntityManager,
+  ): Promise<{
+    submission: PickupQaSubmission;
+    checklistResults: PickupQaChecklistResults;
+  }> {
+    let checklistResults: PickupQaChecklistResults;
+    try {
+      checklistResults = assertPickupQaChecklistPassed(input.checklist);
+    } catch (err) {
+      throw new BadRequestException({
+        code: 'pickup_qa_checklist_incomplete',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Pickup QA checklist incomplete — all checks must pass',
+      });
+    }
+
+    const repo = manager
+      ? manager.getRepository(PickupQaSubmission)
+      : this.pickupQaRepo;
+
+    const submission = await repo.save(
+      repo.create({
+        orderId: input.orderId,
+        actorRole: input.actorRole,
+        actorUserId: input.actorUserId,
+        supplierAssignmentId: input.supplierAssignmentId ?? null,
+        deliveryAssignmentId: input.deliveryAssignmentId ?? null,
+        checklistResults,
+        notes: input.notes?.trim() || null,
+        evidenceFileIds: input.evidenceFileIds ?? [],
+      }),
+    );
+
+    if (manager) {
+      await this.auditService.append(
+        {
+          actorId: input.actorUserId,
+          actorRole: input.actorRole,
+          action: 'pickup_qa_submitted',
+          entityType: 'pickup_qa_submission',
+          entityId: String(submission.id),
+          orderId: input.orderId,
+          reason: `${input.actorRole} completed Pickup QA checklist`,
+          metadata: {
+            checklistResults,
+            supplierAssignmentId: input.supplierAssignmentId ?? null,
+            deliveryAssignmentId: input.deliveryAssignmentId ?? null,
+            evidenceFileIds: input.evidenceFileIds ?? [],
+          },
+        },
+        manager,
+      );
+    } else {
+      await this.auditService.append({
+        actorId: input.actorUserId,
+        actorRole: input.actorRole,
+        action: 'pickup_qa_submitted',
+        entityType: 'pickup_qa_submission',
+        entityId: String(submission.id),
+        orderId: input.orderId,
+        reason: `${input.actorRole} completed Pickup QA checklist`,
+        metadata: {
+          checklistResults,
+          supplierAssignmentId: input.supplierAssignmentId ?? null,
+          deliveryAssignmentId: input.deliveryAssignmentId ?? null,
+          evidenceFileIds: input.evidenceFileIds ?? [],
+        },
+      });
+    }
+
+    return { submission, checklistResults };
+  }
+
+  /** Ops/superadmin: list supplier + rider pickup QA submissions (newest first). */
+  async getPickupQaQueue(limit = 100) {
+    const take = Math.min(Math.max(limit, 1), 200);
+    const rows = await this.pickupQaRepo.find({
+      relations: ['order', 'order.user', 'actor'],
+      order: { createdAt: 'DESC' },
+      take,
     });
+
+    return rows.map((row) => ({
+      id: row.id,
+      orderId: row.orderId,
+      orderPublicId: row.order?.orderId ?? null,
+      orderStatus: row.order?.orderStatus ?? null,
+      actorRole: row.actorRole,
+      actorUserId: row.actorUserId,
+      actorName: row.actor?.fullName ?? row.actor?.email ?? null,
+      actorEmail: row.actor?.email ?? null,
+      supplierAssignmentId: row.supplierAssignmentId,
+      deliveryAssignmentId: row.deliveryAssignmentId,
+      checklistResults: row.checklistResults,
+      notes: row.notes,
+      evidenceFileIds: row.evidenceFileIds ?? [],
+      createdAt: row.createdAt,
+      clientName: row.order?.user?.fullName ?? null,
+      clientEmail: row.order?.user?.email ?? null,
+    }));
+  }
+
+  async getPickupQaSubmission(id: number) {
+    const row = await this.pickupQaRepo.findOne({
+      where: { id },
+      relations: ['order', 'order.user', 'actor'],
+    });
+    if (!row) {
+      throw new NotFoundException(`Pickup QA submission ${id} not found`);
+    }
+    return {
+      id: row.id,
+      orderId: row.orderId,
+      orderPublicId: row.order?.orderId ?? null,
+      orderStatus: row.order?.orderStatus ?? null,
+      actorRole: row.actorRole,
+      actorUserId: row.actorUserId,
+      actorName: row.actor?.fullName ?? row.actor?.email ?? null,
+      actorEmail: row.actor?.email ?? null,
+      supplierAssignmentId: row.supplierAssignmentId,
+      deliveryAssignmentId: row.deliveryAssignmentId,
+      checklistResults: row.checklistResults,
+      checklistDefinition: PICKUP_QA_CHECKLIST_ITEMS,
+      notes: row.notes,
+      evidenceFileIds: row.evidenceFileIds ?? [],
+      createdAt: row.createdAt,
+      clientName: row.order?.user?.fullName ?? null,
+      clientEmail: row.order?.user?.email ?? null,
+    };
   }
 
   /**
@@ -302,9 +411,8 @@ export class QualityService {
   async getQueue(): Promise<QaQueueItem[]> {
     const orders = await this.ordersRepo.find({
       where: { orderStatus: In(QA_QUEUE_STATUSES) },
-      relations: ['user', 'items', 'items.specValues', 'deliveryAddress'],
+      relations: ['user'],
       order: { createdAt: 'ASC' },
-      take: QA_QUEUE_LIMIT,
     });
 
     if (orders.length === 0) return [];
@@ -320,24 +428,16 @@ export class QualityService {
         latestByOrder.set(review.orderId, review);
       }
     }
-    const coverage = await this.matchingService.getCoverageOutcomes(orders);
 
     return orders.map((order) => {
       const latest = latestByOrder.get(order.id) ?? null;
-      const pending = order.pricingStatus === PricingStatus.PENDING_QUOTE;
-      const matchingOutcome = coverage.get(order.id) ?? null;
       return {
         id: order.id,
         orderId: order.orderId,
         orderStatus: order.orderStatus,
         category: order.category,
         quantity: order.quantity,
-        totalPrice: pending ? null : Number(order.totalPrice),
-        pricingStatus: order.pricingStatus,
-        quotedTotalMinor: order.quotedTotalMinor ?? null,
-        items: this.projectItems(order),
-        matchingOutcome,
-        unmetCoverage: matchingOutcome?.code === 'no_eligible_supplier',
+        totalPrice: Number(order.totalPrice),
         fileName: order.fileName ?? null,
         fileMetadataId: order.fileMetadataId ?? null,
         userId: order.userId,
@@ -371,7 +471,7 @@ export class QualityService {
 
     let order = await this.ordersRepo.findOne({
       where: { id: orderId },
-      relations: ['user', 'items', 'items.specValues', 'deliveryAddress'],
+      relations: ['user'],
     });
     if (!order) throw new NotFoundException('Order not found');
 
@@ -401,9 +501,6 @@ export class QualityService {
     const qaOpen =
       order.orderStatus === OrderStatus.NEEDS_QA ||
       order.orderStatus === OrderStatus.SUBMITTED;
-    const coverage = await this.matchingService.getCoverageOutcomes([order]);
-    const matchingOutcome = coverage.get(order.id) ?? null;
-    const pending = order.pricingStatus === PricingStatus.PENDING_QUOTE;
 
     return {
       order: {
@@ -412,13 +509,8 @@ export class QualityService {
         orderStatus: order.orderStatus,
         category: order.category,
         quantity: order.quantity,
-        totalPrice: pending ? null : Number(order.totalPrice),
-        deliveryFee: pending ? null : Number(order.deliveryFee),
-        pricingStatus: order.pricingStatus,
-        quotedTotalMinor: order.quotedTotalMinor ?? null,
-        items: this.projectItems(order),
-        matchingOutcome,
-        unmetCoverage: matchingOutcome?.code === 'no_eligible_supplier',
+        totalPrice: Number(order.totalPrice),
+        deliveryFee: Number(order.deliveryFee),
         paymentMethod: order.paymentMethod,
         deliveryOption: order.deliveryOption,
         fileName: order.fileName ?? null,
@@ -1020,7 +1112,7 @@ export class QualityService {
       const locked = await ordersRepo.findOne({
         where: { id: order.id },
         lock: { mode: 'pessimistic_write' },
-        relations: ['user', 'items', 'items.specValues', 'deliveryAddress'],
+        relations: ['user'],
       });
       if (!locked) throw new NotFoundException('Order not found');
       if (locked.orderStatus !== OrderStatus.SUBMITTED) {

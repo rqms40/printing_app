@@ -11,6 +11,7 @@ export enum FilePurpose {
   PAPER = 'paper',
   PROOF_OF_DELIVERY = 'proof_of_delivery',
   BETA_TESTIMONIAL = 'beta_testimonial',
+  PAYMENT_RECEIPT = 'payment_receipt',
   LEGACY = 'legacy',
   CATALOG_ARTWORK = 'catalog_artwork',
 }

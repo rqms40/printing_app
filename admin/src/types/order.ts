@@ -75,34 +75,6 @@ export interface AssignedSupplierContact {
   self_qc_evidence_file_ids?: number[];
 }
 
-export interface CurrentSupplierAssignment {
-  id: number | null;
-  supplier_id: number | null;
-  decision: string | null;
-  rank_position: number | null;
-  acceptance_deadline: string | null;
-  final_price_minor: string | null;
-  promised_date: string | null;
-  decided_at: string | null;
-}
-
-export type PricingStatus = "pending_quote" | "quoted" | "accepted";
-
-export interface OrderSpecSnapshot {
-  key: string;
-  label: string;
-  input_type?: string | null;
-  value: string;
-  display_value: string;
-  option_id?: number | null;
-  option_label?: string | null;
-}
-
-export interface MatchingOutcome {
-  code: string;
-  message?: string | null;
-}
-
 export interface DeliveryProof {
   type?: "photo" | "signature" | string | null;
   file_id?: number | null;
@@ -112,6 +84,13 @@ export interface DeliveryProof {
   captured_by_rider_id?: number | string | null;
 }
 
+/** Supplier production milestone reached while order status is `production`. */
+export interface ProductionMilestone {
+  milestone: string;
+  reached_at?: string | null;
+  notes?: string | null;
+}
+
 export interface Order {
   id: string;
   order_id: string;
@@ -119,23 +98,15 @@ export interface Order {
   customer_id?: number;
   customer_name?: string | null;
   customer_email?: string | null;
-  category: string;
+  category: "paper" | "3d" | "batch";
   file_url?: string;
   file_name?: string;
   file_metadata_id?: number | null;
   paper_specs?: PaperSpecs;
   three_d_specs?: ThreeDSpecs;
   quantity: number;
-  total_price: number | null;
-  delivery_fee: number | null;
-  pricing_status?: PricingStatus;
-  quoted_total_minor?: string | null;
-  quoted_at?: string | null;
-  quote_accepted_at?: string | null;
-  quoted_by_user_id?: string | null;
-  promised_completion_at?: string | null;
-  unmet_coverage?: boolean;
-  matching_outcome?: MatchingOutcome | null;
+  total_price: number;
+  delivery_fee: number;
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   order_status: OrderStatus;
@@ -149,14 +120,11 @@ export interface Order {
   assigned_rider_id?: string;
   assigned_rider_contact?: AssignedRiderContact | null;
   assigned_supplier_contact?: AssignedSupplierContact | null;
-  current_supplier_assignment?: CurrentSupplierAssignment | null;
-  delivery_proof?: DeliveryProof | null;
+  /** Rider photo at supplier/shop pickup. */
   pickup_proof?: DeliveryProof | null;
-  production_milestones?: Array<{
-    milestone: string;
-    reached_at?: string | null;
-    notes?: string | null;
-  }> | null;
+  delivery_proof?: DeliveryProof | null;
+  /** Supplier production sub-milestones (materials → in production → complete). */
+  production_milestones?: ProductionMilestone[] | null;
   estimated_completion_at?: string;
   admin_notes?: string;
   adminStatusNote?: string | null;
@@ -176,28 +144,34 @@ export interface Order {
   destinations?: OrderDestination[];
 }
 
+/** Catalog-driven spec snapshot stored on order items (and returned by admin API). */
+export interface OrderItemSpec {
+  key: string;
+  label: string;
+  value: string;
+  display_value: string;
+  option_id?: number | null;
+  option_label?: string | null;
+}
+
 export interface OrderItem {
   id: string;
   order_id?: string;
+  /** Legacy paper/3d or product slug for catalog orders. */
   category: string;
   category_id?: number | null;
   category_slug?: string | null;
   category_name?: string | null;
-  group_slug?: string | null;
-  group_name?: string | null;
-  group_description?: string | null;
-  examples?: string[];
-  pricing_model?: string | null;
-  required_at?: string | null;
-  special_instructions?: string | null;
-  specs?: OrderSpecSnapshot[];
   file_url?: string;
   file_name?: string;
   file_metadata_id?: number;
+  /** Full dynamic catalog specs (preferred for display). */
+  specs?: OrderItemSpec[];
   paper_specs?: PaperSpecs;
   three_d_specs?: ThreeDSpecs;
+  special_instructions?: string | null;
   quantity: number;
-  total_price: number | null;
+  total_price: number;
   delivery_address?: OrderDestination | null;
 }
 

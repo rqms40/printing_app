@@ -75,8 +75,18 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
   }
 
   const statusCfg = STATUS_TAG[conversation.status] ?? { color: "default", label: conversation.status };
+  const participantRole =
+    conversation.participantRole ?? conversation.customer?.role ?? null;
+  const isSupplier = participantRole === "supplier";
   const customerName =
-    conversation.customer?.name ?? conversation.customer?.fullName ?? conversation.customer?.nickname ?? (conversation.type === 'rider' ? `Rider #${conversation.customerId}` : `Customer #${conversation.customerId}`);
+    conversation.customer?.name ??
+    conversation.customer?.fullName ??
+    conversation.customer?.nickname ??
+    (conversation.type === "rider"
+      ? `Rider #${conversation.customerId}`
+      : isSupplier
+        ? `Supplier #${conversation.customerId}`
+        : `Customer #${conversation.customerId}`);
 
   return (
     <div
@@ -114,19 +124,26 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
           >
             {customerName}
           </div>
-          {conversation.orderId && (
-            <div
-              style={{
-                fontSize: 11,
-                color: token.colorTextSecondary,
-                fontFamily: MONO,
-                marginTop: 1,
-              }}
-            >
-              Order #{conversation.orderId}
-            </div>
-          )}
+          <div
+            style={{
+              fontSize: 11,
+              color: token.colorTextSecondary,
+              fontFamily: MONO,
+              marginTop: 1,
+            }}
+          >
+            {isSupplier
+              ? "Supplier support"
+              : conversation.type === "admin"
+                ? "Human support"
+                : conversation.type}
+            {conversation.orderId ? ` · Order #${conversation.orderId}` : ""}
+            {conversation.customer?.email
+              ? ` · ${conversation.customer.email}`
+              : ""}
+          </div>
         </div>
+        {isSupplier && <Tag color="purple">Supplier</Tag>}
         <Tag color={statusCfg.color}>{statusCfg.label}</Tag>
         {conversation.status === "open" && (
           <Button size="small" type="primary" onClick={onAssign}>

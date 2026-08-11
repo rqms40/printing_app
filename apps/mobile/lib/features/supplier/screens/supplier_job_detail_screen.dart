@@ -10,9 +10,12 @@ import 'package:printing_app/features/supplier/models/supplier_job.dart';
 import 'package:printing_app/features/supplier/providers/supplier_jobs_provider.dart';
 import 'package:printing_app/features/supplier/widgets/supplier_payment_gate_banner.dart';
 import 'package:printing_app/shared/models/enums.dart';
+import 'package:printing_app/shared/models/pickup_qa_checklist.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
+import 'package:printing_app/shared/widgets/pickup_qa_checklist.dart';
+import 'package:printing_app/shared/widgets/signature_pad.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -39,6 +42,9 @@ class _SupplierJobDetailScreenState
   DateTime? _promisedDate;
   ProductionMilestone _milestone = ProductionMilestone.materialsSetup;
   PlatformFile? _selfQcFile;
+  Map<String, bool> _pickupQa = emptyPickupQaChecklist();
+  String? _pickupQaSignature;
+  final _signaturePadKey = GlobalKey<SignaturePadState>();
   bool _seededPrice = false;
 
   AppColorSet _colors(BuildContext context) {
@@ -153,11 +159,21 @@ class _SupplierJobDetailScreenState
     }
   }
 
-  Future<void> _onProduction() async {
+  Future<void> _onProduction([ProductionMilestone? forceMilestone]) async {
+    final detail = ref.read(supplierJobDetailProvider(widget.jobId)).detail;
+    final available = detail?.availableMilestones ?? ProductionMilestone.values;
+    var target = forceMilestone ?? _milestone;
+    if (!available.contains(target)) {
+      if (available.isEmpty) {
+        _showSnack('All production milestones are already complete');
+        return;
+      }
+      target = available.first;
+    }
     final ok = await ref
         .read(supplierJobDetailProvider(widget.jobId).notifier)
         .updateProduction(
-          milestone: _milestone,
+          milestone: target,
           notes: _prodNotesController.text,
         );
     final state = ref.read(supplierJobDetailProvider(widget.jobId));
@@ -196,22 +212,41 @@ class _SupplierJobDetailScreenState
       _showSnack('Self-QC evidence file is required', isError: true);
       return;
     }
+    if (!allPickupQaChecksPassed(
+      _pickupQa,
+      signatureData: _pickupQaSignature,
+    )) {
+      _showSnack(
+        'Complete every checklist line and draw your digital signature',
+        isError: true,
+      );
+      return;
+    }
     final ok = await ref
         .read(supplierJobDetailProvider(widget.jobId).notifier)
         .submitSelfQc(
           notes: _selfQcNotesController.text,
           fileBytes: bytes,
           fileName: file.name,
+          checklist: pickupQaChecklistPayload(
+            _pickupQa,
+            signatureData: _pickupQaSignature!,
+          ),
         );
     final state = ref.read(supplierJobDetailProvider(widget.jobId));
     if (ok) {
-      setState(() => _selfQcFile = null);
+      setState(() {
+        _selfQcFile = null;
+        _pickupQa = emptyPickupQaChecklist();
+        _pickupQaSignature = null;
+      });
+      _signaturePadKey.currentState?.clear();
       _selfQcNotesController.clear();
-      _showSnack(state.actionMessage ?? 'Self-QC submitted');
+      _showSnack(state.actionMessage ?? 'Pickup QA submitted');
       // ignore: discarded_futures
       ref.read(supplierJobsProvider.notifier).refresh(silent: true);
     } else {
-      _showSnack(state.errorMessage ?? 'Self-QC failed', isError: true);
+      _showSnack(state.errorMessage ?? 'Pickup QA failed', isError: true);
     }
   }
 
@@ -404,11 +439,13 @@ class _SupplierJobDetailScreenState
                         _ProductionSection(
                           colors: colors,
                           milestone: _milestone,
+                          availableMilestones: detail.availableMilestones,
+                          reachedMilestones: detail.productionMilestones,
                           notesController: _prodNotesController,
                           isSubmitting: state.isSubmitting,
                           onMilestoneChanged: (m) =>
                               setState(() => _milestone = m),
-                          onSubmit: _onProduction,
+                          onSubmit: (m) => _onProduction(m),
                         ),
                       ],
                       if (detail.canSelfQc) ...[
@@ -417,7 +454,13 @@ class _SupplierJobDetailScreenState
                           colors: colors,
                           notesController: _selfQcNotesController,
                           file: _selfQcFile,
+                          pickupQa: _pickupQa,
+                          signaturePadKey: _signaturePadKey,
                           isSubmitting: state.isSubmitting,
+                          onPickupQaChanged: (next) =>
+                              setState(() => _pickupQa = next),
+                          onSignatureChanged: (sig) =>
+                              setState(() => _pickupQaSignature = sig),
                           onPickFile: _pickSelfQcFile,
                           onClearFile: () => setState(() => _selfQcFile = null),
                           onSubmit: _onSelfQc,
@@ -856,6 +899,8 @@ class _ProductionSection extends StatelessWidget {
   const _ProductionSection({
     required this.colors,
     required this.milestone,
+    required this.availableMilestones,
+    required this.reachedMilestones,
     required this.notesController,
     required this.isSubmitting,
     required this.onMilestoneChanged,
@@ -864,13 +909,21 @@ class _ProductionSection extends StatelessWidget {
 
   final AppColorSet colors;
   final ProductionMilestone milestone;
+  final List<ProductionMilestone> availableMilestones;
+  final List<String> reachedMilestones;
   final TextEditingController notesController;
   final bool isSubmitting;
   final ValueChanged<ProductionMilestone> onMilestoneChanged;
-  final VoidCallback onSubmit;
+  final ValueChanged<ProductionMilestone> onSubmit;
 
   @override
   Widget build(BuildContext context) {
+    final selectable = availableMilestones;
+    final selected = selectable.contains(milestone)
+        ? milestone
+        : (selectable.isNotEmpty ? selectable.first : null);
+    final allDone = selectable.isEmpty;
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -881,75 +934,139 @@ class _ProductionSection extends StatelessWidget {
               color: colors.onBackground,
             ),
           ),
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            allDone
+                ? 'All milestones are complete and locked.'
+                : 'Completed steps stay grayed out and cannot be set again.',
+            style: AppTypography.caption.copyWith(
+              color: colors.onSurfaceDim,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
           ...ProductionMilestone.values.map((m) {
-            final selected = milestone == m;
+            final reached = reachedMilestones.contains(m.apiValue);
+            final isSelected = !reached && selected == m;
+            final dimColor = colors.onSurfaceDim.withValues(alpha: 0.55);
+            final cardBg = reached
+                ? colors.surfaceVariant.withValues(alpha: 0.45)
+                : isSelected
+                    ? colors.accent.withValues(alpha: 0.12)
+                    : colors.surfaceVariant;
+            final borderColor = reached
+                ? colors.outline.withValues(alpha: 0.5)
+                : isSelected
+                    ? colors.accent
+                    : colors.outline;
+
             return Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: InkWell(
-                onTap: isSubmitting ? null : () => onMilestoneChanged(m),
-                borderRadius: AppRadius.borderMd,
-                child: Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? colors.accent.withValues(alpha: 0.12)
-                        : colors.surfaceVariant,
-                    borderRadius: AppRadius.borderMd,
-                    border: Border.all(
-                      color: selected ? colors.accent : colors.outline,
+              child: Opacity(
+                opacity: reached ? 0.55 : 1,
+                child: InkWell(
+                  onTap: (isSubmitting || reached)
+                      ? null
+                      : () => onMilestoneChanged(m),
+                  borderRadius: AppRadius.borderMd,
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: AppRadius.borderMd,
+                      border: Border.all(color: borderColor),
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        selected
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
-                        size: 20,
-                        color: selected ? colors.accent : colors.onSurfaceDim,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              m.label,
-                              style: AppTypography.caption.copyWith(
-                                color: colors.onBackground,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              m.description,
-                              style: AppTypography.caption.copyWith(
-                                color: colors.onSurfaceDim,
-                              ),
-                            ),
-                          ],
+                    child: Row(
+                      children: [
+                        Icon(
+                          reached
+                              ? Icons.check_circle
+                              : isSelected
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_off,
+                          size: 20,
+                          color: reached
+                              ? colors.success.withValues(alpha: 0.7)
+                              : isSelected
+                                  ? colors.accent
+                                  : colors.onSurfaceDim,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      m.label,
+                                      style: AppTypography.caption.copyWith(
+                                        color: reached
+                                            ? dimColor
+                                            : colors.onBackground,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  if (reached)
+                                    Text(
+                                      'Done',
+                                      style: AppTypography.caption.copyWith(
+                                        color: colors.success
+                                            .withValues(alpha: 0.85),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              Text(
+                                m.description,
+                                style: AppTypography.caption.copyWith(
+                                  color: reached
+                                      ? dimColor
+                                      : colors.onSurfaceDim,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             );
           }),
-          AppTextField(
-            label: 'Notes (optional)',
-            controller: notesController,
-            maxLines: 2,
-            enabled: !isSubmitting,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          AppButton(
-            label: 'Update production status',
-            isFullWidth: true,
-            isLoading: isSubmitting,
-            icon: HugeIcons.strokeRoundedFactory01,
-            onTap: isSubmitting ? null : onSubmit,
-          ),
+          if (allDone)
+            Text(
+              'Proceed to Pickup QA when ready.',
+              style: AppTypography.caption.copyWith(
+                color: colors.onSurfaceDim,
+              ),
+            )
+          else ...[
+            AppTextField(
+              label: 'Notes (optional)',
+              controller: notesController,
+              maxLines: 2,
+              enabled: !isSubmitting,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppButton(
+              label: 'Update production status',
+              isFullWidth: true,
+              isLoading: isSubmitting,
+              icon: HugeIcons.strokeRoundedFactory01,
+              onTap: isSubmitting || selected == null
+                  ? null
+                  : () {
+                      final chosen = selected;
+                      onMilestoneChanged(chosen);
+                      onSubmit(chosen);
+                    },
+            ),
+          ],
         ],
       ),
     );
@@ -961,7 +1078,11 @@ class _SelfQcSection extends StatelessWidget {
     required this.colors,
     required this.notesController,
     required this.file,
+    required this.pickupQa,
+    required this.signaturePadKey,
     required this.isSubmitting,
+    required this.onPickupQaChanged,
+    required this.onSignatureChanged,
     required this.onPickFile,
     required this.onClearFile,
     required this.onSubmit,
@@ -970,7 +1091,11 @@ class _SelfQcSection extends StatelessWidget {
   final AppColorSet colors;
   final TextEditingController notesController;
   final PlatformFile? file;
+  final Map<String, bool> pickupQa;
+  final GlobalKey<SignaturePadState> signaturePadKey;
   final bool isSubmitting;
+  final ValueChanged<Map<String, bool>> onPickupQaChanged;
+  final ValueChanged<String?> onSignatureChanged;
   final VoidCallback onPickFile;
   final VoidCallback onClearFile;
   final VoidCallback onSubmit;
@@ -982,22 +1107,33 @@ class _SelfQcSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Signature validity is enforced in the parent submit handler via state.
+    final canSubmit = _hasEvidence &&
+        pickupQaCheckboxItems.every((i) => pickupQa[i.key] == true);
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Self-QC evidence',
+            'Pickup QA + proof of fulfillment',
             style: AppTypography.bodyBold.copyWith(
               color: colors.onBackground,
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Upload a photo or PDF of the finished print (required) before marking ready.',
+            'After production is complete, pass every checklist line, sign, and upload evidence. Then you can mark ready for pickup.',
             style: AppTypography.caption.copyWith(
               color: colors.onSurfaceDim,
             ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          PickupQaChecklistWidget(
+            value: pickupQa,
+            onChanged: onPickupQaChanged,
+            onSignatureChanged: onSignatureChanged,
+            signaturePadKey: signaturePadKey,
+            enabled: !isSubmitting,
           ),
           const SizedBox(height: AppSpacing.md),
           if (file != null)
@@ -1051,11 +1187,11 @@ class _SelfQcSection extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           AppButton(
-            label: 'Submit self-QC',
+            label: 'Submit Pickup QA',
             isFullWidth: true,
             isLoading: isSubmitting,
             icon: HugeIcons.strokeRoundedCheckmarkCircle02,
-            onTap: (isSubmitting || !_hasEvidence) ? null : onSubmit,
+            onTap: (isSubmitting || !canSubmit) ? null : onSubmit,
           ),
         ],
       ),

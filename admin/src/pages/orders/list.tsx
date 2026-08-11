@@ -26,6 +26,7 @@ import type { OrderStatus, PaymentStatus } from "@/types/enums";
 import { ORDER_STATUS_LABELS } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
 import {
+  formatCurrency,
   formatRelativeTime,
   formatDate,
   statusLabel,
@@ -35,10 +36,9 @@ import {
   humanizeEnumValue,
   normalizeOrders,
   normalizeOrder,
+  orderItemTypeLabel,
 } from "@/utils/api-normalizers";
 import { subscribeToOrderUpdates } from "@/providers/live-provider";
-import { OrderPrice } from "./components/order-price";
-import { OrderProductLabel, productDisplayName } from "./components/order-product-label";
 
 type TabFilter = "new" | "production" | "done" | "all";
 type OrderTypeMeta = {
@@ -89,7 +89,9 @@ function getOrderLineItems(order: Order): OrderItem[] {
   return [
     {
       id: order.id,
-      category: order.category === "batch" ? "paper" : order.category,
+      category: order.category === "3d" ? "3d" : "paper",
+      category_name:
+        order.category === "3d" ? "3D Printing" : "Paper Printing",
       file_name: order.file_name,
       quantity: order.quantity,
       total_price: order.total_price,
@@ -100,24 +102,27 @@ function getOrderLineItems(order: Order): OrderItem[] {
 }
 
 function getOrderTypeMeta(order: Order): OrderTypeMeta {
-  const categories = new Set(
-    getOrderLineItems(order)
-      .map((item) => item.category)
-      .filter(
-        (category): category is "paper" | "3d" =>
-          category === "paper" || category === "3d",
-      ),
-  );
+  const items = getOrderLineItems(order);
+  const labels = items.map((item) => orderItemTypeLabel(item));
+  const unique = new Set(labels);
 
-  if (categories.has("paper") && categories.has("3d")) {
+  if (unique.size > 1) {
     return { label: "Mixed", color: "magenta" };
   }
 
-  if (categories.has("3d")) {
-    return { label: "3D", color: "purple" };
+  const only = labels[0] ?? "Paper";
+  const lower = only.toLowerCase();
+  if (lower.includes("3d")) {
+    return { label: only.length > 18 ? "3D" : only, color: "purple" };
   }
-
-  return { label: "Paper", color: "blue" };
+  if (only === "Paper Printing" || only === "Paper") {
+    return { label: "Paper", color: "blue" };
+  }
+  // Business catalog / other product names — keep readable, truncate if long.
+  return {
+    label: only.length > 18 ? `${only.slice(0, 16)}…` : only,
+    color: "geekblue",
+  };
 }
 
 function getOrderCategoryLabel(order: Order) {
@@ -149,9 +154,9 @@ function exportDeliveredCSV(orders: Order[]) {
     o.user_id,
     getOrderCategoryLabel(o),
     ORDER_STATUS_LABELS[o.order_status] ?? o.order_status,
-    o.total_price ?? "",
-    o.delivery_fee ?? "",
-    o.total_price == null || o.delivery_fee == null ? "" : o.total_price + o.delivery_fee,
+    o.total_price,
+    o.delivery_fee,
+    o.total_price + o.delivery_fee,
     o.payment_method,
     o.payment_status,
     o.delivery_option,
@@ -451,8 +456,8 @@ export function OrderList() {
             title="Type"
             width={110}
             render={(_v: string, record: Order) => {
-              const items = getOrderLineItems(record);
-              return <OrderProductLabel item={items[0]} />;
+              const type = getOrderTypeMeta(record);
+              return <Tag color={type.color}>{type.label}</Tag>;
             }}
           />
           <Table.Column
@@ -470,7 +475,7 @@ export function OrderList() {
                       .slice(0, 2)
                       .map(
                         (item) =>
-                          productDisplayName(item),
+                          item.file_name ?? orderItemTypeLabel(item),
                       )
                       .join(" + ")}
                   </span>
@@ -479,9 +484,6 @@ export function OrderList() {
                       +{items.length - 2} more
                     </span>
                   )}
-                  {record.unmet_coverage ? (
-                    <Tag color="error">Unmet supplier coverage</Tag>
-                  ) : null}
                 </Space>
               );
             }}
@@ -497,10 +499,10 @@ export function OrderList() {
             title="Amount"
             width={110}
             align="right"
-            render={(_v: number | null, record: Order) => (
-              <OrderPrice pricingStatus={record.pricing_status} minor={record.quoted_total_minor} legacyAmount={record.total_price} />
+            render={(v: number) => (
+              <span style={{ fontWeight: 500 }}>{formatCurrency(v)}</span>
             )}
-            sorter={(a: Order, b: Order) => (a.total_price ?? -1) - (b.total_price ?? -1)}
+            sorter={(a: Order, b: Order) => a.total_price - b.total_price}
           />
           <Table.Column
             dataIndex="payment_status"

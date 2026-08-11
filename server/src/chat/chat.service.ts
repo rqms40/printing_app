@@ -129,7 +129,9 @@ export class ChatService {
     });
   }
 
-  async getOrCreateDirectConversation(userId: number): Promise<Conversation> {
+  async getOrCreateDirectConversation(
+    userId: number,
+  ): Promise<{ conversation: Conversation; created: boolean }> {
     return this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(Conversation);
       const existing = await repo.findOne({
@@ -140,7 +142,7 @@ export class ChatService {
         },
         order: { updatedAt: 'DESC' },
       });
-      if (existing) return existing;
+      if (existing) return { conversation: existing, created: false };
 
       const conv = repo.create({
         customerId: userId,
@@ -149,7 +151,8 @@ export class ChatService {
         assignedRiderId: null,
         status: ConversationStatus.OPEN,
       });
-      return repo.save(conv);
+      const saved = await repo.save(conv);
+      return { conversation: saved, created: true };
     });
   }
 
@@ -489,7 +492,13 @@ export class ChatService {
   async getAdminConversations(
     status?: string,
     type?: string,
-  ): Promise<Conversation[]> {
+  ): Promise<
+    Array<
+      Conversation & {
+        participantRole: string | null;
+      }
+    >
+  > {
     const where: FindOptionsWhere<Conversation> = {};
     if (
       status &&
@@ -503,11 +512,16 @@ export class ChatService {
     ) {
       where.type = type as ConversationType;
     }
-    return this.convRepo.find({
+    const rows = await this.convRepo.find({
       where,
-      order: { createdAt: 'DESC' },
+      order: { updatedAt: 'DESC' },
       relations: ['customer'],
     });
+    return rows.map((conv) =>
+      Object.assign(conv, {
+        participantRole: conv.customer?.role ?? null,
+      }),
+    );
   }
 
   async assignAdmin(

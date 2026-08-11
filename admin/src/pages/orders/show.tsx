@@ -1,5 +1,4 @@
 import {
-  Alert,
   Card,
   Descriptions,
   Typography,
@@ -44,15 +43,14 @@ import type {
 import { apiClient } from "@/providers/api-client";
 import { FileInspectorModal } from "@/components/file-inspector/file-inspector-modal";
 import {
+  formatOrderItemSpecLines,
   humanizeEnumValue,
   normalizeAdminRiders,
   normalizeOrder,
+  orderItemTypeLabel,
 } from "@/utils/api-normalizers";
 import { loadOrderFilePreview, type OrderFilePreview } from "./preview";
 import { ManualStatusCard } from "./components/manual-status-card";
-import { OrderPrice } from "./components/order-price";
-import { OrderProductLabel, productDisplayName } from "./components/order-product-label";
-import { OrderSpecifications } from "./components/order-specifications";
 import {
   adminOrderProgressPipeline,
   isPickupDeliveryOption,
@@ -217,7 +215,9 @@ function getOrderLineItems(order: Order): OrderItem[] {
   return [
     {
       id: order.id,
-      category: order.category === "batch" ? "paper" : order.category,
+      category: order.category === "3d" ? "3d" : "paper",
+      category_name:
+        order.category === "3d" ? "3D Printing" : "Paper Printing",
       file_name: order.file_name,
       quantity: order.quantity,
       total_price: order.total_price,
@@ -228,29 +228,17 @@ function getOrderLineItems(order: Order): OrderItem[] {
 }
 
 function getOrderTypeLabel(order: Order) {
-  const lineItems = getOrderLineItems(order);
-  if (lineItems.some((item) => item.category_name || !['paper', '3d'].includes(item.category))) {
-    const labels = lineItems.slice(0, 2).map(productDisplayName);
-    return lineItems.length > 2 ? `${labels.join(' + ')} +${lineItems.length - 2}` : labels.join(' + ');
-  }
-  const categories = new Set(
-    lineItems
-      .map((item) => item.category)
-      .filter(
-        (category): category is "paper" | "3d" =>
-          category === "paper" || category === "3d",
-      ),
-  );
-
-  if (categories.has("paper") && categories.has("3d")) {
-    return "Mixed Printing";
+  const items = getOrderLineItems(order);
+  if (items.length === 1) {
+    return orderItemTypeLabel(items[0]);
   }
 
-  if (categories.has("3d")) {
-    return "3D Printing";
+  const labels = new Set(items.map((item) => orderItemTypeLabel(item)));
+  if (labels.size === 1) {
+    return labels.values().next().value as string;
   }
 
-  return "Paper Printing";
+  return `Mixed · ${items.length} items`;
 }
 
 export function OrderShow() {
@@ -705,9 +693,6 @@ export function OrderShow() {
         </Card>
 
         {/* Order Items */}
-        {order.unmet_coverage ? (
-          <Alert type="warning" showIcon message="Unmet supplier coverage" description={order.matching_outcome?.message ?? "No verified active supplier currently covers this leaf product."} />
-        ) : null}
         <Card
           title="Order Items"
           extra={
@@ -725,12 +710,38 @@ export function OrderShow() {
           <Table dataSource={items} rowKey="id" pagination={false} size="small">
             <Table.Column
               title="Type"
-              render={(_: unknown, item: OrderItem) => <OrderProductLabel item={item} />}
+              width={180}
+              render={(_: unknown, item: OrderItem) => {
+                const label = orderItemTypeLabel(item);
+                const is3d =
+                  item.category === "3d" ||
+                  item.category_slug === "3d" ||
+                  (item.category_slug ?? "").includes("3d") ||
+                  label.toLowerCase().includes("3d");
+                return (
+                  <div>
+                    <Tag color={is3d ? "purple" : "blue"}>{label}</Tag>
+                    {item.category_slug &&
+                      item.category_slug !== item.category && (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#888",
+                            marginTop: 4,
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {item.category_slug}
+                        </div>
+                      )}
+                  </div>
+                );
+              }}
             />
             <Table.Column
               title="File"
               dataIndex="file_name"
-              render={(v: string | null, item: any) =>
+              render={(v: string | null, item: OrderItem) =>
                 v && item.file_url ? (
                   <Button
                     type="link"
@@ -767,15 +778,40 @@ export function OrderShow() {
                 }}
               />
             )}
-            <Table.Column title="Qty" dataIndex="quantity" width={80} />
+            <Table.Column title="Qty" dataIndex="quantity" width={70} />
             <Table.Column
               title="Specs"
-              render={(_: unknown, item: OrderItem) => <OrderSpecifications item={item} />}
+              render={(_: unknown, item: OrderItem) => {
+                const lines = formatOrderItemSpecLines(item);
+                if (lines.length === 0 && !item.special_instructions) {
+                  return <span style={{ color: "#888" }}>—</span>;
+                }
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {lines.map((line) => (
+                      <span
+                        key={line}
+                        style={{ fontSize: 12, color: "#F0F0F0", lineHeight: 1.35 }}
+                      >
+                        {line}
+                      </span>
+                    ))}
+                    {item.special_instructions ? (
+                      <span style={{ fontSize: 11, color: "#A0A0A0", marginTop: 2 }}>
+                        Note: {item.special_instructions}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              }}
             />
             <Table.Column
               title="Amount"
               align="right"
-              render={(_: unknown, item: OrderItem) => <OrderPrice pricingStatus={order.pricing_status} legacyAmount={item.total_price} />}
+              width={110}
+              render={(_: unknown, item: OrderItem) =>
+                formatCurrency(item.total_price ?? 0)
+              }
             />
           </Table>
         </Card>
@@ -783,20 +819,14 @@ export function OrderShow() {
         {/* Price Breakdown */}
         <Card title="Price Breakdown">
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="Goods quote">
-              <OrderPrice
-                pricingStatus={order.pricing_status}
-                minor={order.current_supplier_assignment?.final_price_minor}
-                legacyAmount={order.total_price}
-              />
+            <Descriptions.Item label="Subtotal">
+              {formatCurrency(order.total_price)}
             </Descriptions.Item>
             <Descriptions.Item label="Delivery Fee">
-              {order.pricing_status === "pending_quote" || order.delivery_fee == null
-                ? "Pending quote"
-                : formatCurrency(order.delivery_fee)}
+              {formatCurrency(order.delivery_fee)}
             </Descriptions.Item>
-            <Descriptions.Item label="Quoted total">
-              <OrderPrice pricingStatus={order.pricing_status} minor={order.quoted_total_minor} legacyAmount={order.total_price == null || order.delivery_fee == null ? null : order.total_price + order.delivery_fee} />
+            <Descriptions.Item label="Total">
+              {formatCurrency(order.total_price + order.delivery_fee)}
             </Descriptions.Item>
             <Descriptions.Item label="Payment Method">
               <span style={{ textTransform: "uppercase" }}>
@@ -1146,7 +1176,7 @@ export function OrderShow() {
                         {reachedAt ? (
                           <div>
                             <Text type="secondary" style={{ fontSize: 12 }}>
-                              {formatDateTime(String(reachedAt))}
+                              {formatDateTime(reachedAt)}
                             </Text>
                           </div>
                         ) : null}

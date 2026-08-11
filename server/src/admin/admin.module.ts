@@ -12,12 +12,13 @@ import { RidersModule } from '../riders/riders.module';
 import { CreditsModule } from '../credits/credits.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SuppliersModule } from '../suppliers/suppliers.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
 import { RiderProfile } from '../riders/entities/rider-profile.entity';
 import { DeliveryAssignment } from '../riders/entities/delivery-assignment.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
-import { MatchingModule } from '../matching/matching.module';
+import { AuditEvent } from '../audit/entities/audit-event.entity';
 
 @Module({
   imports: [
@@ -33,13 +34,14 @@ import { MatchingModule } from '../matching/matching.module';
       RiderProfile,
       DeliveryAssignment,
       SupplierAssignment,
+      AuditEvent,
     ]),
     OrdersModule,
     RidersModule,
     CreditsModule,
     NotificationsModule,
     SuppliersModule,
-    MatchingModule,
+    PaymentsModule,
   ],
   controllers: [AdminController],
 })

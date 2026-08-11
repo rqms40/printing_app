@@ -13,12 +13,14 @@ import type { AdminIdentity } from "@/utils/api-normalizers";
 const BADGE_MAP: Partial<Record<string, keyof BadgeCounts>> = {
   "admin/orders": "newOrders",
   "credit-requests": "pendingTopUps",
+  "qr-payments": "pendingQrPayments",
 };
 
 /** Resources exclusive to the supplier portal (not shown to ops). */
 const SUPPLIER_PORTAL_RESOURCES = new Set([
   "supplier-jobs",
   "supplier-payouts",
+  "supplier-support",
 ]);
 
 /** Super Admin–only governance resources (hidden from ops_admin). */
@@ -117,7 +119,7 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
   function buildItems(items: ITreeMenu[]): MenuProps["items"] {
     return items.map((item) => {
       const badgeKey = BADGE_MAP[item.name];
-      const count = badgeKey ? badgeCounts[badgeKey] : 0;
+      const count = badgeKey ? (badgeCounts[badgeKey] ?? 0) : 0;
       const isActive = item.key === selectedKey;
 
       const labelNode =

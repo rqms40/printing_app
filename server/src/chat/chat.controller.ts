@@ -44,15 +44,65 @@ export class ChatController {
     @Request() req: { user: JwtUser },
     @Body() dto: CreateConversationDto,
   ): Promise<Conversation> {
+    // Admin/supplier/client support threads should dedupe via open direct chat.
+    if (
+      dto.type === ConversationType.ADMIN &&
+      dto.orderId == null &&
+      (req.user.role === UserRole.CLIENT ||
+        req.user.role === UserRole.SUPPLIER ||
+        req.user.role === 'client' ||
+        req.user.role === 'supplier')
+    ) {
+      return this.openSupportConversation(req);
+    }
+
     const conv = await this.chatService.createConversation(req.user.sub, dto);
     if (dto.type !== ConversationType.AI) {
       const user = await this.usersService.findById(req.user.sub);
       this.chatGateway.notifyNewConversation(
         conv,
         user?.fullName ?? user?.nickname ?? 'Customer',
+        user?.role ?? null,
       );
     }
     return conv;
+  }
+
+  /**
+   * Open (or resume) a direct Human Support thread with ops/superadmin.
+   * Used by suppliers and customers; shows in admin Live Chat / Support.
+   */
+  @Post('support')
+  async openSupportConversation(
+    @Request() req: { user: JwtUser },
+  ): Promise<Conversation> {
+    if (isAdminRole(req.user.role)) {
+      throw new ForbiddenException(
+        'Admins cannot open supplier/customer support as self',
+      );
+    }
+    if (
+      req.user.role !== UserRole.CLIENT &&
+      req.user.role !== UserRole.SUPPLIER &&
+      req.user.role !== 'client' &&
+      req.user.role !== 'supplier' &&
+      req.user.role !== UserRole.RIDER &&
+      req.user.role !== 'rider'
+    ) {
+      throw new ForbiddenException();
+    }
+
+    const { conversation, created } =
+      await this.chatService.getOrCreateDirectConversation(req.user.sub);
+    if (created) {
+      const user = await this.usersService.findById(req.user.sub);
+      this.chatGateway.notifyNewConversation(
+        conversation,
+        user?.fullName ?? user?.nickname ?? 'User',
+        user?.role ?? null,
+      );
+    }
+    return conversation;
   }
 
   @Post('orders/:orderId/conversation')
@@ -147,12 +197,16 @@ export class ChatController {
   async startDirectConversation(
     @Param('userId') userId: string,
   ): Promise<Conversation> {
-    const conv = await this.chatService.getOrCreateDirectConversation(+userId);
-    const user = await this.usersService.findById(+userId);
-    this.chatGateway.notifyNewConversation(
-      conv,
-      user?.fullName ?? user?.nickname ?? 'Customer',
-    );
-    return conv;
+    const { conversation, created } =
+      await this.chatService.getOrCreateDirectConversation(+userId);
+    if (created) {
+      const user = await this.usersService.findById(+userId);
+      this.chatGateway.notifyNewConversation(
+        conversation,
+        user?.fullName ?? user?.nickname ?? 'Customer',
+        user?.role ?? null,
+      );
+    }
+    return conversation;
   }
 }
