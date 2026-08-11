@@ -22,11 +22,11 @@ import type { Conversation } from './entities/conversation.entity';
 import type { ChatMessage } from './entities/chat-message.entity';
 import { isAdminRole, UserRole } from '../users/entities/user.entity';
 
-type JwtUser = { sub: number; role: string; email: string };
+type JwtUser = { sub: number; role: UserRole; email: string };
 
-function toChatActorRole(role: string): ChatActorRole {
+function toChatActorRole(role: UserRole): ChatActorRole {
   if (isAdminRole(role)) return 'admin';
-  if (role === UserRole.RIDER || role === 'rider') return 'rider';
+  if (role === UserRole.RIDER) return 'rider';
   return 'customer';
 }
 
@@ -65,14 +65,14 @@ export class ChatController {
       throw new BadRequestException('Invalid order id');
     }
 
-    if (req.user.role === UserRole.RIDER || req.user.role === 'rider') {
+    if (req.user.role === UserRole.RIDER) {
       return this.chatService.getOrCreateRiderOrderConversation(
         req.user.sub,
         orderRef,
       );
     }
 
-    if (req.user.role !== UserRole.CLIENT && req.user.role !== 'client') {
+    if (req.user.role !== UserRole.CLIENT) {
       throw new ForbiddenException();
     }
 

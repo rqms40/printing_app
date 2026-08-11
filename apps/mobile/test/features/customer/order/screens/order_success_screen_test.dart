@@ -27,7 +27,7 @@ void main() {
     );
 
     expect(find.text('ORD-10042'), findsOneWidget);
-    expect(find.text('Order Placed'), findsOneWidget);
+    expect(find.text('Submitted'), findsOneWidget);
     expect(find.text('Delivery'), findsOneWidget);
     expect(find.textContaining('2026-07-28'), findsOneWidget);
     expect(find.textContaining('09:00'), findsOneWidget);
@@ -120,13 +120,11 @@ void main() {
       ordersNotifier: notifier,
     );
 
-    expect(find.text('Order Placed'), findsOneWidget);
-    notifier.replace([
-      initial.copyWith(orderStatus: OrderStatus.printingInProgress),
-    ]);
+    expect(find.text('Submitted'), findsOneWidget);
+    notifier.replace([initial.copyWith(orderStatus: OrderStatus.production)]);
     await tester.pump();
 
-    expect(find.text('Printing in Progress'), findsOneWidget);
+    expect(find.text('In production'), findsOneWidget);
   });
 
   testWidgets('keeps the generic fallback when route payload is absent', (
@@ -257,7 +255,7 @@ Order _order({
     deliveryFee: 0,
     paymentMethod: PaymentMethod.gridCredits,
     paymentStatus: PaymentStatus.paid,
-    orderStatus: OrderStatus.orderPlaced,
+    orderStatus: OrderStatus.submitted,
     deliveryOption: deliveryOption,
     assignedSlot: assignedSlot,
     canTrackDelivery: canTrackDelivery,

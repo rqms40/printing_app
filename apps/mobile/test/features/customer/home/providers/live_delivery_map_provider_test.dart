@@ -14,7 +14,7 @@ import 'package:printing_app/shared/models/route_geometry.dart';
 Order _makeOrder({
   String id = 'ord_test',
   String orderId = 'ORD-TEST-001',
-  OrderStatus status = OrderStatus.onTheWay,
+  OrderStatus status = OrderStatus.outForDelivery,
   String? deliveryAddressId = 'addr_test',
   OrderDeliveryAddress? deliveryAddress,
   String? deliveryAssignmentId = 'da_test',
@@ -170,7 +170,7 @@ void main() {
         routePoints: route,
         orderId: 'ORD-001',
         deliveryAssignmentId: 'da_001',
-        orderStatus: OrderStatus.onTheWay,
+        orderStatus: OrderStatus.outForDelivery,
       );
 
       expect(state.status, LiveMapStatus.active);
@@ -180,7 +180,7 @@ void main() {
       expect(state.routePoints, route);
       expect(state.orderId, 'ORD-001');
       expect(state.deliveryAssignmentId, 'da_001');
-      expect(state.orderStatus, OrderStatus.onTheWay);
+      expect(state.orderStatus, OrderStatus.outForDelivery);
     });
 
     test('loading() has loading status', () {
@@ -201,7 +201,7 @@ void main() {
         routePoints: route,
         orderId: 'ORD-001',
         deliveryAssignmentId: 'da_001',
-        orderStatus: OrderStatus.onTheWay,
+        orderStatus: OrderStatus.outForDelivery,
       );
 
       expect(state.etaMinutes, greaterThanOrEqualTo(0));
@@ -222,7 +222,7 @@ void main() {
         routePoints: denseRoute,
         orderId: 'ORD-001',
         deliveryAssignmentId: 'da_001',
-        orderStatus: OrderStatus.onTheWay,
+        orderStatus: OrderStatus.outForDelivery,
       );
 
       expect(state.etaMinutes, 1);
@@ -254,47 +254,36 @@ void main() {
       expect(state.status, LiveMapStatus.idle);
     });
 
-    test('returns idle when orders exist but none are onTheWay', () async {
+    test(
+      'returns idle when orders exist but none are out for delivery',
+      () async {
+        container = _container(
+          orders: [
+            _makeOrder(status: OrderStatus.submitted),
+            _makeOrder(
+              id: 'ord_b',
+              orderId: 'ORD-002',
+              status: OrderStatus.production,
+            ),
+          ],
+          addresses: [_makeDavaoAddress()],
+        );
+        final state = await container.read(liveDeliveryMapProvider.future);
+        expect(state.status, LiveMapStatus.idle);
+      },
+    );
+
+    test('returns idle after delivery is complete', () async {
       container = _container(
-        orders: [
-          _makeOrder(status: OrderStatus.orderPlaced),
-          _makeOrder(
-            id: 'ord_b',
-            orderId: 'ORD-002',
-            status: OrderStatus.printingInProgress,
-          ),
-        ],
+        orders: [_makeOrder(status: OrderStatus.delivered)],
         addresses: [_makeDavaoAddress()],
       );
+
       final state = await container.read(liveDeliveryMapProvider.future);
       expect(state.status, LiveMapStatus.idle);
     });
 
-    test('keeps tracking available after rider arrives', () async {
-      final geometry = GeoJsonLineString.tryParse({
-        'type': 'LineString',
-        'coordinates': [
-          [125.6079, 7.064],
-          [125.6128, 7.0731],
-        ],
-      });
-      container = _container(
-        orders: [
-          _makeOrder(
-            status: OrderStatus.arrivedAtDestination,
-            routeGeometry: geometry,
-          ),
-        ],
-        addresses: [_makeDavaoAddress()],
-      );
-
-      final state = await container.read(liveDeliveryMapProvider.future);
-      expect(state.status, LiveMapStatus.active);
-      expect(state.orderStatus, OrderStatus.arrivedAtDestination);
-      expect(state.routePoints, isNotEmpty);
-    });
-
-    test('returns idle when onTheWay order has no deliveryAddressId', () async {
+    test('returns idle when out-for-delivery order has no address', () async {
       container = _container(
         orders: [_makeOrder(deliveryAddressId: null)],
         addresses: [_makeDavaoAddress()],
@@ -313,7 +302,7 @@ void main() {
     });
 
     test(
-      'returns active when onTheWay order + matching address exist',
+      'returns active when out-for-delivery order + matching address exist',
       () async {
         final geometry = GeoJsonLineString.tryParse({
           'type': 'LineString',
@@ -334,7 +323,7 @@ void main() {
         expect(state.queuePosition, 1);
         expect(state.queueSize, 1);
         expect(state.canTrackDelivery, isTrue);
-        expect(state.orderStatus, OrderStatus.onTheWay);
+        expect(state.orderStatus, OrderStatus.outForDelivery);
         expect(state.destPoint.latitude, closeTo(7.0731, 0.001));
         expect(state.destPoint.longitude, closeTo(125.6128, 0.001));
         expect(state.routePoints, geometry!.points);
@@ -454,16 +443,16 @@ void main() {
     });
 
     test(
-      'picks first onTheWay order when multiple active orders exist',
+      'picks first out-for-delivery order when multiple active orders exist',
       () async {
         container = _container(
           orders: [
             _makeOrder(
-              status: OrderStatus.printingInProgress,
+              status: OrderStatus.production,
               id: 'ord_a',
               orderId: 'ORD-A',
             ),
-            _makeOrder(id: 'ord_b', orderId: 'ORD-B'), // onTheWay
+            _makeOrder(id: 'ord_b', orderId: 'ORD-B'),
             _makeOrder(
               status: OrderStatus.readyForDispatch,
               id: 'ord_c',

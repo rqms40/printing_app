@@ -318,9 +318,8 @@ describe('DeliverySlotsService', () => {
         findOne: jest.fn().mockResolvedValue({ id: 3, date: '2026-04-30' }),
         update: jest.fn().mockResolvedValue(undefined),
       };
-      dataSource.transaction.mockImplementation(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-        async (cb: any) => cb(txManager),
+      dataSource.transaction.mockImplementation(async (cb: any) =>
+        cb(txManager),
       );
 
       await svc.reorderBookings([3, 1, 2]);

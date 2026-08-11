@@ -17,7 +17,6 @@ import {
   SupplierAssignmentDecision,
 } from '../matching/entities/supplier-assignment.entity';
 import { GeoZonesService } from '../geo-zones/geo-zones.service';
-import { COD_PAYOUT_HOLD_REASON } from '../payments/cod-eligibility';
 import {
   ISSUE_WINDOW_MS,
   PAYOUT_HOLD_ISSUE_WINDOW,

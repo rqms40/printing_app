@@ -43,6 +43,25 @@ type CatalogSpecOption = Readonly<{
 export async function upsertCatalogV110(
   executor: CatalogSqlExecutor,
 ): Promise<void> {
+  // Adopted databases can contain explicitly assigned legacy ids while their
+  // SERIAL sequences still point at the initial value. Advance every catalog
+  // sequence before inserting canonical rows so ON CONFLICT natural-key
+  // upserts cannot collide with an unrelated primary key.
+  for (const table of [
+    'product_categories',
+    'product_spec_definitions',
+    'product_spec_options',
+  ]) {
+    await executor.query(`
+      SELECT setval(
+        pg_get_serial_sequence('${table}', 'id'),
+        GREATEST(COALESCE(MAX("id"), 0), 1),
+        COUNT(*) > 0
+      )
+      FROM "${table}"
+    `);
+  }
+
   const groupSlugs = CATALOG_V1_10_GROUPS.map((group) => group.slug);
   const productSlugs = CATALOG_V1_10_GROUPS.flatMap((group) =>
     group.products.map((product) => product.slug),

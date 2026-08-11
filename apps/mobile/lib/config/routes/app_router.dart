@@ -331,9 +331,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           return null;
         }
         // Service-focus ranking is allowed even while pending verification.
-        if (access.needsServiceFocusSetup &&
-            !onServiceFocus &&
-            !onOnboarding) {
+        if (access.needsServiceFocusSetup && !onServiceFocus && !onOnboarding) {
           return '/supplier/service-focus?setup=1';
         }
         if (!access.canAccess && !onPending && !onServiceFocus) {
@@ -608,10 +606,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/order/preview',
         pageBuilder: (_, state) {
           final extra = (state.extra as Map?) ?? const {};
-          final artworkFileId =
-              (extra['artworkFileId'] as num?)?.toInt() ?? 0;
-          final productType =
-              (extra['productType'] as String?) ?? 'flyer';
+          final artworkFileId = (extra['artworkFileId'] as num?)?.toInt() ?? 0;
+          final productType = (extra['productType'] as String?) ?? 'flyer';
           final orderId = (extra['orderId'] as num?)?.toInt();
           final categoryHint = extra['categoryHint'] as String?;
           return slideUpTransition(
@@ -694,7 +690,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Legacy top-up path redirects to Pilot Credits balance/history.
       GoRoute(
         path: '/customer/profile/top-up',
-        redirect: (_, __) => '/customer/profile/credits',
+        redirect: (_, _) => '/customer/profile/credits',
       ),
       GoRoute(
         path: '/customer/profile/survey',
@@ -944,10 +940,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (_, state) {
           final raw = state.pathParameters['id'] ?? '';
           final jobId = int.tryParse(raw) ?? 0;
-          return slideTransition(
-            SupplierJobDetailScreen(jobId: jobId),
-            state,
-          );
+          return slideTransition(SupplierJobDetailScreen(jobId: jobId), state);
         },
       ),
       GoRoute(

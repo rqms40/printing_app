@@ -72,7 +72,7 @@ export class SuperService {
     targetUserId: number,
     role: UserRole,
     actorUserId: number,
-    actorRole: string,
+    actorRole: UserRole,
   ): Promise<User> {
     if (actorRole !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('Only super_admin can change roles');

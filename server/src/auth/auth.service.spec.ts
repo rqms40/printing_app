@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BetaModeService } from '../beta-mode/beta-mode.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
+import { RidersService } from '../riders/riders.service';
 import { UserRole } from '../users/entities/user.entity';
 
 describe('AuthService', () => {
@@ -21,6 +22,7 @@ describe('AuthService', () => {
   let notificationsService: Partial<NotificationsService>;
   let betaModeService: Partial<BetaModeService>;
   let suppliersService: Partial<SuppliersService>;
+  let ridersService: Partial<RidersService>;
 
   const mockUser = {
     id: 1,
@@ -53,6 +55,9 @@ describe('AuthService', () => {
     suppliersService = {
       createProfile: jest.fn().mockResolvedValue({ id: 10 }),
     };
+    ridersService = {
+      createProfile: jest.fn().mockResolvedValue({ id: 20 }),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -62,6 +67,7 @@ describe('AuthService', () => {
         { provide: NotificationsService, useValue: notificationsService },
         { provide: BetaModeService, useValue: betaModeService },
         { provide: SuppliersService, useValue: suppliersService },
+        { provide: RidersService, useValue: ridersService },
       ],
     }).compile();
 

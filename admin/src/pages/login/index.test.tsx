@@ -25,8 +25,10 @@ describe("LoginPage", () => {
     expect(screen.getByText("Printing Services")).toHaveStyle({
       color: "#A0A0A0",
     });
-    expect(screen.getByText("Enter your credentials to continue")).toHaveStyle({
-      color: "#A0A0A0",
-    });
+    expect(
+      screen.getByText(
+        "Ops / Super Admin / Supplier only. Clients and riders use the mobile app.",
+      ),
+    ).toHaveStyle({ color: "#A0A0A0" });
   });
 });

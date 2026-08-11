@@ -391,8 +391,6 @@ export class CreditsService {
       await userRepo.save(user);
     }
 
-    const amountCredits =
-      amountCreditsOverride ?? Math.abs(amountDelta === 0 ? 0 : amountDelta);
     // For zero-delta spend settling a reserve, amountCreditsOverride is required.
     const recordedAmount =
       amountCreditsOverride != null
@@ -643,13 +641,15 @@ export class CreditsService {
   /**
    * Client top-up is disabled for Pilot Credits (grant-only instrument).
    */
-  async requestTopUp(): Promise<never> {
-    throw new GoneException({
-      statusCode: 410,
-      message:
-        'Client top-up is disabled. Pilot Credits are grant-only test credits.',
-      code: 'pilot_credits_topup_disabled',
-    });
+  requestTopUp(): Promise<never> {
+    return Promise.reject(
+      new GoneException({
+        statusCode: 410,
+        message:
+          'Client top-up is disabled. Pilot Credits are grant-only test credits.',
+        code: 'pilot_credits_topup_disabled',
+      }),
+    );
   }
 
   async approveTopUp(transactionId: number): Promise<CreditTransaction> {

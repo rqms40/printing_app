@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -308,6 +308,13 @@ test.describe.serial("opt-in catalog RFQ screenshot evidence", () => {
         customerPassword!,
       );
       await navigateMobile(customerPage, mobileURL, "/customer/order/new");
+      const closeBatchInfo = customerPage.getByRole("button", {
+        name: "Close batch information",
+      });
+      if (await closeBatchInfo.isVisible()) {
+        await closeBatchInfo.click({ timeout: 15_000 });
+        await enableFlutterSemantics(customerPage);
+      }
       await capture(
         customerPage,
         catalogVisualSteps[0],
@@ -316,12 +323,36 @@ test.describe.serial("opt-in catalog RFQ screenshot evidence", () => {
         /Browse by product group/i,
       );
       for (const { name } of groupContract) {
-        await expect(customerPage.locator("body")).toContainText(name);
+        await expect(
+          customerPage.getByRole("button", { name: new RegExp(name, "i") }),
+        ).toBeAttached();
       }
 
       await customerPage.emulateMedia({ colorScheme: "dark" });
       await customerPage.reload();
       await enableFlutterSemantics(customerPage);
+      const restoredSurface = await expect
+        .poll(
+          async () => (await customerPage.locator("body").textContent()) ?? "",
+        )
+        .toMatch(/Welcome back|Browse by product group/i)
+        .then(() => customerPage.locator("body").textContent());
+      if (/Welcome back/i.test(restoredSurface ?? "")) {
+        await loginMobile(
+          customerPage,
+          mobileURL,
+          "maria@gridgo.ph",
+          customerPassword!,
+        );
+        await navigateMobile(customerPage, mobileURL, "/customer/order/new");
+        const darkCloseBatchInfo = customerPage.getByRole("button", {
+          name: "Close batch information",
+        });
+        if (await darkCloseBatchInfo.isVisible()) {
+          await darkCloseBatchInfo.click({ timeout: 15_000 });
+          await enableFlutterSemantics(customerPage);
+        }
+      }
       await capture(
         customerPage,
         catalogVisualSteps[1],
@@ -330,20 +361,29 @@ test.describe.serial("opt-in catalog RFQ screenshot evidence", () => {
         /Browse by product group/i,
       );
       for (const { name } of groupContract) {
-        await expect(customerPage.locator("body")).toContainText(name);
+        await expect(
+          customerPage.getByRole("button", { name: new RegExp(name, "i") }),
+        ).toBeAttached();
       }
 
       await customerPage
-        .getByText("Marketing & Promotional Collateral", { exact: true })
-        .click();
+        .getByRole("button", {
+          name: /Marketing & Promotional Collateral/i,
+        })
+        .click({ timeout: 15_000 });
       await capture(
         customerPage,
         catalogVisualSteps[2],
         screenshots,
         entries,
-        /Single sheets|Event promos/i,
+        /Choose a product/i,
       );
-      await customerPage.getByText("Flyers", { exact: true }).click();
+      await expect(
+        customerPage.getByRole("button", { name: /Flyers/i }),
+      ).toBeAttached();
+      await customerPage
+        .getByRole("button", { name: /Flyers/i })
+        .click({ timeout: 15_000 });
       await capture(
         customerPage,
         catalogVisualSteps[3],
@@ -376,8 +416,24 @@ test.describe.serial("opt-in catalog RFQ screenshot evidence", () => {
         await customerPage.reload();
         await enableFlutterSemantics(customerPage);
       });
+      const quotedRestoreSurface = await expect
+        .poll(
+          async () =>
+            (await customerPage.locator("body").textContent()) ?? "",
+        )
+        .toMatch(/Welcome back|Quote request/i)
+        .then(() => customerPage.locator("body").textContent());
+      if (/Welcome back/i.test(quotedRestoreSurface ?? "")) {
+        await loginMobile(
+          customerPage,
+          mobileURL,
+          "maria@gridgo.ph",
+          customerPassword!,
+        );
+      }
       await navigateMobile(customerPage, mobileURL, "/customer/orders/910001");
-      await customerPage.getByRole("button", { name: "Accept quote" }).click();
+      await dismissBatchInformation(customerPage);
+      await clickFlutterControl(customerPage, "Accept quote");
       await capture(
         customerPage,
         catalogVisualSteps[5],
@@ -469,10 +525,37 @@ async function loginMobile(
   password: string,
 ): Promise<void> {
   await navigateMobile(page, baseURL, "/auth/login");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByPlaceholder("Enter your password").fill(password);
-  await page.getByRole("button", { name: /Sign In|Login/i }).click();
-  await expect(page).toHaveURL(/\/customer\//);
+  await enterFlutterField(
+    page,
+    page.getByLabel(/you@example\.com/i),
+    "you@example.com",
+    email,
+  );
+  await enterFlutterField(
+    page,
+    page.getByLabel(/Enter your password/i),
+    "Enter your password",
+    password,
+  );
+  await expect(
+    page.getByRole("button", { name: /Sign In|Login/i }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: /Sign In|Login/i })
+    .click({ timeout: 15_000 });
+  await expect(page).toHaveURL(/\/(?:customer\/|onboarding)/);
+  if (new URL(page.url()).hash === "#/onboarding") {
+    await enableFlutterSemantics(page);
+    for (let pageIndex = 0; pageIndex < 4; pageIndex += 1) {
+      await page
+        .getByRole("button", { name: "Next" })
+        .click({ timeout: 15_000 });
+    }
+    await page
+      .getByRole("button", { name: "Get Started" })
+      .click({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/customer\//);
+  }
 }
 
 async function loginAdmin(
@@ -488,7 +571,40 @@ async function loginAdmin(
   await expect(page).not.toHaveURL(/\/login/);
 }
 
+async function dismissBatchInformation(page: Page): Promise<void> {
+  const closeBatchInfo = page.getByRole("button", {
+    name: "Close batch information",
+  });
+  if (await closeBatchInfo.isVisible()) {
+    await closeBatchInfo.click({ timeout: 15_000 });
+    await enableFlutterSemantics(page);
+  }
+}
+
+async function clickFlutterControl(page: Page, name: string): Promise<void> {
+  const button = page.getByRole("button", {
+    name: new RegExp(`^${name}(?:\\s|$)`, "i"),
+  });
+  if (await button.isVisible()) {
+    await button.click({ timeout: 15_000 });
+    return;
+  }
+  const mergedSemantics = page.locator(
+    `flt-semantics[aria-label$="${name}"]`,
+  );
+  await expect(mergedSemantics).toBeVisible();
+  const box = await mergedSemantics.boundingBox();
+  expect(box, `measurable Flutter control ${name}`).not.toBeNull();
+  await page.mouse.click(
+    box!.x + box!.width / 2,
+    box!.y + box!.height - 40,
+  );
+}
+
 async function fillFlyerRequirements(page: Page): Promise<void> {
+  await expect(
+    page.getByRole("button", { name: "Continue to artwork" }),
+  ).toBeEnabled();
   const requiredDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
@@ -501,7 +617,45 @@ async function fillFlyerRequirements(page: Page): Promise<void> {
     ["Quantity *", "100"],
     ["Required date *", requiredDate],
   ];
-  for (const [label, value] of fields) await page.getByLabel(label).fill(value);
+  for (const [label, value] of fields) {
+    await enterFlutterField(page, page.getByLabel(label), label, value);
+  }
+}
+
+async function enterFlutterField(
+  page: Page,
+  target: Locator,
+  accessibleName: string,
+  value: string,
+): Promise<void> {
+  await expect(target).toBeVisible();
+  let accepted = false;
+  for (let attempt = 0; attempt < 4 && !accepted; attempt += 1) {
+    const box = await target.boundingBox();
+    expect(box, `measurable Flutter field ${accessibleName}`).not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.waitForTimeout(100);
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type(value, { delay: 10 });
+    accepted = await page
+      .waitForFunction(
+        (expected) => {
+          const active = document.activeElement;
+          return (
+            (active instanceof HTMLInputElement ||
+              active instanceof HTMLTextAreaElement) &&
+            active.value === expected
+          );
+        },
+        value,
+        { timeout: 3_000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+  }
+  expect(accepted, `focused Flutter field value ${accessibleName}`).toBe(true);
+  await page.keyboard.press("Tab");
 }
 
 async function uploadArtwork(page: Page): Promise<void> {

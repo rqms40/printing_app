@@ -154,7 +154,13 @@ export async function enableFlutterSemantics(page: Page): Promise<void> {
   );
   if (await placeholder.count()) {
     await placeholder.waitFor({ state: "attached", timeout: 20_000 });
-    await placeholder.evaluate((element) => element.click());
+    await placeholder.evaluate((element) => {
+      if (element instanceof HTMLElement) {
+        element.click();
+      } else {
+        element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      }
+    });
     await placeholder.waitFor({ state: "detached", timeout: 20_000 });
   }
   await semanticsHost.waitFor({

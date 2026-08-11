@@ -176,4 +176,46 @@ void main() {
     expect(find.textContaining('Estimated ready by'), findsOneWidget);
     expect(find.text('Quote accepted'), findsNothing);
   });
+
+  testWidgets('quoted order exposes quote content without an opacity delay', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    tester.view.physicalSize = const Size(1080, 3600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final base = _order(
+      id: '88',
+      orderId: 'ORD-QUOTE',
+      paymentMethod: PaymentMethod.gridCredits,
+      deliveryAddress: const OrderDeliveryAddress(
+        fullAddress: 'Davao City',
+        city: 'Davao City',
+        latitude: 7.0,
+        longitude: 125.0,
+      ),
+    );
+    final quoted = base.copyWith(
+      pricingStatus: PricingStatus.quoted,
+      quotedTotalMinor: BigInt.from(7700),
+      deliveryFeeMinor: BigInt.from(2700),
+      promisedCompletionAt: DateTime.utc(2026, 8, 20),
+      quoteAssignmentId: 901,
+      orderStatus: OrderStatus.supplierAccepted,
+    );
+
+    await tester.pumpWidget(
+      _wrap(const OrderDetailScreen(orderId: '88'), orders: [quoted]),
+    );
+    await tester.pump();
+
+    final quoteSemantics = tester
+        .getSemantics(find.text('Supplier quote'))
+        .getSemanticsData();
+    expect(quoteSemantics.label, contains('Supplier quote'));
+    expect(quoteSemantics.label, contains('₱77.00'));
+    await tester.pump(const Duration(milliseconds: 600));
+    semantics.dispose();
+  });
 }

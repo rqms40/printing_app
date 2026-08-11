@@ -995,56 +995,51 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     unawaited(_refreshOrderById(orderId));
   }
 
-  Future<void> _refreshOrderById(String orderId) async {
+  Future<Order?> _refreshOrderById(String orderId) async {
     final sessionGeneration = _sessionGeneration;
     try {
       final response = await ApiClient.instance.get('/orders/$orderId');
-      if (!_isCurrentSession(sessionGeneration)) return;
+      if (!_isCurrentSession(sessionGeneration)) return null;
       final updated = _parseOrder(
         Map<String, dynamic>.from(response.data as Map),
       );
-      if (!mounted) return;
+      if (!mounted) return null;
       final index = state.indexWhere(
         (order) => order.id == updated.id || order.orderId == updated.orderId,
       );
       if (index < 0) {
         await _fetchOrders();
-        return;
+        return null;
       }
       final next = [...state];
       next[index] = updated;
       state = _groupBatchOrders(next);
       _subscribeToAllOrders();
+      return updated;
     } catch (error) {
       debugPrint(
         'OrdersProvider: queue promotion refetch failed for $orderId: $error',
       );
+      return null;
     }
   }
 
   void _handleOrderUpdate(dynamic data) {
-    try {
-      if (data is Map<String, dynamic>) {
-        final updated = _parseOrder(data);
-        final index = state.indexWhere(
-          (order) => order.id == updated.id || order.orderId == updated.orderId,
-        );
-
-        if (index >= 0) {
-          final next = [...state];
-          next[index] = updated;
-          state = next;
-          if (updated.orderStatus == OrderStatus.delivered ||
-              updated.orderStatus == OrderStatus.collectedByCustomer) {
-            unawaited(onCompletionUpdate?.call());
-          }
-        } else {
-          _fetchOrders();
-        }
-      }
-    } catch (e) {
-      debugPrint('OrdersProvider: WS order parse error: $e');
+    if (data is! Map<String, dynamic>) return;
+    final orderId = data['id']?.toString();
+    if (orderId == null || orderId.isEmpty) {
+      unawaited(_fetchOrders());
+      return;
     }
+    unawaited(
+      _refreshOrderById(orderId).then((updated) {
+        if (updated?.orderStatus == OrderStatus.delivered ||
+            updated?.orderStatus == OrderStatus.collectedByCustomer) {
+          return onCompletionUpdate?.call();
+        }
+        return null;
+      }),
+    );
   }
 
   @override

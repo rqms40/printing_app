@@ -38,7 +38,7 @@ Order _onTheWayOrder() => Order(
   deliveryFee: 80.0,
   paymentMethod: PaymentMethod.gcash,
   paymentStatus: PaymentStatus.paid,
-  orderStatus: OrderStatus.onTheWay,
+  orderStatus: OrderStatus.outForDelivery,
   deliveryOption: 'delivery',
   createdAt: DateTime(2026, 7, 16),
   updatedAt: DateTime(2026, 7, 16),

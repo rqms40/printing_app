@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ForwardRefExoticComponent, HTMLAttributes, RefAttributes } from 'react';
 import { motion } from 'framer-motion';
 import { UserIcon, BriefcaseBusinessIcon, HammerIcon } from 'lucide-animated';
 
@@ -7,25 +8,36 @@ type AnimatedIconHandle = {
   stopAnimation: () => void;
 };
 
-function AnimatedEcosystemIcon({ icon: Icon, size = 28 }: { icon: any, size?: number }) {
+type AnimatedIconProps = HTMLAttributes<HTMLDivElement> & {
+  size?: number;
+};
+
+type AnimatedIconComponent = ForwardRefExoticComponent<
+  AnimatedIconProps & RefAttributes<AnimatedIconHandle>
+>;
+
+function AnimatedEcosystemIcon({ icon: Icon, size = 28 }: { icon: AnimatedIconComponent, size?: number }) {
   const iconRef = useRef<AnimatedIconHandle>(null);
 
   useEffect(() => {
     // Add a slight random delay so they don't animate exactly at the same time
     const delay = Math.random() * 1000;
+    let interval: ReturnType<typeof setInterval> | undefined;
     const timeout = setTimeout(() => {
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         iconRef.current?.startAnimation();
       }, 3500);
-      return () => clearInterval(interval);
     }, delay);
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      if (interval !== undefined) clearInterval(interval);
+    };
   }, []);
 
   return <Icon ref={iconRef} size={size} />;
 }
 
-export function EcosystemSection({ isDarkMode }: { isDarkMode?: boolean }) {
+export function EcosystemSection() {
   const [activeIndex, setActiveIndex] = useState(1);
   const [isHovered, setIsHovered] = useState(false);
 

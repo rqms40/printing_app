@@ -128,7 +128,7 @@ export class IssuesService {
   async openIssue(
     dto: OpenIssueDto,
     actorUserId: number,
-    actorRole: string,
+    actorRole: UserRole,
   ): Promise<Issue> {
     const order = await this.ordersRepo.findOne({ where: { id: dto.orderId } });
     if (!order) throw new NotFoundException(`Order ${dto.orderId} not found`);
@@ -220,7 +220,7 @@ export class IssuesService {
     issueId: number,
     dto: ResolveIssueDto,
     actorUserId: number,
-    actorRole: string,
+    actorRole: UserRole,
   ): Promise<Issue> {
     const issue = await this.findById(issueId);
     if (!OPEN_STATUSES.includes(issue.status)) {

@@ -93,7 +93,7 @@ LiveDeliveryMapState _active({
   orderId: 'ORD-TEST-001',
   deliveryAssignmentId: assignmentId,
   planVersion: planVersion,
-  orderStatus: OrderStatus.onTheWay,
+  orderStatus: OrderStatus.outForDelivery,
   legDurationSeconds: 120,
   routingHealth: routingHealth,
 );
@@ -170,7 +170,7 @@ void main() {
           orderId: 'ORD-LATER-STOP',
           deliveryAssignmentId: null,
           planVersion: 4,
-          orderStatus: OrderStatus.onTheWay,
+          orderStatus: OrderStatus.outForDelivery,
           canTrackDelivery: false,
           queuePosition: 2,
           queueSize: 2,
@@ -256,7 +256,7 @@ void main() {
       harness.clock.advance(const Duration(seconds: 2));
       await tester.pump(const Duration(seconds: 1));
 
-      expect(find.text('Location stale'), findsOneWidget);
+      expect(find.text('Location stale (>15s)'), findsOneWidget);
       expect(find.byType(FlutterMap), findsOneWidget);
     });
 
@@ -265,11 +265,11 @@ void main() {
     ) async {
       final harness = _harness(
         _active(),
-        locationAge: const Duration(seconds: 60),
+        locationAge: const Duration(seconds: 119),
       );
       await tester.pumpWidget(harness.widget);
       await _settle(tester);
-      expect(find.text('Location stale'), findsOneWidget);
+      expect(find.text('Location stale (>15s)'), findsOneWidget);
 
       harness.clock.advance(const Duration(seconds: 2));
       await tester.pump(const Duration(seconds: 1));

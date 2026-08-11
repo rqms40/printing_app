@@ -1,94 +1,11 @@
 import React, { useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Environment, ContactShadows, Float, Text } from '@react-three/drei'
+import { Environment, ContactShadows, Float } from '@react-three/drei'
 import * as THREE from 'three'
 import { Model as Phone } from './PhoneModel' // Make sure you have this file in your folder!
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 const isMobile = () => window.innerWidth < 768
-
-// ─── GRIDGO text layers (zero-gravity scatter) ───────────────────────────────
-function GridTextLayer({ index, isDarkMode }: { index: number, isDarkMode?: boolean }) {
-  const mesh = useRef<(THREE.Mesh & { fillOpacity: number; outlineOpacity: number })>(null)
-
-  // Each layer has a fixed offset so the stack looks tight at rest
-  const baseZ = -1.2 - (index * 0.18)
-  // Staggered opacity — front layer is brightest
-  const baseAlpha = 1.0 - index * 0.18
-  // Keep the mesh itself moderately sized; per-frame scale handles viewport fit.
-
-  useFrame(() => {
-    if (!mesh.current) return
-    const vh = window.scrollY / window.innerHeight
-
-    // Animation window: fully visible at vh=0, fully gone by vh=0.75
-    const t = THREE.MathUtils.clamp(vh / 0.75, 0, 1)
-    // Use a smooth ease-in curve so it starts slowly then accelerates out
-    const ease = t * t
-
-    // All layers pull straight back on Z (no X/Y drift)
-    const retreatZ = index === 0 ? 1.5 : 2.5 + index * 1.2
-    mesh.current.position.z = THREE.MathUtils.lerp(baseZ, baseZ - retreatZ, ease)
-
-    // Scroll the text UP naturally with the page (1 vh is roughly 6.6 units in this camera setup)
-    mesh.current.position.y = vh * 6.6
-
-    // ── Viewport-responsive scale ─────────────────────────────────────────
-    // Camera z=8, vertical fov=45° → visible height = 6.63 units.
-    // Visible WIDTH = 6.63 × aspect, which shrinks dramatically on portrait mobile.
-    // Keep GRIDGO as a full, readable backdrop while preserving side breathing room.
-    // Troika text's rendered width is much wider than the raw letter count, so
-    // this uses the measured hero word width rather than the old under-estimate
-    // that clipped the first G and last O on both desktop and mobile.
-    const aspect = window.innerWidth / window.innerHeight
-    const visibleWidth = 2 * Math.tan(Math.PI / 8) * 8 * aspect
-    const targetFill = aspect < 0.75 ? 0.76 : 0.78
-    const estimatedTextWidth = 18.6
-    const responsiveScale = Math.min(0.64, (visibleWidth * targetFill) / estimatedTextWidth)
-
-    const fadeScale = THREE.MathUtils.lerp(1, 0.85, ease)
-    mesh.current.scale.setScalar(fadeScale * responsiveScale)
-
-    // Fade to zero opacity
-    const alpha = THREE.MathUtils.lerp(baseAlpha, 0, ease)
-    mesh.current.fillOpacity = alpha
-    mesh.current.outlineOpacity = index === 0 ? 0 : alpha * 0.9
-
-    // Keep rotation absolutely still
-    mesh.current.rotation.set(0, 0, 0)
-
-    // Force troika text to sync its properties
-    if (typeof mesh.current.sync === 'function') {
-      mesh.current.sync()
-    }
-  })
-
-  return (
-    <Text
-      ref={mesh}
-      fontSize={4.15}
-      fontWeight={900}
-      letterSpacing={0.28}
-      color={isDarkMode ? "white" : "#111111"}
-      outlineWidth={index === 0 ? 0 : 0.025}
-      outlineColor={isDarkMode ? "#ffffff" : "#111111"}
-      fillOpacity={baseAlpha}
-      position={[0, 0, baseZ]}
-    >
-      GRIDGO
-    </Text>
-  )
-}
-
-function GridTextLayers({ isDarkMode }: { isDarkMode?: boolean }) {
-  return (
-    <group>
-      {[0, 1, 2, 3, 4].map(i => (
-        <GridTextLayer key={i} index={i} isDarkMode={isDarkMode} />
-      ))}
-    </group>
-  )
-}
 
 // ─── Camera parallax arc ────────────────────────────────────────────────────
 function CameraRig() {
@@ -101,7 +18,7 @@ function CameraRig() {
 }
 
 // ─── Phone state machine ────────────────────────────────────────────────────
-function getPhoneState(vh: number, fromBottomVh: number) {
+function getPhoneState(fromBottomVh: number) {
   const mobile = isMobile()
 
   // ╔══════════════════════════════════════════════╗
@@ -146,20 +63,12 @@ function getPhoneState(vh: number, fromBottomVh: number) {
 // ─── Phone rig ──────────────────────────────────────────────────────────────
 function PhoneRig() {
   const group = useRef<THREE.Group>(null)
-  const [mobile, setMobile] = React.useState(window.innerWidth < 768)
-
-  React.useEffect(() => {
-    const handleResize = () => setMobile(window.innerWidth < 768)
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
 
   useFrame(() => {
     if (!group.current) return
 
     const scrollY = window.scrollY
     const innerHeight = window.innerHeight
-    const vh = scrollY / innerHeight
     const maxScroll = document.documentElement.scrollHeight - innerHeight
     
     const footer = document.querySelector('footer')
@@ -175,7 +84,7 @@ function PhoneRig() {
       fromBottomVh = 0
     }
 
-    const target = getPhoneState(vh, fromBottomVh)
+    const target = getPhoneState(fromBottomVh)
     
     // Apply scroll offset if scrolling into footer
     // In 3D space, moving up is positive Y.
@@ -234,7 +143,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 // ─── Scene export ────────────────────────────────────────────────────────────
-export function PhoneScene({ isDarkMode }: { isDarkMode?: boolean }) {
+export function PhoneScene() {
   const [mobile, setMobile] = React.useState(window.innerWidth < 768)
 
   React.useEffect(() => {

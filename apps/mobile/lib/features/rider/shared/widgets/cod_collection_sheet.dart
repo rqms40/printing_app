@@ -108,16 +108,13 @@ class _CodCollectionSheetState extends State<CodCollectionSheet> {
         Navigator.of(context).pop({
           'mode': 'fail',
           'returnReason': _reasonController.text.trim(),
-          if (fileId != null) 'photoFileId': fileId,
+          'photoFileId': ?fileId,
         });
       } else {
         if (fileId == null) {
           throw StateError('Collection requires photo file id');
         }
-        Navigator.of(context).pop({
-          'mode': 'collect',
-          'photoFileId': fileId,
-        });
+        Navigator.of(context).pop({'mode': 'collect', 'photoFileId': fileId});
       }
     } catch (_) {
       if (!mounted) return;
@@ -232,7 +229,9 @@ class _CodCollectionSheetState extends State<CodCollectionSheet> {
               ],
               const SizedBox(height: AppSpacing.md),
               AppButton(
-                label: _isFail ? 'Record COD failure' : 'Confirm cash collected',
+                label: _isFail
+                    ? 'Record COD failure'
+                    : 'Confirm cash collected',
                 isFullWidth: true,
                 isLoading: _isUploading,
                 onTap: _isUploading ? null : _submit,

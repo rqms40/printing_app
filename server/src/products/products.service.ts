@@ -4,7 +4,12 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
+import {
+  FindOptionsWhere,
+  IsNull,
+  Repository,
+  type QueryDeepPartialEntity,
+} from 'typeorm';
 
 import { CatalogReadService } from './catalog-read.service';
 import type { CreateAddonDto } from './dto/create-addon.dto';
@@ -140,7 +145,10 @@ export class ProductsService {
     }
     const normalized = this.normalizeCategoryDto(dto, true);
     this.validateCategoryConfiguration({ ...existing, ...normalized });
-    await this.catRepo.update(id, normalized as any);
+    await this.catRepo.update(
+      id,
+      normalized as QueryDeepPartialEntity<ProductCategory>,
+    );
     return this.catRepo.findOneOrFail({ where: { id } });
   }
 
@@ -198,7 +206,10 @@ export class ProductsService {
         );
       }
     }
-    await this.specRepo.update(id, dto as any);
+    await this.specRepo.update(
+      id,
+      dto as QueryDeepPartialEntity<ProductSpecDefinition>,
+    );
     return this.specRepo.findOneOrFail({
       where: { id },
       relations: { options: true },
@@ -327,7 +338,10 @@ export class ProductsService {
         );
       }
     }
-    await this.optRepo.update(id, dto as any);
+    await this.optRepo.update(
+      id,
+      dto as QueryDeepPartialEntity<ProductSpecOption>,
+    );
     return this.optRepo.findOneOrFail({ where: { id } });
   }
 

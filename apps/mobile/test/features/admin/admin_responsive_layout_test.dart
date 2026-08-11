@@ -39,7 +39,7 @@ void main() {
           child: SizedBox(
             width: 140,
             child: StatusPicker(
-              currentStatus: OrderStatus.arrivedAtDestination,
+              currentStatus: OrderStatus.delivered,
               onStatusSelected: _noopStatus,
             ),
           ),

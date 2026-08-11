@@ -1,9 +1,10 @@
 import { Request } from 'express';
+import { UserRole } from '../../users/entities/user.entity';
 
 export interface JwtPayload {
   sub: number;
   email: string;
-  role: string;
+  role: UserRole;
   betaTestimonialPending?: boolean;
 }
 

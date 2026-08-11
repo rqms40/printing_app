@@ -78,6 +78,9 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(betaEvidenceSteps.map((step) => step.id)).toEqual(
       Array.from({ length: 29 }, (_, index) => index + 1),
     );
+    expect(JSON.stringify(betaEvidenceSteps)).not.toMatch(
+      /password|access_?token|\btoken\b|authorization|bearer\s/i,
+    );
   });
 
   test("keeps independent release viewports and Juan geolocation permissions", () => {
@@ -155,6 +158,11 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
         {
           method: "GET",
           url: "https://c.basemaps.cartocdn.com/tile.png",
+          failure: "net::ERR_ABORTED",
+        },
+        {
+          method: "GET",
+          url: "http://192.168.40.201:8088/assets/notification_user.mp3",
           failure: "net::ERR_ABORTED",
         },
         {
@@ -331,6 +339,8 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     );
     expect(orderFlow).toContain("assertRfqCheckoutPayload");
     expect(orderFlow).toContain("prepareCatalogOrderForProduction");
+    expect(orderFlow).toContain("saved address picker dismissed");
+    expect(orderFlow).toContain("clickFlutterLabelCenter");
     expect(orderFlow).not.toContain("assertBetaOnlyPaymentOptions");
     expect(orderFlow).not.toContain("assertStandardCheckoutPayload");
 
@@ -380,6 +390,7 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
       source.lastIndexOf("async function advanceProductionAndAssign"),
     );
     expect(quoteFlow).toContain("/Pilot Credits/i");
+    expect(quoteFlow).toContain("await dismissBatchInformation");
     expect(quoteFlow).toContain(
       'clickNamed(customer.actor.page, "Accept quote")',
     );
@@ -1021,6 +1032,14 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(trackingHelper).toContain(
       'activateNamedButtonWithDomClick(actor.page, "Refresh GPS location")',
     );
+    const pickupHelper = source.slice(
+      source.lastIndexOf("async function completePickupProof"),
+      source.lastIndexOf("async function riderAction"),
+    );
+    expect(pickupHelper).toContain('waitForEvent("filechooser"');
+    expect(pickupHelper).toContain("await chooser.setFiles(uploadFixture)");
+    expect(pickupHelper).toContain("Open pickup proof");
+    expect(pickupHelper).toContain("waitForStrict2xx");
   });
 
   test("inherits the full configured time for the four-role visual journey", () => {
@@ -1119,12 +1138,18 @@ async function clickNamed(page: Page, name: string | RegExp): Promise<void> {
         if (buttons.length > 0) return `buttons:${buttons.length}`;
         const labels = await visibleLocators(labelLocator);
         if (labels.length > 0) return `labels:${labels.length}`;
+        if (name === "Accept quote") {
+          const merged = await visibleLocators(
+            page.getByLabel(/Accept quote$/i),
+          );
+          if (merged.length > 0) return `merged:${merged.length}`;
+        }
         const texts = await visibleLocators(textLocator);
         return `texts:${texts.length}`;
       },
       { message: `one visible control named ${String(name)}` },
     )
-    .toMatch(/^(?:buttons|labels|texts):1$/);
+    .toMatch(/^(?:buttons|labels|merged|texts):1$/);
   const buttons = await visibleLocators(buttonLocator);
   if (buttons.length > 0) {
     expect(buttons, `one visible button named ${String(name)}`).toHaveLength(1);
@@ -1135,6 +1160,16 @@ async function clickNamed(page: Page, name: string | RegExp): Promise<void> {
   if (labels.length > 0) {
     expect(labels, `one visible label named ${String(name)}`).toHaveLength(1);
     await clickFlutterLabelCenter(page, labels[0], name);
+    return;
+  }
+  if (name === "Accept quote") {
+    const mergedQuoteCards = await visibleLocators(
+      page.getByLabel(/Accept quote$/i),
+    );
+    expect(mergedQuoteCards, "one merged supplier quote card").toHaveLength(1);
+    const box = await mergedQuoteCards[0].boundingBox();
+    expect(box, "measurable merged supplier quote card").not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height - 40);
     return;
   }
   const texts = await visibleLocators(textLocator);
@@ -1941,12 +1976,23 @@ async function closeNextBatchDialogIfShown(page: Page): Promise<void> {
     )
     .toMatch(/^(?:dialog|ready)$/);
   if (readyState === "dialog") {
-    await activateNamedButtonWithDomClick(page, "Close batch information");
-    await expect(
-      page.getByRole("button", { name: /^Close batch information/i }),
-    ).toHaveCount(0);
+    await dismissBatchInformation(page);
   }
   await expect(page.locator("body")).toContainText(/Let's print something/i);
+}
+
+async function dismissBatchInformation(page: Page): Promise<void> {
+  const close = page.getByRole("button", {
+    name: /^Close batch information/i,
+  });
+  const visible = await visibleLocators(close);
+  if (visible.length === 0) return;
+  expect(visible, "one visible batch information close control").toHaveLength(
+    1,
+  );
+  await visible[0].evaluate((element) => (element as HTMLElement).click());
+  await expect(close).toHaveCount(0);
+  await enableFlutterSemantics(page);
 }
 
 async function completeCheckoutPipelineTutorial(page: Page): Promise<void> {
@@ -2047,6 +2093,9 @@ async function placeCustomerOrder(options: {
   await expect(actor.page.locator("body")).toContainText(
     /Flyers requirements/i,
   );
+  await expect(
+    actor.page.getByRole("button", { name: "Continue to artwork" }),
+  ).toBeEnabled();
   if (name === "Mark")
     await capture(run, actor, 7, /Flyers requirements/i, { userId });
   const requiredDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -2061,7 +2110,7 @@ async function placeCustomerOrder(options: {
     ["Quantity", "100"],
     ["Required date", requiredDate],
   ] as const) {
-    await actor.page.getByLabel(new RegExp(`^${label} \\*`)).fill(value);
+    await fillNamed(actor.page, `${label} *`, value);
   }
   await clickNamed(actor.page, "Continue to artwork");
   await expect(actor.page.locator("body")).toContainText(/Upload your file/i);
@@ -2175,7 +2224,24 @@ async function placeCustomerOrder(options: {
   await expect(actor.page.locator("body")).toContainText(
     /Choose a delivery address/i,
   );
-  await clickNamed(actor.page, expectedAddress.label);
+  const savedAddress = actor.page.getByRole("button", {
+    name: accessibleNamePattern(expectedAddress.label),
+  });
+  await expect
+    .poll(async () => (await visibleLocators(savedAddress)).length, {
+      message: `${name} saved address picker option`,
+    })
+    .toBe(1);
+  const savedAddresses = await visibleLocators(savedAddress);
+  await clickFlutterLabelCenter(
+    actor.page,
+    savedAddresses[0],
+    expectedAddress.label,
+  );
+  await expect(
+    actor.page.locator("body"),
+    "saved address picker dismissed",
+  ).not.toContainText(/Choose a delivery address/i);
   await expect(actor.page.locator("body")).toContainText(expectedAddress.label);
   if (name === "Mark")
     await capture(run, actor, 10, /Mark beta route stop/i, {
@@ -2342,8 +2408,15 @@ async function prepareCatalogOrderForProduction(options: {
     assignment: { id: supplierAssignmentId, decision: "accepted" },
     order: { orderStatus: "supplier_accepted", pricingStatus: "quoted" },
   });
+  const quotedOrder = await authenticatedGet<JsonRecord>(
+    request,
+    apiBaseURL,
+    `/orders/${customer.orderId}`,
+    customer.token,
+    `${customer.name} durable supplier quote`,
+  );
   expect(
-    Number((quote.order as JsonRecord).quotedTotalMinor),
+    Number(quotedOrder.quotedTotalMinor),
     `${customer.name} quoted total must fit the fresh beta credit budget`,
   ).toBeLessThanOrEqual(10_000);
 
@@ -2354,6 +2427,10 @@ async function prepareCatalogOrderForProduction(options: {
     mobileURL,
     supplierAssignmentId,
   });
+  // Login restoration briefly visits customer home, whose deferred batch
+  // dialog can mount after the detail navigation has already completed.
+  await customer.actor.page.waitForTimeout(1_200);
+  await dismissBatchInformation(customer.actor.page);
   await expect(customer.actor.page.locator("body")).toContainText(
     /Supplier quote/i,
   );
@@ -2469,6 +2546,7 @@ async function refreshQuotedCustomerOrder(options: {
         apiBaseURL,
         `/orders/${customer.orderId}`,
         customer.token,
+        `${customer.name} externally quoted RFQ order`,
       );
       return {
         orderStatus: order.orderStatus,
@@ -2482,12 +2560,33 @@ async function refreshQuotedCustomerOrder(options: {
       quoteAssignmentId: supplierAssignmentId,
     },
     message: `${customer.name} externally quoted RFQ is durable`,
-    afterReload: () =>
-      navigateMobile(
+    afterReload: async () => {
+      await navigateMobile(
         customer.actor.page,
         mobileURL,
         `/customer/orders/${customer.orderId}`,
-      ),
+      );
+      const restoredSurface = await expect
+        .poll(
+          async () =>
+            (await customer.actor.page.locator("body").textContent()) ?? "",
+        )
+        .toMatch(/Welcome back|Supplier quote/i)
+        .then(() => customer.actor.page.locator("body").textContent());
+      if (/Welcome back/i.test(restoredSurface ?? "")) {
+        await loginMobile(
+          customer.actor,
+          mobileURL,
+          customer.email,
+          customer.password,
+        );
+        await navigateMobile(
+          customer.actor.page,
+          mobileURL,
+          `/customer/orders/${customer.orderId}`,
+        );
+      }
+    },
   });
 }
 
@@ -2656,6 +2755,31 @@ async function provisionVisualSupplier(options: {
     supplierToken: supplierAuth.access_token,
     superToken: superAuth.access_token,
   };
+}
+
+async function completePickupProof(
+  actor: BetaActorRuntime,
+  assignmentId: number,
+): Promise<JsonRecord> {
+  await activateNamedButtonWithKeyboard(actor.page, /Open pickup proof/i);
+  await expect(
+    actor.page.getByText("Pickup proof", { exact: true }),
+  ).toBeVisible();
+  const chooserPromise = actor.page.waitForEvent("filechooser");
+  await clickNamed(actor.page, "Take pickup photo");
+  const chooser = await chooserPromise;
+  await chooser.setFiles(uploadFixture);
+  await expect(
+    actor.page.getByRole("button", { name: /^Use photo/i }),
+  ).toBeVisible();
+  return waitForStrict2xx<JsonRecord>(
+    actor.page,
+    (response) =>
+      response.request().method() === "PATCH" &&
+      apiPath(response, `/api/riders/assignments/${assignmentId}/status`),
+    () => clickNamed(actor.page, "Use photo"),
+    `pickup proof for assignment ${assignmentId}`,
+  );
 }
 
 async function riderAction(
@@ -3221,9 +3345,8 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           mobileURL,
           customer.assignmentId,
         );
-        const pickedUp = await riderAction(
+        const pickedUp = await completePickupProof(
           actors.juan,
-          /Mark as picked up/i,
           customer.assignmentId,
         );
         expect(pickedUp).toMatchObject({

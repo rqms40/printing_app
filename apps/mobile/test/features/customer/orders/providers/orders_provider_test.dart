@@ -413,6 +413,44 @@ void main() {
   });
 
   group('OrdersNotifier lifecycle', () {
+    test('partial status socket event refetches the complete quote', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      WebSocketService.instance.disconnect();
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      final quotedOrder = {
+        ..._orderJson(
+          id: '7',
+          orderId: 'ORD-10007',
+          fileName: 'flyer.pdf',
+          orderStatus: 'supplier_accepted',
+        ),
+        'pricingStatus': 'quoted',
+        'quotedTotalMinor': '7700',
+        'promisedCompletionAt': '2026-08-14T10:00:00.000Z',
+        'quoteAssignmentId': 41,
+      };
+      ordersGetResponse = [quotedOrder];
+      orderByIdResponse = quotedOrder;
+      final notifier = OrdersNotifier();
+      addTearDown(notifier.dispose);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      WebSocketService.instance.dispatchOrderUpdateForTests({
+        'id': 7,
+        'orderId': 'ORD-10007',
+        'orderStatus': 'supplier_accepted',
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(orderByIdFetches, 1);
+      expect(notifier.state.single.pricingStatus, PricingStatus.quoted);
+      expect(notifier.state.single.quotedTotalMinor, BigInt.from(7700));
+      expect(notifier.state.single.quoteAssignmentId, 41);
+    });
+
     test(
       'promotion with null assignment refetches order before enabling map',
       () async {

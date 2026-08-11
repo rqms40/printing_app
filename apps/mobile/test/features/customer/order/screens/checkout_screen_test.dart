@@ -169,7 +169,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Price and turnaround pending review'), findsWidgets);
-    expect(find.text('Stock / material: Matte'), findsOneWidget);
+    expect(find.text('Stock: Matte'), findsOneWidget);
     expect(find.text('Payment method'), findsNothing);
     expect(find.text('Delivery options'), findsNothing);
     expect(find.text('Payment details'), findsNothing);
@@ -233,7 +233,7 @@ Order _order({required String id, required String orderRef}) {
     deliveryFee: 0,
     paymentMethod: PaymentMethod.gridCredits,
     paymentStatus: PaymentStatus.paid,
-    orderStatus: OrderStatus.orderPlaced,
+    orderStatus: OrderStatus.submitted,
     deliveryOption: 'pickup',
     createdAt: now,
     updatedAt: now,

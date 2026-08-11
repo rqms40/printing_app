@@ -89,108 +89,144 @@ class _QuoteCardState extends ConsumerState<QuoteCard> {
         ? AppColors.dark
         : AppColors.light;
     final status = widget.order.pricingStatus;
-    final semantics = switch (status) {
-      PricingStatus.pendingQuote => 'Supplier quote pending',
-      PricingStatus.quoted => 'Supplier quote ready for review',
-      PricingStatus.accepted => 'Supplier quote accepted',
-    };
-
-    return Semantics(
-      container: true,
-      label: semantics,
-      child: AppCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              status == PricingStatus.accepted
-                  ? 'Quote accepted'
-                  : status == PricingStatus.quoted
-                  ? 'Supplier quote'
-                  : 'Price and turnaround pending review',
-              style: AppTypography.h3.copyWith(color: colors.onSurface),
+    final heading = status == PricingStatus.accepted
+        ? 'Quote accepted'
+        : status == PricingStatus.quoted
+        ? 'Supplier quote'
+        : 'Price and turnaround pending review';
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            container: true,
+            label: heading,
+            child: ExcludeSemantics(
+              child: Text(
+                heading,
+                style: AppTypography.h3.copyWith(color: colors.onSurface),
+              ),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            if (status == PricingStatus.pendingQuote)
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (status == PricingStatus.pendingQuote)
+            Text(
+              'GRIDGO Operations and an eligible supplier are reviewing '
+              'your requirements. Payment is unavailable until a quote is ready.',
+              style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
+            )
+          else ...[
+            _quoteTerms(colors),
+            if (status == PricingStatus.accepted) ...[
+              const SizedBox(height: AppSpacing.md),
               Text(
-                'GRIDGO Operations and an eligible supplier are reviewing '
-                'your requirements. Payment is unavailable until a quote is ready.',
-                style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
-              )
-            else ...[
-              _quoteTerms(colors),
-              if (status == PricingStatus.accepted) ...[
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Payment method: ${widget.order.paymentMethod.displayName}',
-                  style: AppTypography.bodyBold.copyWith(
-                    color: colors.onSurface,
+                'Payment method: ${widget.order.paymentMethod.displayName}',
+                style: AppTypography.bodyBold.copyWith(color: colors.onSurface),
+              ),
+              Text(
+                'GRIDGO Operations will authorize payment before production starts.',
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                ),
+              ),
+            ] else if (widget.isOwner && _hasCompleteQuote) ...[
+              const SizedBox(height: AppSpacing.md),
+              Semantics(
+                container: true,
+                label: widget.order.codEligible
+                    ? 'Choose payment method. '
+                          '${_paymentMethod == PaymentMethod.gridCredits ? 'Pilot Credits selected. Cash on Delivery available' : 'Cash on Delivery selected. Pilot Credits available'}'
+                    : 'Choose payment method. Pilot Credits selected',
+                child: ExcludeSemantics(
+                  child: Text(
+                    'Choose payment method',
+                    style: AppTypography.bodyBold.copyWith(
+                      color: colors.onSurface,
+                    ),
                   ),
                 ),
-                Text(
-                  'GRIDGO Operations will authorize payment before production starts.',
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurfaceDim,
-                  ),
-                ),
-              ] else if (widget.isOwner && _hasCompleteQuote) ...[
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Choose payment method',
-                  style: AppTypography.bodyBold.copyWith(
-                    color: colors.onSurface,
-                  ),
-                ),
-                RadioGroup<PaymentMethod>(
-                  groupValue: _paymentMethod,
-                  onChanged: _accepting
-                      ? (_) {}
-                      : (value) {
-                          if (value != null) {
-                            setState(() => _paymentMethod = value);
-                          }
-                        },
-                  child: Column(
-                    children: [
-                      const RadioListTile<PaymentMethod>(
+              ),
+              RadioGroup<PaymentMethod>(
+                groupValue: _paymentMethod,
+                onChanged: _accepting
+                    ? (_) {}
+                    : (value) {
+                        if (value != null) {
+                          setState(() => _paymentMethod = value);
+                        }
+                      },
+                child: Column(
+                  children: [
+                    Semantics(
+                      container: true,
+                      label: 'Pilot Credits',
+                      checked: _paymentMethod == PaymentMethod.gridCredits,
+                      inMutuallyExclusiveGroup: true,
+                      onTap: _accepting
+                          ? null
+                          : () => setState(
+                              () => _paymentMethod = PaymentMethod.gridCredits,
+                            ),
+                      excludeSemantics: true,
+                      child: RadioListTile<PaymentMethod>(
                         contentPadding: EdgeInsets.zero,
-                        title: Text('Pilot Credits'),
+                        title: const Text('Pilot Credits'),
                         value: PaymentMethod.gridCredits,
                       ),
-                      if (widget.order.codEligible)
-                        const RadioListTile<PaymentMethod>(
+                    ),
+                    if (widget.order.codEligible)
+                      Semantics(
+                        container: true,
+                        label: 'Cash on Delivery',
+                        checked: _paymentMethod == PaymentMethod.cod,
+                        inMutuallyExclusiveGroup: true,
+                        onTap: _accepting
+                            ? null
+                            : () => setState(
+                                () => _paymentMethod = PaymentMethod.cod,
+                              ),
+                        excludeSemantics: true,
+                        child: RadioListTile<PaymentMethod>(
                           contentPadding: EdgeInsets.zero,
-                          title: Text('Cash on Delivery'),
+                          title: const Text('Cash on Delivery'),
                           value: PaymentMethod.cod,
                         ),
-                    ],
-                  ),
-                ),
-                if (_quoteError != null || _genericError != null) ...[
-                  Text(
-                    _quoteError?.message ?? _genericError!,
-                    style: AppTypography.caption.copyWith(color: colors.error),
-                  ),
-                  if (_quoteError?.refreshRecommended == true)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton(
-                        onPressed: _refresh,
-                        child: const Text('Refresh quote'),
                       ),
+                  ],
+                ),
+              ),
+              if (_quoteError != null || _genericError != null) ...[
+                Text(
+                  _quoteError?.message ?? _genericError!,
+                  style: AppTypography.caption.copyWith(color: colors.error),
+                ),
+                if (_quoteError?.refreshRecommended == true)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: _refresh,
+                      child: const Text('Refresh quote'),
                     ),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-                AppButton(
+                  ),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+              Semantics(
+                container: true,
+                button: true,
+                enabled: !_accepting,
+                label: 'Accept quote',
+                onTap: _accepting ? null : _accept,
+                excludeSemantics: true,
+                child: AppButton(
                   label: 'Accept quote',
                   isFullWidth: true,
                   isLoading: _accepting,
                   onTap: _accept,
                 ),
-              ],
+              ),
             ],
           ],
-        ),
+        ],
       ),
     );
   }

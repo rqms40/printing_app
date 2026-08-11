@@ -272,12 +272,9 @@ class OrderDetailScreen extends ConsumerWidget {
             // --- Marketplace QA / payment actions (Phases 3–4) ---
             if (order.hasQuoteLifecycle) ...[
               QuoteCard(
-                    order: order,
-                    isOwner: ref.watch(authProvider).user?.id == order.userId,
-                  )
-                  .animate()
-                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                  .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+                order: order,
+                isOwner: ref.watch(authProvider).user?.id == order.userId,
+              ),
               const SizedBox(height: AppSpacing.md),
             ],
             MarketplaceOrderActions(order: order)

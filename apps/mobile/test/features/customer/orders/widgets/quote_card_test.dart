@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
@@ -104,6 +106,48 @@ void main() {
       expect(find.textContaining('77'), findsNothing);
     },
   );
+
+  testWidgets('quoted state exposes its content and action to semantics', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      _wrap(
+        _order(
+          pricingStatus: PricingStatus.quoted,
+          totalMinor: BigInt.from(12700),
+          deliveryMinor: BigInt.from(2700),
+          promisedAt: DateTime.utc(2026, 8, 20),
+          quoteAssignmentId: 77,
+        ),
+        onAccept: (_, _, _) async {},
+      ),
+    );
+
+    await tester.ensureVisible(find.text('Accept quote'));
+    await tester.pump();
+    final acceptSemantics = tester
+        .getSemantics(find.text('Accept quote'))
+        .getSemanticsData();
+    final quoteSemantics = tester
+        .getSemantics(find.text('Supplier quote'))
+        .getSemanticsData();
+    final pilotSemantics = tester
+        .getSemantics(find.text('Pilot Credits'))
+        .getSemanticsData();
+    final paymentHeadingSemantics = tester
+        .getSemantics(find.text('Choose payment method'))
+        .getSemanticsData();
+    expect(quoteSemantics.label, contains('Supplier quote'));
+    expect(quoteSemantics.label, isNot(contains('Accept quote')));
+    expect(pilotSemantics.label, 'Pilot Credits');
+    expect(pilotSemantics.hasAction(SemanticsAction.tap), isTrue);
+    expect(paymentHeadingSemantics.label, contains('Pilot Credits selected'));
+    expect(acceptSemantics.label, 'Accept quote');
+    expect(acceptSemantics.hasAction(SemanticsAction.tap), isTrue);
+    semantics.dispose();
+  });
 
   testWidgets('quoted state omits missing monetary parts and promised date', (
     tester,

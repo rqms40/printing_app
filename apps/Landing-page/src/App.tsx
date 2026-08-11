@@ -15,10 +15,6 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
-
-      const featuresEl = document.getElementById('features');
-      if (featuresEl) {
-      }
     };
     window.addEventListener('scroll', handleScroll);
     handleScroll();
@@ -744,21 +740,21 @@ function App() {
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [isDarkMode]);
 
   return (
     <div className="w-full relative custom-scrollbar bg-white dark:bg-black text-black dark:text-white">
       <Navbar isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
 
       {/* The 3D Parallax Canvas stays fixed in the background but is now hidden in the hero section */}
-      <PhoneScene isDarkMode={isDarkMode} />
+      <PhoneScene />
 
       {/* Scrollable Content */}
       <div className="relative w-full">
         <HeroSection isDarkMode={isDarkMode} />
         <FeaturesSection />
         <HowItWorksSection />
-        <EcosystemSection isDarkMode={isDarkMode} />
+        <EcosystemSection />
         <SupportSection isDarkMode={isDarkMode} />
         <AboutSection isDarkMode={isDarkMode} />
         <TeamSection isDarkMode={isDarkMode} />

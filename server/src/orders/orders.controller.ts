@@ -28,6 +28,7 @@ import type { TransitionActor } from './order-status-transition';
 import { QualityService } from '../quality/quality.service';
 import { ResubmitCorrectionDto } from '../quality/dto/resubmit-correction.dto';
 import { RejectProofDto } from '../quality/dto/reject-proof.dto';
+import { isAdminRole } from '../users/entities/user.entity';
 
 @ApiTags('orders')
 @ApiBearerAuth()
@@ -48,11 +49,7 @@ export class OrdersController {
   async getOrder(@Request() req: RequestWithUser, @Param('id') id: number) {
     const order = await this.ordersService.findById(id);
     if (!order) throw new NotFoundException('Order not found');
-    if (
-      order.userId !== req.user.sub &&
-      req.user.role !== 'ops_admin' &&
-      req.user.role !== 'super_admin'
-    ) {
+    if (order.userId !== req.user.sub && !isAdminRole(req.user.role)) {
       throw new ForbiddenException('You can only view your own orders');
     }
     return order;

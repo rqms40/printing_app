@@ -28,6 +28,7 @@ import { PresignedUrlResponseDto } from './dto/presigned-url.dto';
 import { FileInspectionDto } from './dto/file-inspection.dto';
 import { PaperSizeValidatorService } from './paper-size-validator.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
+import { isAdminRole } from '../users/entities/user.entity';
 import { PT_TO_MM } from './files.constants';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 import {
@@ -107,8 +108,7 @@ export class FilesController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: RequestWithUser,
   ): Promise<PresignedUrlResponseDto> {
-    const isAdmin =
-      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
+    const isAdmin = isAdminRole(req.user.role);
     const url = await this.filesService.getPresignedUrl(
       id,
       req.user.sub,
@@ -125,8 +125,7 @@ export class FilesController {
     @Query('paperSize') paperSize?: string,
   ): Promise<FileInspectionDto> {
     const file = await this.filesService.findById(id);
-    const isAdmin =
-      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
+    const isAdmin = isAdminRole(req.user.role);
     if (
       !isAdmin &&
       (file.uploadedBy == null || file.uploadedBy !== req.user.sub)
@@ -235,8 +234,7 @@ export class FilesController {
     @Request() req: RequestWithUser,
   ) {
     const file = await this.filesService.findById(id);
-    const isAdmin =
-      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
+    const isAdmin = isAdminRole(req.user.role);
     if (
       !isAdmin &&
       (file.uploadedBy == null || file.uploadedBy !== req.user.sub)
@@ -252,8 +250,7 @@ export class FilesController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: RequestWithUser,
   ): Promise<void> {
-    const isAdmin =
-      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
+    const isAdmin = isAdminRole(req.user.role);
     await this.filesService.deleteOwnedFile(id, req.user.sub, isAdmin);
   }
 }

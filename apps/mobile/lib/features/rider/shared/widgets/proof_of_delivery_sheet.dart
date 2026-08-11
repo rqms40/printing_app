@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -237,10 +235,10 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                     vertical: AppSpacing.sm,
                   ),
                   decoration: BoxDecoration(
-                    color: colors.primary.withValues(alpha: 0.12),
+                    color: colors.brand.withValues(alpha: 0.12),
                     borderRadius: AppRadius.borderMd,
                     border: Border.all(
-                      color: colors.primary.withValues(alpha: 0.35),
+                      color: colors.brand.withValues(alpha: 0.35),
                     ),
                   ),
                   child: Column(

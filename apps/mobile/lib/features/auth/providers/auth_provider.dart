@@ -171,6 +171,7 @@ class AuthUser {
   final String? profileField;
   final String? course;
   final String? organization;
+
   /// Optional marketplace metadata: business | organization | teacher.
   final String? clientAccountType;
   final List<String> printingPreferences;
@@ -388,9 +389,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
       if (user.role == 'supplier') {
-        try {
-          _ref?.invalidate(supplierAccessProvider);
-        } catch (_) {}
+        await _ref?.read(supplierAccessProvider.notifier).refresh();
+        if (!_isAuthOperationCurrent(authGeneration)) return;
       }
       _connectNotificationsWs();
       _startSessionScopedData();
@@ -457,10 +457,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'fullName': fullName,
           if (nickname != null && nickname.isNotEmpty) 'nickname': nickname,
           'profileCategory': profileCategory,
-          if (isSupplier)
-            'profileField': 'print_shop'
-          else if (profileField != null)
-            'profileField': profileField,
+          'profileField': ?(isSupplier ? 'print_shop' : profileField),
           if (isSupplier && serviceFocusRanks.isNotEmpty)
             'serviceFocusRanks': serviceFocusRanks,
           if (ageRange != null && ageRange.isNotEmpty) 'ageRange': ageRange,
@@ -499,6 +496,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
+      if (user.role == 'supplier') {
+        await _ref?.read(supplierAccessProvider.notifier).refresh();
+        if (!_isAuthOperationCurrent(authGeneration)) return;
+      }
       _connectNotificationsWs();
       _startSessionScopedData();
     } on DioException catch (e) {
@@ -784,6 +785,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
+      if (user.role == 'supplier') {
+        await _ref?.read(supplierAccessProvider.notifier).refresh();
+        if (!_isAuthOperationCurrent(authGeneration)) return;
+      }
       _connectNotificationsWs();
       _startSessionScopedData();
     } catch (_) {

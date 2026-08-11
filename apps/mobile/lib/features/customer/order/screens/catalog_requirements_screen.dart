@@ -88,7 +88,9 @@ class _CatalogRequirementsScreenState
                       key: ValueKey('catalog-spec-${definition.key}'),
                       definition: definition,
                       value: _values[definition.key],
-                      onChanged: (value) => _values[definition.key] = value,
+                      onChanged: (value) {
+                        setState(() => _values[definition.key] = value);
+                      },
                     ),
                   TextFormField(
                     key: const ValueKey('quantity-field'),

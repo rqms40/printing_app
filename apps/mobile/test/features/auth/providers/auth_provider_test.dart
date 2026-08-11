@@ -176,7 +176,7 @@ void main() {
       devNotifier.devBypass('customer');
       expect(devNotifier.state.status, AuthStatus.authenticated);
       expect(devNotifier.state.user, isNotNull);
-      expect(devNotifier.state.user!.role, 'customer');
+      expect(devNotifier.state.user!.role, 'client');
       expect(devNotifier.state.user!.fullName, 'Maria Santos');
       expect(devNotifier.state.user!.email, 'maria@test.com');
       expect(devNotifier.state.user!.id, '1');
@@ -314,7 +314,7 @@ void main() {
     test('multiple devBypass calls override previous state', () {
       final devNotifier = AuthNotifier(null, true);
       devNotifier.devBypass('customer');
-      expect(devNotifier.state.user!.role, 'customer');
+      expect(devNotifier.state.user!.role, 'client');
 
       devNotifier.devBypass('rider');
       expect(devNotifier.state.user!.role, 'rider');
@@ -806,10 +806,7 @@ void main() {
 
       await container.read(authProvider.notifier).logout();
 
-      expect(
-        container.read(authProvider).status,
-        AuthStatus.unauthenticated,
-      );
+      expect(container.read(authProvider).status, AuthStatus.unauthenticated);
     });
 
     test('completes when the tutorial flush never settles', () async {
@@ -834,10 +831,7 @@ void main() {
           .logout()
           .timeout(const Duration(seconds: 5));
 
-      expect(
-        container.read(authProvider).status,
-        AuthStatus.unauthenticated,
-      );
+      expect(container.read(authProvider).status, AuthStatus.unauthenticated);
     });
 
     test('drops a push route captured before the next sign-in', () async {
@@ -866,6 +860,5 @@ class _StubTutorialNotifier extends TutorialNotifier {
   final Future<void> Function()? _flush;
 
   @override
-  Future<void> flushPendingWrites() =>
-      _flush?.call() ?? Future<void>.value();
+  Future<void> flushPendingWrites() => _flush?.call() ?? Future<void>.value();
 }

@@ -126,13 +126,13 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
     id: 14,
     slug: "mark-order-details",
     actor: "mark",
-    assertion: "Mark accepts the real supplier quote before authorization",
+    assertion: "Mark accepts the real supplier quote before payment approval",
   },
   {
     id: 15,
     slug: "mark-production-progress",
     actor: "admin",
-    assertion: "Mark passed authorization, supplier production, and self-QC",
+    assertion: "Mark passed payment approval, supplier production, and self-QC",
   },
   {
     id: 16,
@@ -280,10 +280,17 @@ export function requiredEvidenceNetworkIssues(
       return false;
     }
   };
+  const isNavigationMediaAbort = (entry: ActorNetworkEntry) =>
+    entry.method === "GET" &&
+    entry.failure === "net::ERR_ABORTED" &&
+    /\.(?:mp3|m4a|ogg|wav)(?:[?#]|$)/i.test(entry.url);
 
   return {
     transportFailures: network.filter(
-      (entry) => Boolean(entry.failure) && isRequiredOrigin(entry),
+      (entry) =>
+        Boolean(entry.failure) &&
+        isRequiredOrigin(entry) &&
+        !isNavigationMediaAbort(entry),
     ),
     serverResponses: network.filter(
       (entry) => (entry.status ?? 0) >= 500 && isRequiredOrigin(entry),

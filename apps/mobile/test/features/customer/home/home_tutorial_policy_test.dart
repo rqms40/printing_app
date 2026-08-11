@@ -71,7 +71,7 @@ void main() {
           orderHistoryAuthoritative: true,
           hasOrderHistory: false,
           pipelineSeen: false,
-          activeOrderStatuses: const [OrderStatus.onTheWay],
+          activeOrderStatuses: const [OrderStatus.outForDelivery],
         ),
         isFalse,
       );
@@ -85,7 +85,7 @@ void main() {
         orderHistoryAuthoritative: true,
         hasOrderHistory: true,
         pipelineSeen: false,
-        activeOrderStatuses: const [OrderStatus.completedPickup],
+        activeOrderStatuses: const [OrderStatus.collectedByCustomer],
       ),
       isFalse,
     );
@@ -105,8 +105,7 @@ void main() {
     for (final status in const [
       OrderStatus.riderAssigned,
       OrderStatus.pickedUp,
-      OrderStatus.onTheWay,
-      OrderStatus.arrivedAtDestination,
+      OrderStatus.outForDelivery,
     ]) {
       expect(
         shouldDeferHomeTutorial(
@@ -122,7 +121,10 @@ void main() {
     expect(
       shouldDeferHomeTutorial(
         ordersLoaded: true,
-        activeOrderStatuses: const [OrderStatus.printingInProgress],
+        activeOrderStatuses: const [
+          OrderStatus.production,
+          OrderStatus.delivered,
+        ],
       ),
       isFalse,
     );

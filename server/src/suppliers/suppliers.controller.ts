@@ -142,7 +142,10 @@ export class SuppliersController {
     @Request() req: RequestWithUser,
   ) {
     const profile = await this.suppliersService.findById(id);
-    if (req.user.role === 'supplier' && profile.userId !== req.user.sub) {
+    if (
+      req.user.role === UserRole.SUPPLIER &&
+      profile.userId !== req.user.sub
+    ) {
       throw new ForbiddenException(
         'You can only read your own supplier profile',
       );
@@ -191,7 +194,7 @@ export class SuppliersController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: RequestWithUser,
   ) {
-    if (req.user.role === 'supplier') {
+    if (req.user.role === UserRole.SUPPLIER) {
       const profile = await this.suppliersService.findById(id);
       if (profile.userId !== req.user.sub) {
         throw new ForbiddenException(

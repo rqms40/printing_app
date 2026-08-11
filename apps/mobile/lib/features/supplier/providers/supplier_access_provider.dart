@@ -46,9 +46,7 @@ class SupplierAccessState {
 class SupplierAccessNotifier extends StateNotifier<SupplierAccessState> {
   SupplierAccessNotifier({ApiClient? apiClient})
     : _api = apiClient ?? ApiClient.instance,
-      super(const SupplierAccessState()) {
-    refresh();
-  }
+      super(const SupplierAccessState());
 
   final ApiClient _api;
 
@@ -56,9 +54,11 @@ class SupplierAccessNotifier extends StateNotifier<SupplierAccessState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final res = await _api.get('/suppliers/me/access');
+      if (!mounted) return;
       final data = res.data;
       if (data is Map) {
-        final ranksRaw = data['serviceFocusRanks'] ?? data['service_focus_ranks'];
+        final ranksRaw =
+            data['serviceFocusRanks'] ?? data['service_focus_ranks'];
         final ranks = <String>[];
         if (ranksRaw is List) {
           for (final r in ranksRaw) {
@@ -69,8 +69,8 @@ class SupplierAccessNotifier extends StateNotifier<SupplierAccessState> {
         state = SupplierAccessState(
           isLoading: false,
           canAccess: data['canAccessSupplierInterface'] == true,
-          verificationStatus:
-              (data['verificationStatus'] ?? 'pending').toString(),
+          verificationStatus: (data['verificationStatus'] ?? 'pending')
+              .toString(),
           message: data['message']?.toString(),
           needsServiceFocusSetup:
               data['needsServiceFocusSetup'] == true || ranks.isEmpty,
@@ -85,6 +85,7 @@ class SupplierAccessNotifier extends StateNotifier<SupplierAccessState> {
         message: 'Unable to determine supplier verification status.',
       );
     } on DioException catch (e) {
+      if (!mounted) return;
       final data = e.response?.data;
       String? code;
       String? message;
@@ -104,6 +105,7 @@ class SupplierAccessNotifier extends StateNotifier<SupplierAccessState> {
         errorMessage: message,
       );
     } catch (e) {
+      if (!mounted) return;
       state = SupplierAccessState(
         isLoading: false,
         canAccess: false,

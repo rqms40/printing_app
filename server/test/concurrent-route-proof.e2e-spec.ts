@@ -567,10 +567,10 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
 
     await expect(
       ordersRepo.findOneOrFail({ where: { id: nearAssignment.orderId } }),
-    ).resolves.toMatchObject({ orderStatus: OrderStatus.DELIVERED });
+    ).resolves.toMatchObject({ orderStatus: OrderStatus.ISSUE_WINDOW_OPEN });
     await expect(
       ordersRepo.findOneOrFail({ where: { id: midAssignment.orderId } }),
-    ).resolves.toMatchObject({ orderStatus: OrderStatus.DELIVERED });
+    ).resolves.toMatchObject({ orderStatus: OrderStatus.ISSUE_WINDOW_OPEN });
     await expect(
       assignmentsRepo.findOneOrFail({ where: { id: farAssignment.id } }),
     ).resolves.toMatchObject({ status: DeliveryStatus.ASSIGNED });

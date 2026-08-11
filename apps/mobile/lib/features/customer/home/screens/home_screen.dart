@@ -576,7 +576,7 @@ class _ResumeQueueCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '$formattedSubtotal subtotal',
+                          formattedSubtotal,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption.copyWith(

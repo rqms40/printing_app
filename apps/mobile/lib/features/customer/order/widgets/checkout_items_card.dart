@@ -351,15 +351,24 @@ class _Stepper extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-            padding: EdgeInsets.zero,
-            onPressed: canDec ? onDecrement : null,
-            icon: HugeIcon(
-              icon: HugeIcons.strokeRoundedMinusSign,
-              size: 14,
-              color: canDec ? colors.onBackground : colors.disabled,
+          MergeSemantics(
+            child: Semantics(
+              label: 'Decrease quantity',
+              child: IconButton(
+                tooltip: 'Decrease quantity',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(
+                  width: 28,
+                  height: 28,
+                ),
+                padding: EdgeInsets.zero,
+                onPressed: canDec ? onDecrement : null,
+                icon: HugeIcon(
+                  icon: HugeIcons.strokeRoundedMinusSign,
+                  size: 14,
+                  color: canDec ? colors.onBackground : colors.disabled,
+                ),
+              ),
             ),
           ),
           SizedBox(
@@ -373,15 +382,24 @@ class _Stepper extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-            padding: EdgeInsets.zero,
-            onPressed: onIncrement,
-            icon: HugeIcon(
-              icon: HugeIcons.strokeRoundedAdd01,
-              size: 14,
-              color: colors.onBackground,
+          MergeSemantics(
+            child: Semantics(
+              label: 'Increase quantity',
+              child: IconButton(
+                tooltip: 'Increase quantity',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(
+                  width: 28,
+                  height: 28,
+                ),
+                padding: EdgeInsets.zero,
+                onPressed: onIncrement,
+                icon: HugeIcon(
+                  icon: HugeIcons.strokeRoundedAdd01,
+                  size: 14,
+                  color: colors.onBackground,
+                ),
+              ),
             ),
           ),
         ],
