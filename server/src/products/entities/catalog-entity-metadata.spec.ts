@@ -30,4 +30,33 @@ describe('catalog entity metadata', () => {
 
     expect(categoryRelation?.type()).toBe(ProductCategory);
   });
+
+  it('supports self-referential category hierarchy columns', () => {
+    const columns = getMetadataArgsStorage().columns;
+    const parentId = columns.find(
+      (column) =>
+        column.target === ProductCategory &&
+        column.propertyName === 'parentId',
+    );
+    const catalogLevel = columns.find(
+      (column) =>
+        column.target === ProductCategory &&
+        column.propertyName === 'catalogLevel',
+    );
+    const isOrderable = columns.find(
+      (column) =>
+        column.target === ProductCategory &&
+        column.propertyName === 'isOrderable',
+    );
+    const audienceLabel = columns.find(
+      (column) =>
+        column.target === ProductCategory &&
+        column.propertyName === 'audienceLabel',
+    );
+
+    expect(parentId?.options.name).toBe('parent_id');
+    expect(catalogLevel?.options.name).toBe('catalog_level');
+    expect(isOrderable?.options.name).toBe('is_orderable');
+    expect(audienceLabel?.options.name).toBe('audience_label');
+  });
 });

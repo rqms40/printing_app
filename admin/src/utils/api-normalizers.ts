@@ -817,6 +817,27 @@ function normalizeDeliveryProof(value: unknown): DeliveryProof | null {
   };
 }
 
+function normalizeProductionMilestones(
+  value: unknown,
+): NonNullable<Order["production_milestones"]> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      const record = asRecord(item);
+      const milestone =
+        toOptionalString(record, "milestone") ??
+        toOptionalString(record, "key");
+      if (!milestone) return null;
+      return {
+        milestone,
+        reached_at:
+          toOptionalString(record, "reached_at", "reachedAt") ?? null,
+        notes: toOptionalString(record, "notes") ?? null,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
 function normalizeOrderItems(value: unknown): OrderItem[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -1000,8 +1021,14 @@ export function normalizeOrder(input: unknown): Order & {
         "assignedRider",
       ),
     ),
+    pickup_proof: normalizeDeliveryProof(
+      read(record, "pickup_proof", "pickupProof"),
+    ),
     delivery_proof: normalizeDeliveryProof(
       read(record, "delivery_proof", "deliveryProof"),
+    ),
+    production_milestones: normalizeProductionMilestones(
+      read(record, "production_milestones", "productionMilestones"),
     ),
     estimated_completion_at: toOptionalString(
       record,
@@ -1382,6 +1409,8 @@ export function normalizeAdminRiders(payload: unknown): AdminRiderRecord[] {
 
 export function normalizeServiceCategory(input: unknown): ServiceCategory {
   const record = asRecord(input);
+  const parentRaw = read(record, "parent_id", "parentId");
+  const childrenRaw = read(record, "children");
 
   return {
     id: toRequiredString(record, "", "id"),
@@ -1393,7 +1422,28 @@ export function normalizeServiceCategory(input: unknown): ServiceCategory {
       "mobile_description",
       "mobileDescription",
     ),
+    audience_label: toOptionalString(
+      record,
+      "audience_label",
+      "audienceLabel",
+    ),
     icon: toOptionalString(record, "icon"),
+    parent_id:
+      parentRaw == null || parentRaw === ""
+        ? null
+        : String(parentRaw),
+    catalog_level: toNumberValue(
+      record,
+      1,
+      "catalog_level",
+      "catalogLevel",
+    ),
+    is_orderable: toBooleanValue(
+      record,
+      true,
+      "is_orderable",
+      "isOrderable",
+    ),
     file_processing_type: toRequiredString(
       record,
       "generic_file",
@@ -1425,6 +1475,9 @@ export function normalizeServiceCategory(input: unknown): ServiceCategory {
     is_active: toBooleanValue(record, true, "is_active", "isActive"),
     sort_order: toNumberValue(record, 0, "sort_order", "sortOrder"),
     specs: normalizeProductSpecDefinitions(read(record, "specs")),
+    children: Array.isArray(childrenRaw)
+      ? childrenRaw.map(normalizeServiceCategory)
+      : undefined,
     created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
     updated_at: toRequiredString(record, EMPTY_DATE, "updated_at", "updatedAt"),
   };

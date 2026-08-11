@@ -362,6 +362,39 @@ describe("api normalizers", () => {
     });
   });
 
+  it("preserves proof of pickup metadata for admin review", () => {
+    const order = normalizeOrder({
+      id: 8,
+      order_id: "ORD-10008",
+      user_id: 1,
+      category: "paper",
+      total_price: 2,
+      delivery_fee: 0,
+      payment_method: "gcash",
+      payment_status: "paid",
+      order_status: "picked_up",
+      delivery_option: "delivery",
+      pickup_proof: {
+        type: "photo",
+        file_id: 25,
+        object_key: "uploads/proof_of_delivery/pickup-25.jpg",
+        captured_at: "2026-05-02T18:00:00.000Z",
+        captured_by_rider_id: 10,
+      },
+      created_at: "2026-05-02T17:00:00.000Z",
+      updated_at: "2026-05-02T18:00:00.000Z",
+    });
+
+    expect(order.pickup_proof).toEqual({
+      type: "photo",
+      file_id: 25,
+      object_key: "uploads/proof_of_delivery/pickup-25.jpg",
+      signature_data: undefined,
+      captured_at: "2026-05-02T18:00:00.000Z",
+      captured_by_rider_id: 10,
+    });
+  });
+
   it("maps product category responses and parses allowed extensions", () => {
     const category = normalizeServiceCategory({
       id: 2,
@@ -405,6 +438,37 @@ describe("api normalizers", () => {
       specs: [{ id: "8", key: "paper_size", pricing_role: "multiplier" }],
       is_active: true,
       sort_order: 1,
+      catalog_level: 1,
+      is_orderable: true,
+      parent_id: null,
+    });
+  });
+
+  it("maps hierarchical category fields (parent, level, orderable)", () => {
+    const category = normalizeServiceCategory({
+      id: 10,
+      name: "Single sheets",
+      slug: "flyers-single-sheets",
+      parentId: 4,
+      catalogLevel: 3,
+      isOrderable: true,
+      audienceLabel: "Best for: event flyers",
+      fileProcessingType: "document",
+      pricingModel: "per_page_modifiers",
+      baseRate: 2.5,
+      quantityUnit: "copy",
+      maxFileSizeMb: 50,
+      allowedExtensions: ["pdf"],
+      isActive: true,
+      sortOrder: 10,
+    });
+
+    expect(category).toMatchObject({
+      id: "10",
+      parent_id: "4",
+      catalog_level: 3,
+      is_orderable: true,
+      audience_label: "Best for: event flyers",
     });
   });
 

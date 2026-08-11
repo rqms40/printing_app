@@ -355,10 +355,19 @@ describe('RidersService', () => {
           isCurrent: true,
           pickupOtpCode: expect.stringMatching(/^\d{6}$/),
           pickupOtpHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-          deliveryOtpCode: null,
-          deliveryOtpHash: null,
+          deliveryOtpCode: expect.stringMatching(/^\d{6}$/),
+          deliveryOtpHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         }),
       );
+      // Pickup and delivery share one customer-verification OTP.
+      const created = assignmentRepo.create.mock.calls[0][0] as {
+        pickupOtpCode: string;
+        deliveryOtpCode: string;
+        pickupOtpHash: string;
+        deliveryOtpHash: string;
+      };
+      expect(created.deliveryOtpCode).toBe(created.pickupOtpCode);
+      expect(created.deliveryOtpHash).toBe(created.pickupOtpHash);
       expect(assignmentRepo.save).toHaveBeenCalled();
       expect(orderRepo.update).toHaveBeenCalledWith(
         {

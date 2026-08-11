@@ -239,7 +239,7 @@ class _OrderCardState extends State<OrderCard> {
                             const SizedBox(height: 6),
                           ],
 
-                          // Status label + date
+                          // Status label + date (+ delivery OTP when active)
                           Row(
                             children: [
                               Container(
@@ -261,6 +261,20 @@ class _OrderCardState extends State<OrderCard> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              if (widget.order.deliveryOtp != null &&
+                                  widget.order.deliveryOtp!
+                                      .trim()
+                                      .isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Text(
+                                  'OTP ${widget.order.deliveryOtp!.trim()}',
+                                  style: AppTypography.caption.copyWith(
+                                    color: colors.brand,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ],

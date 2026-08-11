@@ -21,6 +21,7 @@ import {
   ProfileCategory,
   ProfileField,
 } from './users/profile.constants';
+import { seedBusinessCatalog } from './products/seed-business-catalog';
 
 interface CountRow {
   count: string;
@@ -402,17 +403,19 @@ async function seed() {
   const [paperCat] = await typedQuery<IdRow>(
     ds,
     `INSERT INTO product_categories (
-      name, slug, description, mobile_description, icon, file_processing_type,
-      pricing_model, base_rate, quantity_unit, max_file_size_mb,
-      allowed_extensions, is_active, sort_order
+      name, slug, description, mobile_description, audience_label, icon,
+      parent_id, catalog_level, is_orderable,
+      file_processing_type, pricing_model, base_rate, quantity_unit,
+      max_file_size_mb, allowed_extensions, is_active, sort_order
     )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,true,$12)
+     VALUES ($1,$2,$3,$4,$5,$6,NULL,1,true,$7,$8,$9,$10,$11,$12::jsonb,true,$13)
      RETURNING id`,
     [
       'Paper Printing',
       'paper',
       'Standard and large-format paper printing',
       'Print documents, plans, posters, and handouts.',
+      'Best for: Everyday document, plan, and poster printing.',
       'FileTextOutlined',
       'document',
       'per_page_modifiers',
@@ -426,17 +429,19 @@ async function seed() {
   const [threeDCat] = await typedQuery<IdRow>(
     ds,
     `INSERT INTO product_categories (
-      name, slug, description, mobile_description, icon, file_processing_type,
-      pricing_model, base_rate, quantity_unit, max_file_size_mb,
-      allowed_extensions, is_active, sort_order
+      name, slug, description, mobile_description, audience_label, icon,
+      parent_id, catalog_level, is_orderable,
+      file_processing_type, pricing_model, base_rate, quantity_unit,
+      max_file_size_mb, allowed_extensions, is_active, sort_order
     )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,true,$12)
+     VALUES ($1,$2,$3,$4,$5,$6,NULL,1,true,$7,$8,$9,$10,$11,$12::jsonb,true,$13)
      RETURNING id`,
     [
       '3D Printing',
       '3d',
       'FDM 3D printing with PLA, ABS, and PETG materials',
       'Upload a model and configure print material and finish.',
+      'Best for: Prototypes, models, and custom 3D parts.',
       'AppstoreOutlined',
       'model_3d',
       'base_plus_material_estimate',
@@ -884,6 +889,12 @@ async function seed() {
   ];
   for (const option of tdOptions) await insertSpecOption(ds, option);
   console.log('✅ 3D catalog specs and options created');
+
+  // ─── GRIDGO Business hierarchical catalog ───────────────────────────
+  const business = await seedBusinessCatalog(ds);
+  console.log(
+    `✅ Business catalog: ${business.categories} categories, ${business.subgroups} subgroups, ${business.variants} variants (with temp specs)`,
+  );
 
   // ─── Service Addons ─────────────────────────────────────────────────
   await ds.query(

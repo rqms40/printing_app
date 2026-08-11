@@ -84,6 +84,13 @@ export interface DeliveryProof {
   captured_by_rider_id?: number | string | null;
 }
 
+/** Supplier production milestone reached while order status is `production`. */
+export interface ProductionMilestone {
+  milestone: string;
+  reached_at?: string | null;
+  notes?: string | null;
+}
+
 export interface Order {
   id: string;
   order_id: string;
@@ -113,7 +120,11 @@ export interface Order {
   assigned_rider_id?: string;
   assigned_rider_contact?: AssignedRiderContact | null;
   assigned_supplier_contact?: AssignedSupplierContact | null;
+  /** Rider photo at supplier/shop pickup. */
+  pickup_proof?: DeliveryProof | null;
   delivery_proof?: DeliveryProof | null;
+  /** Supplier production sub-milestones (materials → in production → complete). */
+  production_milestones?: ProductionMilestone[] | null;
   estimated_completion_at?: string;
   admin_notes?: string;
   adminStatusNote?: string | null;

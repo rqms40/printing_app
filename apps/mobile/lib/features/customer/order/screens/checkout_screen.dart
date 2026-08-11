@@ -373,7 +373,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           : CheckoutFooter(
               onPlaceOrder: () => _placeOrder(context),
               placeOrderKey: _placeOrderKey,
-            ),
+            ), // onPlaceOrder is Future-aware (awaited in footer)
     );
   }
 
@@ -386,16 +386,29 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     final notifier = ref.read(ordersProvider.notifier);
     try {
-      final placed = await notifier.placeCheckout(ref.read(checkoutProvider));
+      final checkout = ref.read(checkoutProvider);
+      final placed = await notifier.placeCheckout(checkout);
+      if (!context.mounted) return;
       ref.read(checkoutProvider.notifier).reset();
       if (!context.mounted) return;
-      final refs = placed.map((o) => o.orderId).toList();
+      final refs = placed
+          .map((o) => o.orderId)
+          .where((ref) => ref.trim().isNotEmpty)
+          .toList(growable: false);
       final firstNumericId = placed.isEmpty
           ? null
           : int.tryParse(placed.first.id);
+      // Defer navigation one frame so checkout rebuilds (and any realtime
+      // listeners) settle before we leave the route — avoids web RTI errors
+      // from disposing mid-callback.
+      await Future<void>.delayed(Duration.zero);
+      if (!context.mounted) return;
       context.go(
         '/customer/order/success',
-        extra: {'orderRefs': refs, 'firstOrderId': firstNumericId},
+        extra: <String, dynamic>{
+          'orderRefs': refs,
+          'firstOrderId': firstNumericId,
+        },
       );
     } on BetaOrderLimitException {
       if (!context.mounted) return;

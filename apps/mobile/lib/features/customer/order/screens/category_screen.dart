@@ -15,7 +15,7 @@ import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/app_illustrations.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
 
-/// Step 1/6 -- Category selection (Paper Printing or 3D Printing).
+/// Step 1/6 -- Category selection with Category → Subgroup → Variant browse.
 class CategoryScreen extends ConsumerStatefulWidget {
   const CategoryScreen({super.key, this.addMode = false});
 
@@ -34,6 +34,9 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   bool _categoryCoachVisible = false;
   PipelineTutorialNotifier? _pipelineNotifier;
   PipelineState _pipelineState = const PipelineState();
+
+  /// Drill-down stack of parent node ids (empty = roots).
+  final List<int> _browseStack = [];
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -82,11 +85,21 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   }
 
   int _activePaperCategoryIndex(ProductCatalog catalog) {
-    final categories = catalog.activeCategories;
+    final categories = _visibleCategories(catalog);
     for (var i = 0; i < categories.length; i++) {
       if (categories[i].slug == 'paper') return i;
     }
     return -1;
+  }
+
+  List<ProductCategory> _visibleCategories(ProductCatalog catalog) {
+    if (_browseStack.isEmpty) return catalog.rootCategories;
+    return catalog.childrenOf(_browseStack.last);
+  }
+
+  ProductCategory? _currentParent(ProductCatalog catalog) {
+    if (_browseStack.isEmpty) return null;
+    return catalog.categoryById(_browseStack.last);
   }
 
   void _schedulePipelineCoachMark() {
@@ -96,6 +109,11 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
 
     final catalogAsync = ref.read(productCatalogProvider);
     if (catalogAsync.isLoading || !catalogAsync.hasValue) return;
+
+    // Tutorial expects paper at root level.
+    if (_browseStack.isNotEmpty) {
+      setState(() => _browseStack.clear());
+    }
 
     final catalog = catalogAsync.requireValue;
     final paperIndex = _activePaperCategoryIndex(catalog);
@@ -169,9 +187,19 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   Widget build(BuildContext context) {
     final colors = _colors(context);
     final catalogAsync = ref.watch(productCatalogProvider);
-    final categories =
-        catalogAsync.valueOrNull?.activeCategories ??
-        ProductCatalog.fallback().activeCategories;
+    final catalog =
+        catalogAsync.valueOrNull ?? ProductCatalog.fallback();
+    final categories = _visibleCategories(catalog);
+    final parent = _currentParent(catalog);
+
+    final heading = parent == null
+        ? 'What would you\nlike to print?'
+        : parent.name;
+    final subheading = parent == null
+        ? null
+        : (parent.audienceLabel ??
+            parent.mobileDescription ??
+            parent.description);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -183,6 +211,16 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
           style: AppTypography.h3.copyWith(color: colors.onBackground),
         ),
         iconTheme: IconThemeData(color: colors.onBackground),
+        leading: _browseStack.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  setState(() {
+                    _browseStack.removeLast();
+                  });
+                },
+              )
+            : null,
       ),
       body: SafeArea(
         child: Padding(
@@ -205,9 +243,28 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                   ),
                 ),
               ],
+              if (_browseStack.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _Breadcrumb(
+                  catalog: catalog,
+                  stack: _browseStack,
+                  onTapLevel: (index) {
+                    setState(() {
+                      if (index < 0) {
+                        _browseStack.clear();
+                      } else {
+                        _browseStack.removeRange(
+                          index + 1,
+                          _browseStack.length,
+                        );
+                      }
+                    });
+                  },
+                ),
+              ],
               const SizedBox(height: AppSpacing.xl),
               Text(
-                    'What would you\nlike to print?',
+                    heading,
                     style: AppTypography.h1.copyWith(
                       color: colors.onBackground,
                     ),
@@ -215,6 +272,15 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                   .animate()
                   .fadeIn(duration: 400.ms, curve: Curves.easeOut)
                   .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+              if (subheading != null && subheading.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  subheading,
+                  style: AppTypography.body.copyWith(
+                    color: colors.onSurfaceDim,
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.xl),
               Expanded(
                 child: ListView(
@@ -229,9 +295,22 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                           backgroundColor: colors.surfaceVariant,
                         ),
                       ),
+                    if (categories.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.xl),
+                        child: Text(
+                          'No products in this group yet.',
+                          style: AppTypography.body.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
+                        ),
+                      ),
                     ...categories.indexed.map((entry) {
                       final index = entry.$1;
                       final category = entry.$2;
+                      final children = catalog.childrenOf(category.id);
+                      final canDrill =
+                          category.isBrowseGroup || children.isNotEmpty;
                       return Padding(
                         padding: EdgeInsets.only(
                           bottom: index == categories.length - 1
@@ -249,10 +328,22 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                                   ),
                                   title: category.name,
                                   description:
+                                      category.audienceLabel ??
                                       category.mobileDescription ??
                                       category.description ??
-                                      'Configure specs and upload your file',
-                                  onTap: () => _selectCategory(category),
+                                      (canDrill
+                                          ? 'Browse products in this group'
+                                          : 'Configure specs and upload your file'),
+                                  badge: _levelBadge(category),
+                                  onTap: () {
+                                    if (canDrill && !category.isOrderable) {
+                                      setState(() {
+                                        _browseStack.add(category.id);
+                                      });
+                                      return;
+                                    }
+                                    _selectCategory(category);
+                                  },
                                 )
                                 .animate()
                                 .fadeIn(
@@ -282,6 +373,13 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
     );
   }
 
+  String? _levelBadge(ProductCategory category) {
+    if (category.isOrderable && category.catalogLevel >= 3) return 'Product';
+    if (category.catalogLevel == 2) return 'Group';
+    if (category.isBrowseGroup && category.catalogLevel == 1) return 'Category';
+    return null;
+  }
+
   Widget _categoryIllustration(ProductCategory category, AppColorSet colors) {
     if (category.fileProcessingType == 'model_3d' || category.slug == '3d') {
       return ThreeDCubeIllustration(size: 60, color: colors.accent);
@@ -294,11 +392,66 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
         .read(orderFlowProvider.notifier)
         .setCategory(category.slug, categoryName: category.name);
     ref.read(orderFlowProvider.notifier).goToStep(1);
+    final is3d =
+        category.fileProcessingType == 'model_3d' || category.slug == '3d';
     await context.push(
-      category.fileProcessingType == 'document' || category.slug == 'paper'
-          ? '/customer/order/paper-specs'
-          : '/customer/order/3d-specs',
+      is3d ? '/customer/order/3d-specs' : '/customer/order/paper-specs',
     );
+  }
+}
+
+class _Breadcrumb extends StatelessWidget {
+  const _Breadcrumb({
+    required this.catalog,
+    required this.stack,
+    required this.onTapLevel,
+  });
+
+  final ProductCatalog catalog;
+  final List<int> stack;
+  final void Function(int index) onTapLevel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+
+    final chips = <Widget>[
+      GestureDetector(
+        onTap: () => onTapLevel(-1),
+        child: Text(
+          'All',
+          style: AppTypography.caption.copyWith(color: colors.accent),
+        ),
+      ),
+    ];
+
+    for (var i = 0; i < stack.length; i++) {
+      final node = catalog.categoryById(stack[i]);
+      if (node == null) continue;
+      chips.add(
+        Text(
+          ' / ',
+          style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+        ),
+      );
+      final isLast = i == stack.length - 1;
+      chips.add(
+        GestureDetector(
+          onTap: isLast ? null : () => onTapLevel(i),
+          child: Text(
+            node.name,
+            style: AppTypography.caption.copyWith(
+              color: isLast ? colors.onBackground : colors.accent,
+              fontWeight: isLast ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: chips);
   }
 }
 
@@ -309,6 +462,7 @@ class _CategoryCard extends StatelessWidget {
     required this.description,
     required this.onTap,
     this.tutorialKey,
+    this.badge,
   });
 
   final Widget illustration;
@@ -316,6 +470,7 @@ class _CategoryCard extends StatelessWidget {
   final String description;
   final VoidCallback onTap;
   final GlobalKey? tutorialKey;
+  final String? badge;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -341,11 +496,37 @@ class _CategoryCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    title,
-                    style: AppTypography.h3.copyWith(
-                      color: colors.onBackground,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: AppTypography.h3.copyWith(
+                            color: colors.onBackground,
+                          ),
+                        ),
+                      ),
+                      if (badge != null) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.surfaceVariant,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            badge!,
+                            style: AppTypography.caption.copyWith(
+                              color: colors.onSurfaceDim,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(

@@ -82,22 +82,66 @@ export function otpCodesMatch(
  * Expose active handoff codes as `pickupOtp` / `deliveryOtp` so the rider UI
  * can prefill/display them (customer also sees delivery OTP on the order).
  */
+function readOtpCode(value: unknown): string | null {
+  if (value == null) return null;
+  const code = String(value).trim();
+  return code.length > 0 ? code : null;
+}
+
 export function sanitizeAssignmentSecrets<T extends object>(assignment: T): T {
-  const clone = { ...(assignment as Record<string, unknown>) };
-  const pickupVerified = clone.pickupOtpVerifiedAt != null;
-  const deliveryVerified = clone.deliveryOtpVerifiedAt != null;
-  const pickupCode =
-    typeof clone.pickupOtpCode === 'string' ? clone.pickupOtpCode : null;
-  const deliveryCode =
-    typeof clone.deliveryOtpCode === 'string' ? clone.deliveryOtpCode : null;
+  // Prefer explicit property reads — TypeORM entities may not enumerate columns
+  // when spread with object rest.
+  const source = assignment as Record<string, unknown>;
+  const clone: Record<string, unknown> = { ...source };
+  // Copy known OTP columns even if they were non-enumerable on the entity.
+  for (const key of [
+    'pickupOtpCode',
+    'pickupOtpHash',
+    'pickupOtpVerifiedAt',
+    'deliveryOtpCode',
+    'deliveryOtpHash',
+    'deliveryOtpVerifiedAt',
+    'pickup_otp_code',
+    'delivery_otp_code',
+  ] as const) {
+    if (source[key] !== undefined) clone[key] = source[key];
+    // Direct access also works for TypeORM entity instances.
+    const direct = (assignment as Record<string, unknown>)[key];
+    if (direct !== undefined) clone[key] = direct;
+  }
+
+  const pickupVerified =
+    clone.pickupOtpVerifiedAt != null || clone.pickup_otp_verified_at != null;
+  const deliveryVerified =
+    clone.deliveryOtpVerifiedAt != null ||
+    clone.delivery_otp_verified_at != null;
+  const pickupCode = readOtpCode(
+    clone.pickupOtpCode ??
+      clone.pickup_otp_code ??
+      (assignment as { pickupOtpCode?: unknown }).pickupOtpCode,
+  );
+  const deliveryCode = readOtpCode(
+    clone.deliveryOtpCode ??
+      clone.delivery_otp_code ??
+      (assignment as { deliveryOtpCode?: unknown }).deliveryOtpCode,
+  );
 
   for (const field of OTP_SECRET_FIELDS) {
     delete clone[field];
   }
+  delete clone.pickup_otp_code;
+  delete clone.delivery_otp_code;
+  delete clone.pickup_otp_hash;
+  delete clone.delivery_otp_hash;
+  delete clone.pickup_otp_verified_at;
+  delete clone.delivery_otp_verified_at;
 
-  clone.pickupOtp = !pickupVerified && pickupCode ? pickupCode : null;
-  clone.deliveryOtp =
-    pickupVerified && !deliveryVerified && deliveryCode ? deliveryCode : null;
+  // Shared customer OTP — pickup and delivery codes are kept equal.
+  const sharedCode = pickupCode ?? deliveryCode;
+  // Rider needs it at pickup (before pickup verified) and at delivery
+  // (until delivery verified). Customer always sees deliveryOtp from the API.
+  clone.pickupOtp = !pickupVerified && sharedCode ? sharedCode : null;
+  clone.deliveryOtp = !deliveryVerified && sharedCode ? sharedCode : null;
   return clone as T;
 }
 
@@ -321,17 +365,21 @@ export class RidersService {
           );
         }
         riderProfile.user = riderUser;
-        const pickupOtpCode = generateDeliveryOtpCode();
+        // One customer-verification OTP for the whole handoff: same value is
+        // stored as pickup + delivery so the rider uses one code at pickup and
+        // at the door, and the customer sees that same code on their order.
+        const customerOtpCode = generateDeliveryOtpCode();
+        const customerOtpHash = hashDeliveryOtp(customerOtpCode);
         const assignment = assignmentRepo.create({
           orderId,
           riderId,
           status: DeliveryStatus.ASSIGNED,
           isCurrent: true,
-          pickupOtpCode,
-          pickupOtpHash: hashDeliveryOtp(pickupOtpCode),
+          pickupOtpCode: customerOtpCode,
+          pickupOtpHash: customerOtpHash,
           pickupOtpVerifiedAt: null,
-          deliveryOtpCode: null,
-          deliveryOtpHash: null,
+          deliveryOtpCode: customerOtpCode,
+          deliveryOtpHash: customerOtpHash,
           deliveryOtpVerifiedAt: null,
         });
         const savedAssignment = await assignmentRepo.save(assignment);
@@ -917,10 +965,19 @@ export class RidersService {
           assignment.pickupProofSignatureData =
             pickupProofMetadata!.proofSignatureData;
           assignment.pickupProofCapturedAt = now;
-          // Issue delivery OTP at confirmed pickup window.
-          const deliveryOtpCode = generateDeliveryOtpCode();
-          assignment.deliveryOtpCode = deliveryOtpCode;
-          assignment.deliveryOtpHash = hashDeliveryOtp(deliveryOtpCode);
+          // Keep a single customer OTP: delivery must match pickup. Never mint
+          // a second code after pickup (customer already has the shared OTP).
+          if (assignment.pickupOtpCode && assignment.pickupOtpHash) {
+            assignment.deliveryOtpCode = assignment.pickupOtpCode;
+            assignment.deliveryOtpHash = assignment.pickupOtpHash;
+          } else if (!assignment.deliveryOtpCode || !assignment.deliveryOtpHash) {
+            const customerOtpCode = generateDeliveryOtpCode();
+            const customerOtpHash = hashDeliveryOtp(customerOtpCode);
+            assignment.pickupOtpCode = customerOtpCode;
+            assignment.pickupOtpHash = customerOtpHash;
+            assignment.deliveryOtpCode = customerOtpCode;
+            assignment.deliveryOtpHash = customerOtpHash;
+          }
           assignment.deliveryOtpVerifiedAt = null;
           break;
         }

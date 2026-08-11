@@ -6,6 +6,10 @@ import { ProductCategory } from './entities/product-category.entity';
 
 export type CatalogCategory = ProductCategory;
 
+export type CatalogCategoryNode = CatalogCategory & {
+  children: CatalogCategoryNode[];
+};
+
 @Injectable()
 export class CatalogReadService {
   constructor(
@@ -14,7 +18,10 @@ export class CatalogReadService {
   ) {}
 
   async getPublicCatalog(includeInactive = false): Promise<{
+    /** Flat list (all levels) for lookup, admin, and mobile tree building. */
     categories: CatalogCategory[];
+    /** Nested Category → Subgroup → Variant tree (roots only at top). */
+    tree: CatalogCategoryNode[];
   }> {
     const categories = await this.categoryRepo.find({
       relations: {
@@ -33,23 +40,26 @@ export class CatalogReadService {
       },
     });
 
+    const mapped = categories
+      .filter((category) => includeInactive || category.isActive)
+      .map((category) => ({
+        ...category,
+        specs: (category.specs ?? [])
+          .filter((spec) => includeInactive || spec.isActive)
+          .map((spec) => ({
+            ...spec,
+            options: (spec.options ?? []).filter(
+              (option) => includeInactive || option.isActive,
+            ),
+          })),
+        addons: (category.addons ?? []).filter(
+          (addon) => includeInactive || addon.isActive,
+        ),
+      }));
+
     return {
-      categories: categories
-        .filter((category) => includeInactive || category.isActive)
-        .map((category) => ({
-          ...category,
-          specs: (category.specs ?? [])
-            .filter((spec) => includeInactive || spec.isActive)
-            .map((spec) => ({
-              ...spec,
-              options: (spec.options ?? []).filter(
-                (option) => includeInactive || option.isActive,
-              ),
-            })),
-          addons: (category.addons ?? []).filter(
-            (addon) => includeInactive || addon.isActive,
-          ),
-        })),
+      categories: mapped,
+      tree: this.buildTree(mapped),
     };
   }
 
@@ -59,6 +69,30 @@ export class CatalogReadService {
     if (!category) {
       throw new NotFoundException(`Category '${slug}' is not available`);
     }
+    if (!category.isOrderable) {
+      throw new NotFoundException(
+        `Category '${slug}' is a browse-only group, not an orderable product`,
+      );
+    }
     return category;
   }
+
+  private buildTree(categories: CatalogCategory[]): CatalogCategoryNode[] {
+    const byParent = new Map<number | null, CatalogCategory[]>();
+    for (const category of categories) {
+      const key = category.parentId ?? null;
+      const bucket = byParent.get(key) ?? [];
+      bucket.push(category);
+      byParent.set(key, bucket);
+    }
+
+    const attach = (parentId: number | null): CatalogCategoryNode[] =>
+      (byParent.get(parentId) ?? []).map((category) => ({
+        ...category,
+        children: attach(category.id),
+      }));
+
+    return attach(null);
+  }
 }
+

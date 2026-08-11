@@ -17,6 +17,7 @@ import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.e
 import { RiderProfile } from '../riders/entities/rider-profile.entity';
 import { DeliveryAssignment } from '../riders/entities/delivery-assignment.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import { AuditEvent } from '../audit/entities/audit-event.entity';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SupplierAssignment } from '../matching/entities/supplier-assignment.ent
       RiderProfile,
       DeliveryAssignment,
       SupplierAssignment,
+      AuditEvent,
     ]),
     OrdersModule,
     RidersModule,

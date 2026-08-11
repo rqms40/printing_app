@@ -175,9 +175,46 @@ class OrderDetailScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
-                      StatusBadge(
-                        label: order.orderStatus.displayName,
-                        variant: _orderStatusBadgeVariant(order.orderStatus),
+                      // Status badge + delivery OTP chip in the same row
+                      // (placement matches the customer order status card).
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          StatusBadge(
+                            label: order.orderStatus.displayName,
+                            variant: _orderStatusBadgeVariant(
+                              order.orderStatus,
+                            ),
+                          ),
+                          if (order.deliveryOtp != null &&
+                              order.deliveryOtp!.trim().isNotEmpty) ...[
+                            const SizedBox(width: AppSpacing.sm),
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colors.brand.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: colors.brand.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Text(
+                                  'OTP ${order.deliveryOtp!.trim()}',
+                                  style: AppTypography.bodyBold.copyWith(
+                                    color: colors.onBackground,
+                                    letterSpacing: 2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       Text(
@@ -188,43 +225,11 @@ class OrderDetailScreen extends ConsumerWidget {
                       ),
                       if (order.deliveryOtp != null &&
                           order.deliveryOtp!.trim().isNotEmpty) ...[
-                        const SizedBox(height: AppSpacing.md),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                          decoration: BoxDecoration(
-                            color: colors.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: colors.primary.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'DELIVERY OTP',
-                                style: AppTypography.overline.copyWith(
-                                  color: colors.primary,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              Text(
-                                order.deliveryOtp!.trim(),
-                                style: AppTypography.h2.copyWith(
-                                  color: colors.onBackground,
-                                  letterSpacing: 4,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              Text(
-                                'Show this code to the rider when your order arrives.',
-                                style: AppTypography.caption.copyWith(
-                                  color: colors.onSurfaceDim,
-                                ),
-                              ),
-                            ],
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          'Show this delivery OTP to the rider when your order arrives.',
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
                           ),
                         ),
                       ],

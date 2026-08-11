@@ -11,6 +11,9 @@ import {
   MaxLength,
   Matches,
   IsNotEmpty,
+  Min,
+  Max,
+  ValidateIf,
 } from 'class-validator';
 
 import { FileProcessingType, PricingModel } from '../enums/catalog.enums';
@@ -45,11 +48,45 @@ export class CreateCategoryDto {
   @MaxLength(160)
   mobileDescription?: string;
 
+  @ApiPropertyOptional({
+    example: 'Best for: Businesses, startups, and events',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  audienceLabel?: string;
+
   @ApiPropertyOptional({ example: 'FileTextOutlined' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   icon?: string;
+
+  @ApiPropertyOptional({
+    description: 'Parent category id for subgroup / variant nesting',
+  })
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  parentId?: number | null;
+
+  @ApiPropertyOptional({
+    example: 1,
+    description: '1 = category, 2 = subgroup, 3 = variant/leaf',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3)
+  catalogLevel?: number;
+
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Whether this node can be ordered (leaves only)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isOrderable?: boolean;
 
   @ApiPropertyOptional({ enum: FileProcessingType })
   @IsOptional()
@@ -61,10 +98,11 @@ export class CreateCategoryDto {
   @IsEnum(PricingModel)
   pricingModel?: PricingModel;
 
-  @ApiProperty({ example: 2.0 })
+  @ApiPropertyOptional({ example: 2.0 })
+  @ValidateIf((dto: CreateCategoryDto) => dto.isOrderable !== false)
   @IsNumber()
-  @IsPositive()
-  baseRate: number;
+  @Min(0)
+  baseRate?: number;
 
   @ApiPropertyOptional({ example: 'page' })
   @IsOptional()
@@ -72,18 +110,19 @@ export class CreateCategoryDto {
   @MaxLength(30)
   quantityUnit?: string;
 
-  @ApiProperty({ example: 50 })
+  @ApiPropertyOptional({ example: 50 })
+  @IsOptional()
   @IsInt()
   @IsPositive()
-  maxFileSizeMb: number;
+  maxFileSizeMb?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '["pdf","png","jpg"]',
     description: 'JSON array string of allowed file extensions',
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  allowedExtensions: string;
+  allowedExtensions?: string;
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()

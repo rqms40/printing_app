@@ -52,7 +52,10 @@ import { ManualStatusCard } from "./components/manual-status-card";
 import {
   adminOrderProgressPipeline,
   isPickupDeliveryOption,
+  isProductionMilestoneKey,
+  PRODUCTION_MILESTONE_LABELS,
   progressStepState,
+  type ProductionMilestoneKey,
 } from "@/utils/order-progress-pipeline";
 
 const { Text } = Typography;
@@ -69,13 +72,6 @@ function toCoordinate(value: unknown): number | null {
   if (value == null || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : null;
-}
-
-function hasCoordinates(destination?: OrderDestination | null) {
-  return (
-    toCoordinate(destination?.latitude) != null &&
-    toCoordinate(destination?.longitude) != null
-  );
 }
 
 function withPinnedCoordinates(
@@ -296,7 +292,7 @@ export function OrderShow() {
       apiClient
         .get(`/admin/orders/${id}`)
         .then((r) => setOrder(normalizeOrder(r.data)))
-        .catch(() => {}),
+        .catch(() => { }),
       apiClient
         .get("/admin/riders")
         .then((r) =>
@@ -306,7 +302,7 @@ export function OrderShow() {
             ),
           ),
         )
-        .catch(() => {}),
+        .catch(() => { }),
     ]).finally(() => setLoading(false));
   }, [id]);
 
@@ -425,22 +421,22 @@ export function OrderShow() {
         ? res.data.verifiedSuppliers
         : Array.isArray(res.data?.candidates)
           ? res.data.candidates.map(
-              (c: {
-                supplierId: number;
-                businessName: string;
-                score?: number;
-                rankPosition?: number;
-              }) => ({
-                supplierId: c.supplierId,
-                businessName: c.businessName,
-                isEligibleCandidate: true,
-                score: c.score ?? null,
-                rankPosition: c.rankPosition ?? null,
-                excludeReason: null,
-                capabilities: [],
-                serviceZones: [],
-              }),
-            )
+            (c: {
+              supplierId: number;
+              businessName: string;
+              score?: number;
+              rankPosition?: number;
+            }) => ({
+              supplierId: c.supplierId,
+              businessName: c.businessName,
+              isEligibleCandidate: true,
+              score: c.score ?? null,
+              rankPosition: c.rankPosition ?? null,
+              excludeReason: null,
+              capabilities: [],
+              serviceZones: [],
+            }),
+          )
           : [];
       setVerifiedSuppliers(list);
     } catch (e: unknown) {
@@ -536,22 +532,28 @@ export function OrderShow() {
     }
   };
 
-  const openProofPhoto = async () => {
-    const proof = order.delivery_proof;
-    if (!proof?.file_id) return;
-    setPreviewingFileId(`pod:${proof.file_id}`);
+  const openProofPhoto = async (
+    kind: "pickup" | "delivery",
+    fileId: number,
+  ) => {
+    const label = kind === "pickup" ? "picked-up" : "delivery";
+    setPreviewingFileId(`${kind}:${fileId}`);
     try {
       const response = await apiClient.get<{ url: string }>(
-        `/files/${proof.file_id}/presigned-url`,
+        `/files/${fileId}/presigned-url`,
       );
       setPreviewFile({
         url: response.data.url,
-        name: `proof-of-delivery-${order.order_id}.jpg`,
+        name: `proof-of-${label}-${order.order_id}.jpg`,
         mimeType: "image/jpeg",
         inspection: null,
       });
     } catch {
-      void message.error("Unable to open proof of delivery photo.");
+      void message.error(
+        kind === "pickup"
+          ? "Unable to open proof of pickup photo."
+          : "Unable to open proof of delivery photo.",
+      );
     } finally {
       setPreviewingFileId(null);
     }
@@ -626,8 +628,8 @@ export function OrderShow() {
                     style={{ width: 200 }}
                     onChange={handleStatusChange}
                     options={validNextStatuses.map((s) => ({
-                      label: s === "rider_assigned" && !order.assigned_rider_contact?.delivery_assignment_id 
-                        ? "Assign a Rider" 
+                      label: s === "rider_assigned" && !order.assigned_rider_contact?.delivery_assignment_id
+                        ? "Assign a Rider"
                         : ORDER_STATUS_LABELS[s],
                       value: s,
                     }))}
@@ -815,55 +817,55 @@ export function OrderShow() {
           Boolean(order.priority) ||
           Boolean(order.speedTier) ||
           Boolean(order.deliveryType)) && (
-          <Card title="Delivery Info">
-            <Descriptions column={2} bordered size="small">
-              {order.deliverySlotBookingId && (
-                <Descriptions.Item label="Slot Booking">
-                  <Tag color="cyan">Slot #{order.deliverySlotBookingId}</Tag>
-                </Descriptions.Item>
-              )}
-              {(order.priorityFee ?? 0) > 0 || order.priority ? (
-                <Descriptions.Item label="Priority">
-                  <Tag color="gold">Priority</Tag>
-                </Descriptions.Item>
-              ) : null}
-              {order.speedTier && (
-                <Descriptions.Item label="Speed">
-                  {humanizeEnumValue(order.speedTier)}
-                </Descriptions.Item>
-              )}
-              {order.deliveryType && (
-                <Descriptions.Item label="Delivery Type">
-                  {humanizeEnumValue(order.deliveryType)}
-                </Descriptions.Item>
-              )}
-              {(order.extraDestinationFee ?? 0) > 0 && (
-                <Descriptions.Item label="Extra Destination Fee">
-                  {formatCurrency(order.extraDestinationFee ?? 0)}
-                </Descriptions.Item>
-              )}
-              {destinations.length > 0 && (
-                <Descriptions.Item label="Destinations" span={2}>
-                  <Space direction="vertical" size={6}>
-                    {destinations.map((destination, index) => (
-                      <span key={destination.id ?? index}>
-                        <Text strong>
-                          {destinationTitle(destination, index)}
-                        </Text>
-                        {" — "}
-                        {destinationAddress(destination)}
-                        <Text type="secondary">
-                          {" "}
-                          ({destination.latitude}, {destination.longitude})
-                        </Text>
-                      </span>
-                    ))}
-                  </Space>
-                </Descriptions.Item>
-              )}
-            </Descriptions>
-          </Card>
-        )}
+            <Card title="Delivery Info">
+              <Descriptions column={2} bordered size="small">
+                {order.deliverySlotBookingId && (
+                  <Descriptions.Item label="Slot Booking">
+                    <Tag color="cyan">Slot #{order.deliverySlotBookingId}</Tag>
+                  </Descriptions.Item>
+                )}
+                {(order.priorityFee ?? 0) > 0 || order.priority ? (
+                  <Descriptions.Item label="Priority">
+                    <Tag color="gold">Priority</Tag>
+                  </Descriptions.Item>
+                ) : null}
+                {order.speedTier && (
+                  <Descriptions.Item label="Speed">
+                    {humanizeEnumValue(order.speedTier)}
+                  </Descriptions.Item>
+                )}
+                {order.deliveryType && (
+                  <Descriptions.Item label="Delivery Type">
+                    {humanizeEnumValue(order.deliveryType)}
+                  </Descriptions.Item>
+                )}
+                {(order.extraDestinationFee ?? 0) > 0 && (
+                  <Descriptions.Item label="Extra Destination Fee">
+                    {formatCurrency(order.extraDestinationFee ?? 0)}
+                  </Descriptions.Item>
+                )}
+                {destinations.length > 0 && (
+                  <Descriptions.Item label="Destinations" span={2}>
+                    <Space direction="vertical" size={6}>
+                      {destinations.map((destination, index) => (
+                        <span key={destination.id ?? index}>
+                          <Text strong>
+                            {destinationTitle(destination, index)}
+                          </Text>
+                          {" — "}
+                          {destinationAddress(destination)}
+                          <Text type="secondary">
+                            {" "}
+                            ({destination.latitude}, {destination.longitude})
+                          </Text>
+                        </span>
+                      ))}
+                    </Space>
+                  </Descriptions.Item>
+                )}
+              </Descriptions>
+            </Card>
+          )}
 
         {destinations.length > 0 && (
           <Card
@@ -877,6 +879,108 @@ export function OrderShow() {
             <OrderDestinationMap destinations={destinations} />
           </Card>
         )}
+
+        <Card title="Proof of Fulfillment - Supplier">
+          {(() => {
+            const supplier = order.assigned_supplier_contact;
+            const evidenceIds = supplier?.self_qc_evidence_file_ids ?? [];
+            if (evidenceIds.length === 0) {
+              return (
+                <Text type="secondary">
+                  No supplier self-QC evidence has been uploaded for this order
+                  yet.
+                </Text>
+              );
+            }
+            return (
+              <Descriptions column={2} bordered size="small">
+                <Descriptions.Item label="Type">
+                  <Tag color="blue">Photo</Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="Evidence Count">
+                  {evidenceIds.length}
+                </Descriptions.Item>
+                <Descriptions.Item label="Supplier">
+                  {supplier?.business_name?.trim() ||
+                    (supplier?.supplier_id != null
+                      ? `Supplier #${supplier.supplier_id}`
+                      : "—")}
+                </Descriptions.Item>
+                <Descriptions.Item label="Decision">
+                  {supplier?.decision
+                    ? humanizeEnumValue(supplier.decision)
+                    : "—"}
+                </Descriptions.Item>
+                <Descriptions.Item label="Proof" span={2}>
+                  <Space size="small" wrap>
+                    {evidenceIds.map((fileId, idx) => (
+                      <Button
+                        key={fileId}
+                        size="small"
+                        onClick={() => void openSelfQcEvidence(fileId, idx)}
+                        loading={previewingFileId === `selfqc:${fileId}`}
+                      >
+                        View evidence photo {idx + 1}
+                      </Button>
+                    ))}
+                  </Space>
+                </Descriptions.Item>
+              </Descriptions>
+            );
+          })()}
+        </Card>
+
+        <Card title="Proof of Picked up">
+          {order.pickup_proof ? (
+            <Descriptions column={2} bordered size="small">
+              <Descriptions.Item label="Type">
+                <Tag
+                  color={
+                    order.pickup_proof.type === "photo" ? "blue" : "green"
+                  }
+                >
+                  {humanizeEnumValue(order.pickup_proof.type ?? "unknown")}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Captured At">
+                {order.pickup_proof.captured_at
+                  ? formatDateTime(order.pickup_proof.captured_at)
+                  : "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Captured By Rider">
+                {order.pickup_proof.captured_by_rider_id ?? "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Proof">
+                {order.pickup_proof.type === "photo" &&
+                order.pickup_proof.file_id ? (
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      void openProofPhoto(
+                        "pickup",
+                        order.pickup_proof!.file_id!,
+                      )
+                    }
+                    loading={
+                      previewingFileId ===
+                      `pickup:${order.pickup_proof.file_id}`
+                    }
+                  >
+                    View pickup photo
+                  </Button>
+                ) : order.pickup_proof.type === "signature" ? (
+                  <Text>Signature captured at pickup</Text>
+                ) : (
+                  "—"
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : (
+            <Text type="secondary">
+              No pickup proof has been captured for this order yet.
+            </Text>
+          )}
+        </Card>
 
         <Card title="Proof of Delivery">
           {order.delivery_proof ? (
@@ -903,15 +1007,21 @@ export function OrderShow() {
                 order.delivery_proof.file_id ? (
                   <Button
                     size="small"
-                    onClick={() => void openProofPhoto()}
+                    onClick={() =>
+                      void openProofPhoto(
+                        "delivery",
+                        order.delivery_proof!.file_id!,
+                      )
+                    }
                     loading={
-                      previewingFileId === `pod:${order.delivery_proof.file_id}`
+                      previewingFileId ===
+                      `delivery:${order.delivery_proof.file_id}`
                     }
                   >
-                    View photo proof
+                    View delivery photo
                   </Button>
                 ) : order.delivery_proof.type === "signature" ? (
-                  <Text>Signature captured</Text>
+                  <Text>Signature captured at delivery</Text>
                 ) : (
                   "—"
                 )}
@@ -919,26 +1029,10 @@ export function OrderShow() {
             </Descriptions>
           ) : (
             <Text type="secondary">
-              No proof has been captured for this order.
+              No delivery proof has been captured for this order yet.
             </Text>
           )}
         </Card>
-
-        {order.assigned_supplier_contact?.self_qc_evidence_file_ids && order.assigned_supplier_contact.self_qc_evidence_file_ids.length > 0 && (
-          <Card title="Proof of Fulfillment">
-            <Space size="middle" wrap>
-              {order.assigned_supplier_contact.self_qc_evidence_file_ids.map((fileId, idx) => (
-                <Button
-                  key={fileId}
-                  onClick={() => void openSelfQcEvidence(fileId, idx)}
-                  loading={previewingFileId === `selfqc:${fileId}`}
-                >
-                  View evidence photo {idx + 1}
-                </Button>
-              ))}
-            </Space>
-          </Card>
-        )}
 
         {/* Admin Notes */}
         <Card title="Admin Notes">
@@ -973,13 +1067,13 @@ export function OrderShow() {
           }}
         />
 
-        {/* Marketplace + logistics progress (always shows steps after Ready for Dispatch) */}
+        {/* Marketplace + production milestones + logistics progress */}
         <Card
           title="Order progress"
           extra={
             <Text type="secondary" style={{ fontSize: 12 }}>
-              Delivery process after Ready for Dispatch: assign rider → pick up
-              → out for delivery → delivered
+              Production: materials setup → in production → production complete
+              · then Self-QC · Ready for dispatch · Delivery process
             </Text>
           }
         >
@@ -994,10 +1088,22 @@ export function OrderShow() {
               includeOptional: historyStatuses,
             });
             const current = order.order_status as OrderStatus;
+            const milestones = order.production_milestones ?? [];
+            const milestoneReachedAt = new Map(
+              milestones.map((m) => [
+                m.milestone.trim().toLowerCase(),
+                m.reached_at,
+              ]),
+            );
             return (
               <Timeline
                 items={pipeline.map((step) => {
-                  const state = progressStepState(step, current, pipeline);
+                  const state = progressStepState(
+                    step,
+                    current,
+                    pipeline,
+                    milestones,
+                  );
                   const color =
                     state === "done"
                       ? "green"
@@ -1009,6 +1115,14 @@ export function OrderShow() {
                     step === "picked_up" ||
                     step === "out_for_delivery" ||
                     step === "delivered";
+                  const isProduction = isProductionMilestoneKey(step);
+                  const label = isProduction
+                    ? PRODUCTION_MILESTONE_LABELS[step as ProductionMilestoneKey]
+                    : (ORDER_STATUS_LABELS[step as OrderStatus] ??
+                      statusLabel(step as OrderStatus));
+                  const reachedAt = isProduction
+                    ? milestoneReachedAt.get(step)
+                    : undefined;
                   return {
                     color,
                     children: (
@@ -1017,13 +1131,21 @@ export function OrderShow() {
                           strong={state === "current"}
                           type={state === "todo" ? "secondary" : undefined}
                         >
-                          {ORDER_STATUS_LABELS[step] ?? statusLabel(step)}
+                          {label}
+                          {isProduction ? " · Production" : ""}
                           {isLogistics ? " · Delivery process" : ""}
                           {step === "ready_for_dispatch" &&
                           current === "ready_for_dispatch"
                             ? " · Assign rider next"
                             : ""}
                         </Text>
+                        {reachedAt ? (
+                          <div>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              {formatDateTime(reachedAt)}
+                            </Text>
+                          </div>
+                        ) : null}
                       </div>
                     ),
                   };
