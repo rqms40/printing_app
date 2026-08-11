@@ -169,7 +169,7 @@ class _QuoteCardState extends ConsumerState<QuoteCard> {
                             ),
                       excludeSemantics: true,
                       child: RadioListTile<PaymentMethod>(
-                        contentPadding: EdgeInsets.zero,
+                        contentPadding: const EdgeInsets.zero,
                         title: const Text('Pilot Credits'),
                         value: PaymentMethod.gridCredits,
                       ),
@@ -187,7 +187,7 @@ class _QuoteCardState extends ConsumerState<QuoteCard> {
                               ),
                         excludeSemantics: true,
                         child: RadioListTile<PaymentMethod>(
-                          contentPadding: EdgeInsets.zero,
+                          contentPadding: const EdgeInsets.zero,
                           title: const Text('Cash on Delivery'),
                           value: PaymentMethod.cod,
                         ),
