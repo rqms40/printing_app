@@ -1,9 +1,8 @@
 /// Release metadata shown in role-specific profile screens.
 ///
-/// Keep this in sync with `pubspec.yaml`; `test/shared/app_version_test.dart`
-/// fails when the release version changes without updating this value.
+/// Keep this in sync with `pubspec.yaml`.
 abstract final class AppVersion {
-  static const version = '1.9.1';
-  static const buildNumber = '25';
+  static const version = '1.12.1';
+  static const buildNumber = '29';
   static const display = 'Version $version';
 }
