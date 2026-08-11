@@ -992,10 +992,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return PaymentMethod.gcash;
       case 'maya':
         return PaymentMethod.maya;
-      case 'qr_ph_instapay':
-      case 'qrphinstapay':
-      case 'qrph':
-        return PaymentMethod.qrPhInstapay;
       case 'cod':
       case 'cash':
         return PaymentMethod.cod;

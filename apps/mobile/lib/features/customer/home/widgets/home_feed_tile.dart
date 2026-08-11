@@ -163,32 +163,44 @@ class _HomeFeedTileState extends ConsumerState<HomeFeedTile> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.end,
-          spacing: 6,
-          runSpacing: 2,
-          children: [
-            Text(
-              'The Feed',
-              style: AppTypography.h2.copyWith(
-                color: widget.colors.onBackground,
-                fontSize: 18,
-                letterSpacing: -0.5,
-                height: 1.0,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                _subtitleFor(feedAsync),
-                style: AppTypography.caption.copyWith(
-                  color: widget.colors.brand,
-                  fontSize: 10,
+        // The tile shares a bento row, so its width varies with the device.
+        // Scale the header off the measured width rather than a fixed size,
+        // and keep the eyebrow on the title's baseline when they fit together.
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            final scale = (w / 168).clamp(0.86, 1.15);
+            final titleSize = (18 * scale).clamp(15.0, 21.0);
+            final eyebrowSize = (10 * scale).clamp(9.0, 12.0);
+
+            return Wrap(
+              crossAxisAlignment: WrapCrossAlignment.end,
+              spacing: 6,
+              runSpacing: 2,
+              children: [
+                Text(
+                  'The Feed',
+                  style: AppTypography.h2.copyWith(
+                    color: widget.colors.onBackground,
+                    fontSize: titleSize,
+                    letterSpacing: -0.5,
+                    height: 1.0,
+                  ),
                 ),
-                softWrap: true,
-              ),
-            ),
-          ],
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    _subtitleFor(feedAsync),
+                    style: AppTypography.caption.copyWith(
+                      color: widget.colors.brand,
+                      fontSize: eyebrowSize,
+                    ),
+                    softWrap: true,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 8),
         Expanded(
@@ -289,6 +301,11 @@ class _HomeFeedTileState extends ConsumerState<HomeFeedTile> {
               final hPad = (w * 0.06).clamp(6.0, 14.0);
               final hasFeedback =
                   item.feedback != null && item.feedback!.isNotEmpty;
+              // In a short tile there is not room for every line. Shed the
+              // least informative ones first: the role, then the rating,
+              // so the name and the quote always survive.
+              final showRole = h >= 116;
+              final showStars = h >= 92;
 
               return Padding(
                 padding: EdgeInsets.symmetric(
@@ -297,43 +314,53 @@ class _HomeFeedTileState extends ConsumerState<HomeFeedTile> {
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(5, (starIdx) {
-                        final isFilled = starIdx < item.rating.round();
-                        return Icon(
-                          Icons.star_rounded,
-                          color: isFilled
-                              ? widget.colors.brand
-                              : widget.colors.onSurfaceDim.withValues(
-                                  alpha: 0.4,
-                                ),
-                          size: starSize,
-                        );
-                      }),
-                    ),
-                    SizedBox(height: gap),
-                    Text(
-                      item.userName,
-                      style: AppTypography.bodyBold.copyWith(
-                        color: widget.colors.onBackground,
-                        fontSize: nameSize,
+                    if (showStars) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(5, (starIdx) {
+                          final isFilled = starIdx < item.rating.round();
+                          return Icon(
+                            Icons.star_rounded,
+                            color: isFilled
+                                ? widget.colors.brand
+                                : widget.colors.onSurfaceDim.withValues(
+                                    alpha: 0.4,
+                                  ),
+                            size: starSize,
+                          );
+                        }),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                    ),
-                    Text(
-                      'Student',
-                      style: AppTypography.caption.copyWith(
-                        color: widget.colors.onSurfaceDim,
-                        fontSize: roleSize,
-                        fontStyle: FontStyle.italic,
+                      SizedBox(height: gap),
+                    ],
+                    Flexible(
+                      child: Text(
+                        item.userName,
+                        style: AppTypography.bodyBold.copyWith(
+                          color: widget.colors.onBackground,
+                          fontSize: nameSize,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
+                    if (showRole)
+                      Flexible(
+                        child: Text(
+                          'Student',
+                          style: AppTypography.caption.copyWith(
+                            color: widget.colors.onSurfaceDim,
+                            fontSize: roleSize,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     if (hasFeedback) ...[
                       SizedBox(height: gap),
                       Flexible(
@@ -738,7 +765,7 @@ class _PromoCtaChip extends StatelessWidget {
   }
 }
 
-/// Quiet empty state: an invitation, not an apology.
+/// Quiet empty state: the mark, held on its own.
 class _InviteState extends StatelessWidget {
   const _InviteState({super.key, required this.colors});
 
@@ -755,33 +782,44 @@ class _InviteState extends StatelessWidget {
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          DotGridMotif(
-            dotColor: colors.onSurfaceDim.withValues(alpha: 0.45),
-            accentColor: colors.brand,
-            size: 22,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'No community feedback yet.',
-            style: AppTypography.caption.copyWith(
-              color: colors.onBackground.withValues(alpha: 0.85),
-              fontWeight: FontWeight.w600,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Reviews appear here.',
-            style: AppTypography.caption.copyWith(
-              color: colors.onSurfaceDim,
-              fontSize: 9.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+      // Same scale idiom as the community card, so the empty state shrinks
+      // with the tile instead of overflowing it. The motif is the first thing
+      // to go when there is not enough height for both it and the line.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final h = constraints.maxHeight;
+          final scale = (h / 122).clamp(0.85, 1.4);
+          final motifSize = (22 * scale).clamp(16.0, 28.0);
+          final gap = (8 * scale).clamp(4.0, 12.0);
+          final showMotif = h.isFinite && h >= 56;
+
+          return Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showMotif) ...[
+                DotGridMotif(
+                  dotColor: colors.onSurfaceDim.withValues(alpha: 0.45),
+                  accentColor: colors.brand,
+                  size: motifSize,
+                ),
+                SizedBox(height: gap),
+              ],
+              Flexible(
+                child: Text(
+                  'No community feedback yet.',
+                  style: AppTypography.caption.copyWith(
+                    color: colors.onBackground.withValues(alpha: 0.85),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -805,13 +843,18 @@ class _ErrorState extends StatelessWidget {
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            "Couldn't load the feed.",
-            style: AppTypography.caption.copyWith(
-              color: colors.onSurfaceDim,
+          Flexible(
+            child: Text(
+              "Couldn't load the feed.",
+              style: AppTypography.caption.copyWith(
+                color: colors.onSurfaceDim,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            textAlign: TextAlign.center,
           ),
           TextButton(
             onPressed: onRetry,

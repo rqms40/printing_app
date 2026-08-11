@@ -8,6 +8,8 @@ import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
+import 'package:printing_app/features/customer/order/models/product_catalog.dart';
+import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
@@ -52,22 +54,6 @@ dynamic _readJsonValue(
   return null;
 }
 
-/// Safe map coercion for Flutter web — Dio/JS payloads are often plain `Map`
-/// instances that fail a direct `as Map<String, dynamic>` (manifests as
-/// `TypeError: T[_eval] is not a function` in the browser console).
-///
-/// Avoids `is Map<String, dynamic>` / `Map.from` generic RTI paths that can
-/// throw under DDC when maps originate from JS interop.
-Map<String, dynamic>? _asStringKeyMap(dynamic value) {
-  if (value == null) return null;
-  if (value is! Map) return null;
-  final out = <String, dynamic>{};
-  value.forEach((Object? key, Object? val) {
-    out[key?.toString() ?? ''] = val;
-  });
-  return out;
-}
-
 int _readInt(dynamic value, int fallback) {
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value) ?? fallback;
@@ -102,6 +88,32 @@ bool _readBool(dynamic value, bool fallback) {
   return fallback;
 }
 
+BigInt? _readMinorUnits(dynamic value) {
+  if (value == null) return null;
+  if (value is String) {
+    final normalized = value.trim();
+    if (!RegExp(r'^\d+$').hasMatch(normalized)) return null;
+    return BigInt.tryParse(normalized);
+  }
+  if (value is int && value.abs() <= 9007199254740991) {
+    return BigInt.from(value);
+  }
+  return null;
+}
+
+PricingStatus _parsePricingStatus(dynamic value) {
+  switch (value?.toString().trim().toLowerCase()) {
+    case 'pending_quote':
+      return PricingStatus.pendingQuote;
+    case 'quoted':
+      return PricingStatus.quoted;
+    case 'accepted':
+      return PricingStatus.accepted;
+    default:
+      return PricingStatus.accepted;
+  }
+}
+
 String? _normalizeOptionalText(dynamic value) {
   final text = value?.toString().trim();
   return text == null || text.isEmpty ? null : text;
@@ -125,11 +137,6 @@ OrderStatus _parseOrderStatus(String value) {
 
 PaymentMethod _parsePaymentMethod(String value) {
   final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
-  if (normalized == 'qrphinstapay' ||
-      normalized == 'qrph' ||
-      normalized == 'instapayqr') {
-    return PaymentMethod.qrPhInstapay;
-  }
   if (normalized == 'credits' ||
       normalized == 'gridcredit' ||
       normalized == 'gridcredits' ||
@@ -343,7 +350,7 @@ Map<String, dynamic> _parseSpecValues(dynamic raw) {
   final specs = <String, dynamic>{};
   for (final entry in raw.whereType<Map>()) {
     final row = Map<String, dynamic>.from(entry);
-    final key = _readJsonValue(row, 'specKey', 'spec_key')?.toString();
+    final key = _readJsonValue(row, 'specKey', 'spec_key', 'key')?.toString();
     if (key == null || key.isEmpty) continue;
     specs[key] = _readJsonValue(row, 'value');
   }
@@ -355,7 +362,7 @@ Map<String, String> _parseSpecDisplayValues(dynamic raw) {
   final display = <String, String>{};
   for (final entry in raw.whereType<Map>()) {
     final row = Map<String, dynamic>.from(entry);
-    final key = _readJsonValue(row, 'specKey', 'spec_key')?.toString();
+    final key = _readJsonValue(row, 'specKey', 'spec_key', 'key')?.toString();
     if (key == null || key.isEmpty) continue;
     display[key] =
         _readJsonValue(row, 'displayValue', 'display_value')?.toString() ??
@@ -363,6 +370,26 @@ Map<String, String> _parseSpecDisplayValues(dynamic raw) {
         '';
   }
   return display;
+}
+
+Map<String, String> _parseSpecLabels(dynamic raw) {
+  if (raw is! List) return const {};
+  final labels = <String, String>{};
+  for (final entry in raw.whereType<Map>()) {
+    final row = Map<String, dynamic>.from(entry);
+    final key = _readJsonValue(row, 'specKey', 'spec_key', 'key')?.toString();
+    final label = _readJsonValue(
+      row,
+      'specLabel',
+      'spec_label',
+      'label',
+    )?.toString();
+    if (key == null || key.isEmpty || label == null || label.trim().isEmpty) {
+      continue;
+    }
+    labels[key] = label;
+  }
+  return labels;
 }
 
 DateTime _parseDate(dynamic value) {
@@ -379,9 +406,10 @@ AssignedRiderContact? _parseAssignedRider(Map<String, dynamic> json) {
   final value =
       _readJsonValue(json, 'assignedRiderContact', 'assigned_rider_contact') ??
       _readJsonValue(json, 'assignedRider', 'assigned_rider');
-  final map = _asStringKeyMap(value);
-  if (map == null) return null;
-  return AssignedRiderContact.fromJson(map);
+  if (value is Map) {
+    return AssignedRiderContact.fromJson(Map<String, dynamic>.from(value));
+  }
+  return null;
 }
 
 AssignedSupplierContact? _parseAssignedSupplier(Map<String, dynamic> json) {
@@ -392,26 +420,37 @@ AssignedSupplierContact? _parseAssignedSupplier(Map<String, dynamic> json) {
         'assigned_supplier_contact',
       ) ??
       _readJsonValue(json, 'assignedSupplier', 'assigned_supplier');
-  final map = _asStringKeyMap(value);
-  if (map == null) return null;
-  return AssignedSupplierContact.fromJson(map);
+  if (value is Map) {
+    return AssignedSupplierContact.fromJson(Map<String, dynamic>.from(value));
+  }
+  return null;
 }
 
 Order _parseOrder(Map<String, dynamic> json) {
   final batch = _readJsonValue(json, 'batchOrder', 'batch_order');
-  final batchJson = _asStringKeyMap(batch);
-  final specValuesRaw = _readJsonValue(json, 'specValues', 'spec_values');
+  final batchJson = batch is Map ? Map<String, dynamic>.from(batch) : null;
+  final specValuesRaw = _readJsonValue(
+    json,
+    'specValues',
+    'spec_values',
+    'specs',
+  );
   final specs = _parseSpecValues(specValuesRaw);
+  final specLabels = _parseSpecLabels(specValuesRaw);
   final specDisplayValues = _parseSpecDisplayValues(specValuesRaw);
   final category = _readJsonValue(json, 'category')?.toString() ?? '';
   final itemsJson = _readJsonValue(json, 'items');
   final items = itemsJson is List
       ? itemsJson
-            .map(_asStringKeyMap)
-            .whereType<Map<String, dynamic>>()
-            .map(_parseOrderLineItem)
+            .whereType<Map>()
+            .map((item) => _parseOrderLineItem(Map<String, dynamic>.from(item)))
             .toList()
       : const <OrderLineItem>[];
+  final firstItem = items.isEmpty ? null : items.first;
+  final examplesRaw = _readJsonValue(json, 'examples');
+  final examples = examplesRaw is List
+      ? examplesRaw.map((value) => value.toString()).toList(growable: false)
+      : (firstItem?.examples ?? const <String>[]);
   final rawDeliveryGeometry = _readJsonValue(
     json,
     'deliveryRouteGeometry',
@@ -462,6 +501,27 @@ Order _parseOrder(Map<String, dynamic> json) {
             ? null
             : _readJsonValue(batchJson, 'batchRef', 'batch_ref')?.toString()),
     category: category,
+    categoryName:
+        _normalizeOptionalText(
+          _readJsonValue(json, 'categoryName', 'category_name'),
+        ) ??
+        firstItem?.categoryName,
+    groupSlug:
+        _normalizeOptionalText(
+          _readJsonValue(json, 'groupSlug', 'group_slug'),
+        ) ??
+        firstItem?.groupSlug,
+    groupName:
+        _normalizeOptionalText(
+          _readJsonValue(json, 'groupName', 'group_name'),
+        ) ??
+        firstItem?.groupName,
+    groupDescription:
+        _normalizeOptionalText(
+          _readJsonValue(json, 'groupDescription', 'group_description'),
+        ) ??
+        firstItem?.groupDescription,
+    examples: examples,
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
     fileMetadataId:
@@ -472,15 +532,30 @@ Order _parseOrder(Map<String, dynamic> json) {
             0,
           ),
     specs: specs,
+    specLabels: specLabels,
     specDisplayValues: specDisplayValues,
-    paperSpecs: _parsePaperSpecs(
-      _asStringKeyMap(_readJsonValue(json, 'paperSpecs', 'paper_specs')) ??
-          (category == 'paper' && specs.isNotEmpty ? specs : null),
-    ),
-    threeDSpecs: _parseThreeDSpecs(
-      _asStringKeyMap(_readJsonValue(json, 'threeDSpecs', 'three_d_specs')) ??
-          (category == '3d' && specs.isNotEmpty ? specs : null),
-    ),
+    paperSpecs: category == 'paper'
+        ? _parsePaperSpecs(
+            _readJsonValue(json, 'paperSpecs', 'paper_specs') is Map
+                ? Map<String, dynamic>.from(
+                    _readJsonValue(json, 'paperSpecs', 'paper_specs') as Map,
+                  )
+                : specs.isNotEmpty
+                ? specs
+                : null,
+          )
+        : null,
+    threeDSpecs: category == '3d'
+        ? _parseThreeDSpecs(
+            _readJsonValue(json, 'threeDSpecs', 'three_d_specs') is Map
+                ? Map<String, dynamic>.from(
+                    _readJsonValue(json, 'threeDSpecs', 'three_d_specs') as Map,
+                  )
+                : specs.isNotEmpty
+                ? specs
+                : null,
+          )
+        : null,
     quantity:
         int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
     totalPrice:
@@ -494,6 +569,30 @@ Order _parseOrder(Map<String, dynamic> json) {
               '0',
         ) ??
         0,
+    deliveryFeeMinor: _readMinorUnits(
+      _readJsonValue(json, 'deliveryFeeMinor', 'delivery_fee_minor'),
+    ),
+    pricingStatus: _parsePricingStatus(
+      _readJsonValue(json, 'pricingStatus', 'pricing_status'),
+    ),
+    quotedTotalMinor: _readMinorUnits(
+      _readJsonValue(json, 'quotedTotalMinor', 'quoted_total_minor'),
+    ),
+    quotedAt: _parseDateNullable(_readJsonValue(json, 'quotedAt', 'quoted_at')),
+    quoteAcceptedAt: _parseDateNullable(
+      _readJsonValue(json, 'quoteAcceptedAt', 'quote_accepted_at'),
+    ),
+    promisedCompletionAt: _parseDateNullable(
+      _readJsonValue(json, 'promisedCompletionAt', 'promised_completion_at'),
+    ),
+    quoteAssignmentId: _readBoundedInt(
+      _readJsonValue(json, 'quoteAssignmentId', 'quote_assignment_id'),
+      minimum: 1,
+    ),
+    codEligible: _readBool(
+      _readJsonValue(json, 'codEligible', 'cod_eligible'),
+      false,
+    ),
     paymentMethod: _parsePaymentMethod(
       _readJsonValue(json, 'paymentMethod', 'payment_method')?.toString() ??
           'cod',
@@ -611,12 +710,16 @@ Order _parseOrder(Map<String, dynamic> json) {
 }
 
 List<OrderClaim> _parseOrderClaims(Map<String, dynamic> json) {
-  final raw = _readJsonValue(json, 'claims', 'materialClaims', 'material_claims');
+  final raw = _readJsonValue(
+    json,
+    'claims',
+    'materialClaims',
+    'material_claims',
+  );
   if (raw is! List) return const [];
   return raw
-      .map(_asStringKeyMap)
-      .whereType<Map<String, dynamic>>()
-      .map(OrderClaim.fromJson)
+      .whereType<Map>()
+      .map((row) => OrderClaim.fromJson(Map<String, dynamic>.from(row)))
       .toList();
 }
 
@@ -624,9 +727,8 @@ List<OrderStatusHistory> _parseOrderStatusHistory(Map<String, dynamic> json) {
   final raw = _readJsonValue(json, 'statusHistory', 'status_history');
   if (raw is! List) return const [];
   final rows = <OrderStatusHistory>[];
-  for (final entry in raw) {
-    final map = _asStringKeyMap(entry);
-    if (map == null) continue;
+  for (final entry in raw.whereType<Map>()) {
+    final map = Map<String, dynamic>.from(entry);
     final fromRaw =
         _readJsonValue(map, 'fromStatus', 'from_status')?.toString() ?? '';
     final toRaw =
@@ -640,13 +742,13 @@ List<OrderStatusHistory> _parseOrderStatusHistory(Map<String, dynamic> json) {
           fromRaw.isEmpty ? 'submitted' : fromRaw,
         ),
         toStatus: parseMarketplaceOrderStatus(toRaw),
-        changedByUserId:
-            _readJsonValue(map, 'changedByUserId', 'changed_by_user_id')
-                ?.toString(),
+        changedByUserId: _readJsonValue(
+          map,
+          'changedByUserId',
+          'changed_by_user_id',
+        )?.toString(),
         notes: _readJsonValue(map, 'notes')?.toString(),
-        createdAt: _parseDate(
-          _readJsonValue(map, 'createdAt', 'created_at'),
-        ),
+        createdAt: _parseDate(_readJsonValue(map, 'createdAt', 'created_at')),
       ),
     );
   }
@@ -655,22 +757,52 @@ List<OrderStatusHistory> _parseOrderStatusHistory(Map<String, dynamic> json) {
 }
 
 OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
-  final specValuesRaw = _readJsonValue(json, 'specValues', 'spec_values');
+  final specValuesRaw = _readJsonValue(
+    json,
+    'specValues',
+    'spec_values',
+    'specs',
+  );
   final specs = _parseSpecValues(specValuesRaw);
+  final specLabels = _parseSpecLabels(specValuesRaw);
   final specDisplayValues = _parseSpecDisplayValues(specValuesRaw);
-  final category = _readJsonValue(json, 'category')?.toString() ?? '';
-  final paperSpecJson = _asStringKeyMap(
-    _readJsonValue(json, 'paperSpecs', 'paper_specs') ??
-        _readJsonValue(json, 'paperSpec', 'paper_spec'),
-  );
-  final threeDSpecJson = _asStringKeyMap(
-    _readJsonValue(json, 'threeDSpecs', 'three_d_specs') ??
-        _readJsonValue(json, 'threeDSpec', 'three_d_spec'),
-  );
+  final category =
+      _readJsonValue(
+        json,
+        'categorySlug',
+        'category_slug',
+        'category',
+      )?.toString() ??
+      '';
+  final examplesRaw = _readJsonValue(json, 'examples');
+  final paperSpecJson =
+      (_readJsonValue(json, 'paperSpecs', 'paper_specs') ??
+      _readJsonValue(json, 'paperSpec', 'paper_spec'));
+  final threeDSpecJson =
+      (_readJsonValue(json, 'threeDSpecs', 'three_d_specs') ??
+      _readJsonValue(json, 'threeDSpec', 'three_d_spec'));
   return OrderLineItem(
     id: _readJsonValue(json, 'id')?.toString() ?? '',
     orderId: _readJsonValue(json, 'orderId', 'order_id')?.toString() ?? '',
     category: category,
+    categoryName: _normalizeOptionalText(
+      _readJsonValue(json, 'categoryName', 'category_name'),
+    ),
+    groupSlug: _normalizeOptionalText(
+      _readJsonValue(json, 'groupSlug', 'group_slug'),
+    ),
+    groupName: _normalizeOptionalText(
+      _readJsonValue(json, 'groupName', 'group_name'),
+    ),
+    groupDescription: _normalizeOptionalText(
+      _readJsonValue(json, 'groupDescription', 'group_description'),
+    ),
+    examples: examplesRaw is List
+        ? examplesRaw.map((value) => value.toString()).toList(growable: false)
+        : const [],
+    pricingModel: _normalizeOptionalText(
+      _readJsonValue(json, 'pricingModel', 'pricing_model'),
+    ),
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
     fileMetadataId:
@@ -681,15 +813,26 @@ OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
             0,
           ),
     specs: specs,
+    specLabels: specLabels,
     specDisplayValues: specDisplayValues,
-    paperSpecs: _parsePaperSpecs(
-      paperSpecJson ??
-          (category == 'paper' && specs.isNotEmpty ? specs : null),
-    ),
-    threeDSpecs: _parseThreeDSpecs(
-      threeDSpecJson ??
-          (category == '3d' && specs.isNotEmpty ? specs : null),
-    ),
+    paperSpecs: category == 'paper'
+        ? _parsePaperSpecs(
+            paperSpecJson is Map
+                ? Map<String, dynamic>.from(paperSpecJson)
+                : specs.isNotEmpty
+                ? specs
+                : null,
+          )
+        : null,
+    threeDSpecs: category == '3d'
+        ? _parseThreeDSpecs(
+            threeDSpecJson is Map
+                ? Map<String, dynamic>.from(threeDSpecJson)
+                : specs.isNotEmpty
+                ? specs
+                : null,
+          )
+        : null,
     quantity:
         int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
     totalPrice:
@@ -710,10 +853,16 @@ OrderLineItem _lineItemFromOrder(Order order) {
     id: order.id,
     orderId: order.orderId,
     category: order.category,
+    categoryName: order.categoryName,
+    groupSlug: order.groupSlug,
+    groupName: order.groupName,
+    groupDescription: order.groupDescription,
+    examples: order.examples,
     fileUrl: order.fileUrl,
     fileName: order.fileName,
     fileMetadataId: order.fileMetadataId,
     specs: order.specs,
+    specLabels: order.specLabels,
     specDisplayValues: order.specDisplayValues,
     paperSpecs: order.paperSpecs,
     threeDSpecs: order.threeDSpecs,
@@ -798,7 +947,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     bool skipBootstrap = false,
     this.onCompletionUpdate,
     this.onInitialLoadComplete,
+    this.onInitialLoadResult,
     bool? realFlow,
+    this.catalogStateResolver = _unavailableCatalogState,
   }) : realFlow = realFlow ?? AppConstants.realFlow,
        super(initialState) {
     if (!skipBootstrap) {
@@ -809,7 +960,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   final Future<void> Function()? onCompletionUpdate;
   final VoidCallback? onInitialLoadComplete;
+  final ValueChanged<bool>? onInitialLoadResult;
   final bool realFlow;
+  final ProductCatalogState Function() catalogStateResolver;
   String? errorMessage;
   VoidCallback? _removeOrderUpdateListener;
   VoidCallback? _removeDeliveryQueueListener;
@@ -817,6 +970,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   bool _sessionNeedsStart = false;
   int _sessionGeneration = 0;
   int _fetchGeneration = 0;
+  final Map<String, Future<void>> _quoteAcceptances = {};
 
   bool _isCurrentSession(int generation) =>
       mounted && generation == _sessionGeneration;
@@ -841,91 +995,51 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     unawaited(_refreshOrderById(orderId));
   }
 
-  Future<void> _refreshOrderById(String orderId) async {
-    if (orderId.trim().isEmpty) return;
+  Future<Order?> _refreshOrderById(String orderId) async {
     final sessionGeneration = _sessionGeneration;
     try {
       final response = await ApiClient.instance.get('/orders/$orderId');
-      if (!_isCurrentSession(sessionGeneration)) return;
-      final payload = _asStringKeyMap(response.data);
-      if (payload == null) return;
-      final updated = _parseOrder(payload);
-      if (!mounted) return;
+      if (!_isCurrentSession(sessionGeneration)) return null;
+      final updated = _parseOrder(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+      if (!mounted) return null;
       final index = state.indexWhere(
         (order) => order.id == updated.id || order.orderId == updated.orderId,
       );
       if (index < 0) {
         await _fetchOrders();
-        return;
+        return null;
       }
       final next = [...state];
       next[index] = updated;
       state = _groupBatchOrders(next);
       _subscribeToAllOrders();
+      return updated;
     } catch (error) {
       debugPrint(
         'OrdersProvider: queue promotion refetch failed for $orderId: $error',
       );
+      return null;
     }
   }
 
   void _handleOrderUpdate(dynamic data) {
-    try {
-      final map = _asStringKeyMap(data);
-      if (map == null) return;
-      var updated = _parseOrder(map);
-      final index = state.indexWhere(
-        (order) => order.id == updated.id || order.orderId == updated.orderId,
-      );
-
-      if (index >= 0) {
-        final previous = state[index];
-        // Realtime payloads are often partial — keep the active delivery OTP
-        // when the event does not re-send it.
-        if ((updated.deliveryOtp == null ||
-                updated.deliveryOtp!.trim().isEmpty) &&
-            previous.deliveryOtp != null &&
-            previous.deliveryOtp!.trim().isNotEmpty) {
-          updated = updated.copyWith(deliveryOtp: previous.deliveryOtp);
-        }
-        final next = [...state];
-        next[index] = updated;
-        state = next;
-        if (updated.orderStatus == OrderStatus.delivered ||
-            updated.orderStatus == OrderStatus.collectedByCustomer) {
-          unawaited(() async {
-            try {
-              await onCompletionUpdate?.call();
-            } catch (e) {
-              debugPrint('OrdersProvider: completion callback failed: $e');
-            }
-          }());
-        }
-        // When logistics advances, refetch so deliveryOtp is authoritative.
-        if (updated.id.isNotEmpty &&
-            (updated.orderStatus == OrderStatus.riderAssigned ||
-                updated.orderStatus == OrderStatus.pickedUp ||
-                updated.orderStatus == OrderStatus.outForDelivery)) {
-          unawaited(() async {
-            try {
-              await _refreshOrderById(updated.id);
-            } catch (e) {
-              debugPrint('OrdersProvider: logistics refetch failed: $e');
-            }
-          }());
-        }
-      } else {
-        unawaited(() async {
-          try {
-            await _fetchOrders();
-          } catch (e) {
-            debugPrint('OrdersProvider: WS-triggered fetch failed: $e');
-          }
-        }());
-      }
-    } catch (e) {
-      debugPrint('OrdersProvider: WS order parse error: $e');
+    if (data is! Map<String, dynamic>) return;
+    final orderId = data['id']?.toString();
+    if (orderId == null || orderId.isEmpty) {
+      unawaited(_fetchOrders());
+      return;
     }
+    unawaited(
+      _refreshOrderById(orderId).then((updated) {
+        if (updated?.orderStatus == OrderStatus.delivered ||
+            updated?.orderStatus == OrderStatus.collectedByCustomer) {
+          return onCompletionUpdate?.call();
+        }
+        return null;
+      }),
+    );
   }
 
   @override
@@ -974,27 +1088,19 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   Future<void> _fetchOrders() async {
     final sessionGeneration = _sessionGeneration;
     final fetchGeneration = ++_fetchGeneration;
+    var authoritative = false;
     try {
       final response = await ApiClient.instance.get('/orders');
-      final raw = response.data;
-      final data = raw is List ? raw : const <dynamic>[];
+      final data = response.data as List<dynamic>;
       if (!_isCurrentSession(sessionGeneration) ||
           fetchGeneration != _fetchGeneration) {
         return;
       }
-      final parsed = <Order>[];
-      for (final json in data) {
-        final map = _asStringKeyMap(json);
-        if (map == null) continue;
-        try {
-          parsed.add(_parseOrder(map));
-        } catch (e) {
-          // Don't let one bad payload kill the whole list on Flutter web RTI.
-          debugPrint('OrdersProvider: skip unparseable order: $e');
-        }
-      }
-      state = _groupBatchOrders(parsed);
+      state = _groupBatchOrders(
+        data.map((json) => _parseOrder(json as Map<String, dynamic>)).toList(),
+      );
       errorMessage = null;
+      authoritative = true;
       debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
     } catch (e) {
       if (!_isCurrentSession(sessionGeneration) ||
@@ -1016,24 +1122,76 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       return;
     }
     // Subscribe to all loaded orders in case socket connected before fetch completed.
-    try {
-      _subscribeToAllOrders();
-    } catch (e) {
-      debugPrint('OrdersProvider: subscribe after fetch failed: $e');
-    }
+    _subscribeToAllOrders();
+    scheduleMicrotask(() => onInitialLoadResult?.call(authoritative));
     if (!_initialLoadReported) {
       _initialLoadReported = true;
-      scheduleMicrotask(() {
-        try {
-          onInitialLoadComplete?.call();
-        } catch (e) {
-          debugPrint('OrdersProvider: initial-load callback failed: $e');
-        }
-      });
+      scheduleMicrotask(() => onInitialLoadComplete?.call());
     }
   }
 
   Future<void> refreshOrders() async => _fetchOrders();
+
+  Future<void> acceptQuote(
+    String orderId,
+    int supplierAssignmentId,
+    PaymentMethod paymentMethod,
+  ) {
+    if (paymentMethod != PaymentMethod.gridCredits &&
+        paymentMethod != PaymentMethod.cod) {
+      return Future.error(
+        ArgumentError.value(
+          paymentMethod,
+          'paymentMethod',
+          'Quote acceptance supports Pilot Credits or COD only',
+        ),
+      );
+    }
+    final key = '$orderId:$supplierAssignmentId';
+    final inFlight = _quoteAcceptances[key];
+    if (inFlight != null) return inFlight;
+    final request =
+        _performQuoteAcceptance(
+          orderId,
+          supplierAssignmentId,
+          paymentMethod,
+        ).whenComplete(() {
+          _quoteAcceptances.remove(key);
+        });
+    _quoteAcceptances[key] = request;
+    return request;
+  }
+
+  Future<void> _performQuoteAcceptance(
+    String orderId,
+    int supplierAssignmentId,
+    PaymentMethod paymentMethod,
+  ) async {
+    try {
+      await ApiClient.instance.post(
+        '/orders/$orderId/accept-quote',
+        data: {
+          'supplierAssignmentId': supplierAssignmentId,
+          'paymentMethod': paymentMethod.orderApiValue,
+        },
+      );
+    } on DioException catch (error) {
+      final responseData = error.response?.data;
+      final payload = responseData is Map ? responseData : const {};
+      final nested = payload['message'];
+      final nestedPayload = nested is Map ? nested : const {};
+      final code = (payload['code'] ?? nestedPayload['code'] ?? 'quote_error')
+          .toString();
+      final message =
+          (payload['message'] is String
+                  ? payload['message']
+                  : nestedPayload['message'])
+              ?.toString() ??
+          'Unable to accept this quote. Please try again.';
+      throw QuoteAcceptanceException(code: code, message: message);
+    }
+    await _fetchOrders();
+  }
 
   void clear() {
     _sessionGeneration += 1;
@@ -1092,18 +1250,10 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
               : null,
         },
       );
-      final payload = _asStringKeyMap(response.data);
-      if (payload == null) {
-        throw StateError('Order create response was not a JSON object');
-      }
-      final newOrder = _parseOrder(payload);
+      final newOrder = _parseOrder(response.data as Map<String, dynamic>);
       if (!_isCurrentSession(sessionGeneration)) return newOrder;
       state = [newOrder, ...state];
-      try {
-        WebSocketService.instance.subscribeToOrder(newOrder.orderId);
-      } catch (e) {
-        debugPrint('OrdersProvider: subscribe after create failed: $e');
-      }
+      WebSocketService.instance.subscribeToOrder(newOrder.orderId);
       debugPrint('OrdersProvider: Order created via API: ${newOrder.orderId}');
       return newOrder;
     } on DioException catch (e) {
@@ -1142,17 +1292,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     List<Map<String, dynamic>> destinations = const [],
     List<int> itemDestinationIndices = const [],
     Map<String, dynamic>? temporaryAddress,
-    int? qrReceiptFileId,
   }) async {
     final sessionGeneration = _sessionGeneration;
     final addressId = _deliveryAddressIdValue(deliveryAddressId);
-
-    if (paymentMethod.requiresPaymentReceipt &&
-        (qrReceiptFileId == null || qrReceiptFileId <= 0)) {
-      throw StateError(
-        'QR Ph (Instapay) requires a digital payment receipt upload',
-      );
-    }
 
     final mappedItems = items.indexed.map((entry) {
       final idx = entry.$1;
@@ -1171,11 +1313,10 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       'deliveryOption': deliveryOption,
       'deliveryAddressId': addressId,
       'speedTier': speedTier.toApi(),
-      if (slotTemplateId != null) 'slotTemplateId': slotTemplateId,
-      if (slotDate != null) 'slotDate': slotDate,
+      'slotTemplateId': ?slotTemplateId,
+      'slotDate': ?slotDate,
       if (destinations.isNotEmpty) 'destinations': destinations,
-      if (temporaryAddress != null) 'temporaryAddress': temporaryAddress,
-      if (qrReceiptFileId != null) 'qrReceiptFileId': qrReceiptFileId,
+      'temporaryAddress': ?temporaryAddress,
     };
 
     final Response response;
@@ -1191,41 +1332,28 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       rethrow;
     }
 
-    final data = _asStringKeyMap(response.data);
-    if (data == null) {
-      throw StateError('Batch order response was not a JSON object');
-    }
+    final data = Map<String, dynamic>.from(response.data as Map);
     final batchId = data['batchId']?.toString();
     final batchAssignedSlot = _parseAssignedSlot(data);
-    final rawOrders = data['orders'] is List
-        ? data['orders'] as List
-        : const <dynamic>[];
+    final rawOrders = data['orders'] as List<dynamic>? ?? const [];
     final createdOrders = _groupBatchOrders(
-      rawOrders
-          .map((json) {
-            final orderJson = _asStringKeyMap(json);
-            if (orderJson == null) return null;
-            if (batchId != null && batchId.isNotEmpty) {
-              orderJson['batchId'] = batchId;
-            }
-            final order = _parseOrder(orderJson);
-            if (batchAssignedSlot == null || order.assignedSlot != null) {
-              return order;
-            }
-            return order.copyWith(assignedSlot: batchAssignedSlot);
-          })
-          .whereType<Order>()
-          .toList(),
+      rawOrders.map((json) {
+        final orderJson = Map<String, dynamic>.from(json as Map);
+        if (batchId != null && batchId.isNotEmpty) {
+          orderJson['batchId'] = batchId;
+        }
+        final order = _parseOrder(orderJson);
+        if (batchAssignedSlot == null || order.assignedSlot != null) {
+          return order;
+        }
+        return order.copyWith(assignedSlot: batchAssignedSlot);
+      }).toList(),
     );
 
     if (!_isCurrentSession(sessionGeneration)) return createdOrders;
     state = [...createdOrders, ...state];
     for (final order in createdOrders) {
-      try {
-        WebSocketService.instance.subscribeToOrder(order.orderId);
-      } catch (e) {
-        debugPrint('OrdersProvider: subscribe after batch create failed: $e');
-      }
+      WebSocketService.instance.subscribeToOrder(order.orderId);
     }
     debugPrint(
       'OrdersProvider: Batch order created via API: ${createdOrders.length} orders',
@@ -1305,7 +1433,6 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         speedTier: state.speedTier,
         destinations: destinations,
         itemDestinationIndices: indices,
-        qrReceiptFileId: state.qrReceiptFileId,
       );
     }
 
@@ -1322,8 +1449,96 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       temporaryAddress: hasTemporaryAddress
           ? state.temporaryAddress!.toJson()
           : null,
-      qrReceiptFileId: state.qrReceiptFileId,
     );
+  }
+
+  Future<List<Order>> submitRfq(CheckoutState checkout) async {
+    final catalogState = catalogStateResolver();
+    if (!catalogState.canSubmit) {
+      throw StateError('Refresh the catalog before submitting this request.');
+    }
+    if (checkout.items.isEmpty) throw StateError('RFQ cart is empty');
+    if (checkout.hasMixedPricingModes) {
+      throw StateError(
+        'Quoted requests and priced orders must be submitted separately.',
+      );
+    }
+    if (!checkout.hasPendingQuoteItems) {
+      throw StateError('RFQ cart requires quote-request items');
+    }
+
+    final items = <Map<String, dynamic>>[];
+    for (final item in checkout.items) {
+      final slug = item.productSlug?.trim();
+      final requiredDate = item.requiredDate;
+      if (slug == null || slug.isEmpty || item.quantity < 1) {
+        throw StateError('Each request needs an active product and quantity.');
+      }
+      final product = catalogState.catalog.productBySlug(slug);
+      if (product == null || product.pricingModel != 'quote_required') {
+        throw StateError('Refresh the catalog before submitting this request.');
+      }
+      if (requiredDate == null || !requiredDate.isAfter(DateTime.now())) {
+        throw StateError('Each request needs a future required date.');
+      }
+      if (item.fileMetadataId <= 0 || item.specs.isEmpty) {
+        throw StateError('Each request needs specifications and artwork.');
+      }
+      items.add({
+        'categorySlug': slug,
+        'quantity': item.quantity,
+        'requiredDate': _isoDateOnly(requiredDate),
+        'fileMetadataId': item.fileMetadataId,
+        'specs': item.specs,
+        if (item.specialInstructions?.trim().isNotEmpty ?? false)
+          'specialInstructions': item.specialInstructions!.trim(),
+      });
+    }
+
+    final body = <String, dynamic>{
+      'items': items,
+      'deliveryOption': checkout.mode == DeliveryMode.pickup
+          ? 'pickup'
+          : 'delivery',
+    };
+    if (checkout.mode == DeliveryMode.delivery) {
+      final temporaryAddress = checkout.temporaryAddress;
+      final addressId = _deliveryAddressIdValue(checkout.singleAddress?.id);
+      if (temporaryAddress?.isValid ?? false) {
+        body['temporaryAddress'] = temporaryAddress!.toJson();
+      } else if (addressId != null) {
+        body['deliveryAddressId'] = addressId;
+      } else {
+        throw StateError('A delivery address is required for RFQ submission.');
+      }
+    } else if (checkout.mode == DeliveryMode.multidrop) {
+      throw StateError(
+        'Submit RFQ items to one delivery destination at a time.',
+      );
+    }
+
+    final sessionGeneration = _sessionGeneration;
+    final response = await ApiClient.instance.post(
+      '/orders/requests/batch',
+      data: body,
+    );
+    final data = Map<String, dynamic>.from(response.data as Map);
+    final batchId = data['batchId']?.toString();
+    final rawOrders = data['orders'] as List<dynamic>? ?? const [];
+    final created = _groupBatchOrders(
+      rawOrders.map((raw) {
+        final json = Map<String, dynamic>.from(raw as Map);
+        if (batchId?.isNotEmpty ?? false) json['batchId'] = batchId;
+        return _parseOrder(json);
+      }).toList(),
+    );
+    if (_isCurrentSession(sessionGeneration)) {
+      state = [...created, ...state];
+      for (final order in created) {
+        WebSocketService.instance.subscribeToOrder(order.orderId);
+      }
+    }
+    return created;
   }
 
   /// Cancel an order if it is in a cancellable status.
@@ -1412,6 +1627,21 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   }
 }
 
+class QuoteAcceptanceException implements Exception {
+  const QuoteAcceptanceException({required this.code, required this.message});
+
+  final String code;
+  final String message;
+
+  bool get refreshRecommended =>
+      code == 'stale_quote' ||
+      code == 'quote_acceptance_conflict' ||
+      code == 'quote_conflict';
+
+  @override
+  String toString() => message;
+}
+
 Map<String, dynamic> _cartItemPayload(CartItem item) {
   return {
     'category': item.category,
@@ -1450,18 +1680,36 @@ int? _deliveryAddressIdValue(String? id) {
   return int.tryParse(id);
 }
 
+String _isoDateOnly(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+ProductCatalogState _unavailableCatalogState() => ProductCatalogState(
+  catalog: ProductCatalog.v110Snapshot(),
+  isServerBacked: false,
+  isLoading: false,
+  error: StateError('Catalog authority unavailable'),
+);
+
 final ordersProvider = StateNotifierProvider<OrdersNotifier, List<Order>>((
   ref,
 ) {
   return OrdersNotifier(
+    catalogStateResolver: () => ref.read(productCatalogProvider),
     onCompletionUpdate: () => ref.read(accountStateProvider.notifier).refresh(),
     onInitialLoadComplete: () {
       ref.read(ordersInitialLoadCompleteProvider.notifier).state = true;
+    },
+    onInitialLoadResult: (authoritative) {
+      ref.read(ordersInitialLoadAuthoritativeProvider.notifier).state =
+          authoritative;
     },
   );
 });
 
 final ordersInitialLoadCompleteProvider = StateProvider<bool>((ref) => false);
+final ordersInitialLoadAuthoritativeProvider = StateProvider<bool>(
+  (ref) => false,
+);
 
 /// Reactive list of active (non-terminal) orders, sorted newest-updated first.
 /// Widgets that watch this will rebuild automatically on any WS or API update.
