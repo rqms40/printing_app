@@ -49,9 +49,7 @@ export class ChatController {
       dto.type === ConversationType.ADMIN &&
       dto.orderId == null &&
       (req.user.role === UserRole.CLIENT ||
-        req.user.role === UserRole.SUPPLIER ||
-        req.user.role === 'client' ||
-        req.user.role === 'supplier')
+        req.user.role === UserRole.SUPPLIER)
     ) {
       return this.openSupportConversation(req);
     }
@@ -84,10 +82,7 @@ export class ChatController {
     if (
       req.user.role !== UserRole.CLIENT &&
       req.user.role !== UserRole.SUPPLIER &&
-      req.user.role !== 'client' &&
-      req.user.role !== 'supplier' &&
-      req.user.role !== UserRole.RIDER &&
-      req.user.role !== 'rider'
+      req.user.role !== UserRole.RIDER
     ) {
       throw new ForbiddenException();
     }
