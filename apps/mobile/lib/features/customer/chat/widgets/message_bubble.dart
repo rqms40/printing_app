@@ -38,7 +38,8 @@ class MessageBubble extends ConsumerWidget {
   bool get _isOutgoing => message.senderRole == currentUserRole;
   bool get _shouldRenderMarkdown =>
       message.senderRole == SenderRole.bot ||
-      message.senderRole == SenderRole.admin;
+      message.senderRole == SenderRole.admin ||
+      message.senderRole == SenderRole.supplier;
 
   AppColorSet _colors(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
@@ -57,6 +58,7 @@ class MessageBubble extends ConsumerWidget {
     SenderRole.admin => 'Human Support',
     SenderRole.rider => 'Rider',
     SenderRole.bot => 'GridBot AI',
+    SenderRole.supplier => 'Print Shop',
   };
 
   String _semanticLabel() {

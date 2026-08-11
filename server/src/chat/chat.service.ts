@@ -23,7 +23,7 @@ import { GRIDBOT_SYSTEM_PROMPT } from './gridbot.prompt';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { Order } from '../orders/entities/order.entity';
 
-export type ChatActorRole = 'admin' | 'customer' | 'rider';
+export type ChatActorRole = 'admin' | 'customer' | 'rider' | 'supplier';
 
 @Injectable()
 export class ChatService {
@@ -117,6 +117,50 @@ export class ChatService {
           orderId: order.id,
           type: ConversationType.RIDER,
           assignedRiderId: riderUserId,
+        },
+      );
+    });
+  }
+
+  async getOrCreateSupplierOrderConversation(
+    supplierUserId: number,
+    orderRef: string | number,
+  ): Promise<Conversation> {
+    const candidate = await this.findOrderByRef(orderRef);
+    return this.dataSource.transaction(async (manager) => {
+      const order = await this.lockOrder(manager, candidate.id);
+      
+      // We look up the supplier profile by supplierUserId, or we could just check if order.supplierId matches
+      // the supplier profile id of the current user. Wait, order.supplierId is the supplier_profiles.id!
+      // The user id of the supplier is needed. Let's load the supplier profile first.
+      
+      const supplierProfile = await manager.query(
+        'SELECT id FROM supplier_profiles WHERE user_id = $1',
+        [supplierUserId]
+      );
+      
+      if (!supplierProfile.length) {
+        throw new ForbiddenException('Supplier profile not found');
+      }
+
+      const assignment = await manager.query(
+        "SELECT id FROM supplier_assignments WHERE order_id = $1 AND supplier_id = $2 AND decision IN ('accepted', 'pending') LIMIT 1",
+        [order.id, supplierProfile[0].id]
+      );
+      
+      if (!assignment.length) {
+        throw new ForbiddenException(
+          'Only the assigned supplier can chat about this order',
+        );
+      }
+
+      return this.getOrCreateOrderConversation(
+        manager.getRepository(Conversation),
+        {
+          customerId: order.userId,
+          orderId: order.id,
+          type: ConversationType.SUPPLIER,
+          assignedRiderId: null,
         },
       );
     });
@@ -222,7 +266,38 @@ export class ChatService {
     return this.convRepo.find({
       where: { customerId },
       order: { updatedAt: 'DESC' },
+      relations: ['customer'],
     });
+  }
+
+  async getSupplierConversations(supplierUserId: number): Promise<Conversation[]> {
+    // A supplier can have two types of conversations:
+    // 1. As a customer interacting with ADMIN (Support)
+    // 2. As a supplier interacting with CUSTOMER on an order (type=SUPPLIER)
+    
+    // Support conversations
+    const supportConvs = await this.convRepo.find({
+      where: { customerId: supplierUserId, type: ConversationType.ADMIN },
+      order: { updatedAt: 'DESC' },
+      relations: ['customer'],
+    });
+
+    // Order conversations
+    const orderConvs = await this.convRepo
+      .createQueryBuilder('c')
+      .innerJoinAndSelect('c.customer', 'customer')
+      .innerJoin(Order, 'o', 'o.id = c.order_id')
+      .innerJoin('supplier_assignments', 'sa', "sa.order_id = o.id AND sa.decision IN ('accepted', 'pending')")
+      .innerJoin('supplier_profiles', 'sp', 'sp.id = sa.supplier_id')
+      .where('sp.user_id = :supplierUserId', { supplierUserId })
+      .andWhere('c.type = :type', { type: ConversationType.SUPPLIER })
+      .orderBy('c.updated_at', 'DESC')
+      .getMany();
+
+    // Merge and sort
+    const allConvs = [...supportConvs, ...orderConvs];
+    allConvs.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    return allConvs;
   }
 
   async getMessages(
@@ -287,7 +362,9 @@ export class ChatService {
         ? SenderRole.ADMIN
         : role === 'rider'
           ? SenderRole.RIDER
-          : SenderRole.CUSTOMER;
+          : role === 'supplier'
+            ? SenderRole.SUPPLIER
+            : SenderRole.CUSTOMER;
     return this.withAuthorizedConversation(
       conversationId,
       userId,
@@ -383,7 +460,8 @@ export class ChatService {
     return this.dataSource.transaction(async (manager) => {
       let order: Order | null = null;
       if (
-        candidate.type === ConversationType.RIDER &&
+        (candidate.type === ConversationType.RIDER ||
+          candidate.type === ConversationType.SUPPLIER) &&
         candidate.orderId != null
       ) {
         order = await manager.getRepository(Order).findOne({
@@ -400,27 +478,70 @@ export class ChatService {
         throw new NotFoundException('Conversation not found');
       }
 
+      let isAssignedSupplier = false;
+      if (role === 'supplier' && order) {
+        const assignments = await manager.query(
+          `SELECT 1 FROM supplier_assignments sa 
+           JOIN supplier_profiles sp ON sp.id = sa.supplier_id 
+           WHERE sa.order_id = $1 AND sp.user_id = $2 AND sa.decision IN ('accepted', 'pending') LIMIT 1`,
+          [order.id, userId]
+        );
+        isAssignedSupplier = assignments.length > 0;
+      }
+
       const canAccess =
         (!requireOpen || conversation.status !== ConversationStatus.CLOSED) &&
         (role === 'admin' ||
-          (role === 'customer' && conversation.customerId === userId) ||
+          conversation.customerId === userId ||
           (role === 'rider' &&
             conversation.type === ConversationType.RIDER &&
             conversation.status !== ConversationStatus.CLOSED &&
             conversation.assignedRiderId === userId &&
             conversation.orderId === candidate.orderId &&
-            order?.assignedRiderId === userId));
+            order?.assignedRiderId === userId) ||
+          (role === 'supplier' &&
+            conversation.type === ConversationType.SUPPLIER &&
+            conversation.status !== ConversationStatus.CLOSED &&
+            conversation.orderId === candidate.orderId &&
+            isAssignedSupplier)); 
+            
       if (!canAccess) throw new ForbiddenException('Forbidden');
 
       return action(manager, conversation);
     });
   }
 
-  async getUnreadCount(customerId: number): Promise<number> {
+  async getUnreadCount(userId: number, role?: ChatActorRole): Promise<number> {
+    if (role === 'supplier') {
+      // Unread count for a supplier involves both their direct admin chats AND their order chats
+      const adminCount = await this.msgRepo
+        .createQueryBuilder('m')
+        .innerJoin('chat_conversations', 'c', 'c.id = m.conversation_id')
+        .where('c.customer_id = :userId', { userId })
+        .andWhere('c.type = :type', { type: ConversationType.ADMIN })
+        .andWhere('m.sender_role <> :sender', { sender: SenderRole.CUSTOMER }) // They act as customer
+        .andWhere('m.is_read = false')
+        .getCount();
+        
+      const orderCount = await this.msgRepo
+        .createQueryBuilder('m')
+        .innerJoin('chat_conversations', 'c', 'c.id = m.conversation_id')
+        .innerJoin(Order, 'o', 'o.id = c.order_id')
+        .innerJoin('supplier_assignments', 'sa', "sa.order_id = o.id AND sa.decision IN ('accepted', 'pending')")
+        .innerJoin('supplier_profiles', 'sp', 'sp.id = sa.supplier_id')
+        .where('sp.user_id = :userId', { userId })
+        .andWhere('c.type = :type', { type: ConversationType.SUPPLIER })
+        .andWhere('m.sender_role <> :sender', { sender: SenderRole.SUPPLIER })
+        .andWhere('m.is_read = false')
+        .getCount();
+        
+      return adminCount + orderCount;
+    }
+
     return this.msgRepo
       .createQueryBuilder('m')
       .innerJoin('chat_conversations', 'c', 'c.id = m.conversation_id')
-      .where('c.customer_id = :customerId', { customerId })
+      .where('c.customer_id = :userId', { userId: userId })
       .andWhere('m.sender_role <> :role', { role: SenderRole.CUSTOMER })
       .andWhere('m.is_read = false')
       .getCount();

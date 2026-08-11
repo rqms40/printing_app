@@ -167,9 +167,10 @@ export function useConversationThread(conversationId: number | null) {
   }, [conversationId]);
 
   const sendMessage = useCallback(
-    (content: string) => {
-      if (!conversationId || !content.trim()) return;
-      sendAdminMessage(conversationId, content.trim());
+    (content?: string, attachmentFileId?: number, attachmentMimeType?: string) => {
+      const trimmed = content?.trim() || "";
+      if (!conversationId || (!trimmed && !attachmentFileId)) return;
+      sendAdminMessage(conversationId, trimmed, attachmentFileId, attachmentMimeType);
     },
     [conversationId],
   );

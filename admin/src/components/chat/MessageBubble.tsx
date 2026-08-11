@@ -30,8 +30,6 @@ interface RoleConfig {
 }
 
 function useRoleConfigs(): Record<SenderRole, RoleConfig> {
-  const { token } = theme.useToken();
-
   return {
     admin: {
       align: "flex-end",
@@ -43,8 +41,8 @@ function useRoleConfigs(): Record<SenderRole, RoleConfig> {
     },
     customer: {
       align: "flex-start",
-      bg: token.colorBgElevated,
-      color: token.colorText,
+      bg: "#4B5563",
+      color: "#FFFFFF",
       label: null,
       borderRadius: "14px 14px 14px 4px",
       shadow: `0 1px 4px rgba(0,0,0,0.24)`,
@@ -65,6 +63,14 @@ function useRoleConfigs(): Record<SenderRole, RoleConfig> {
       label: "🚴 Rider",
       borderRadius: "14px 14px 14px 4px",
       border: "1.5px solid rgba(245,158,11,0.3)",
+      shadow: "0 1px 4px rgba(0,0,0,0.12)",
+    },
+    supplier: {
+      align: "flex-start", // Default left (for admin viewing supplier)
+      bg: "rgba(255, 222, 88, 0.2)",
+      color: "#D4B106", // Darker yellow for text
+      label: "Print Shop",
+      borderRadius: "14px 14px 14px 4px",
       shadow: "0 1px 4px rgba(0,0,0,0.12)",
     },
   };
@@ -316,21 +322,24 @@ function MarkdownContent({
 
 export function MessageBubble({
   message,
-  /** When true, participant (customer/supplier) messages are right-aligned. */
-  viewerIsParticipant = false,
+  /** The role of the person viewing the chat. Defaults to "admin". */
+  viewerRole = "admin",
 }: {
   message: ChatMessage;
-  viewerIsParticipant?: boolean;
+  viewerRole?: "admin" | "supplier";
 }) {
   const { token } = theme.useToken();
   const roleConfigs = useRoleConfigs();
   const baseCfg = roleConfigs[message.senderRole] ?? roleConfigs.customer;
 
-  // From the participant's view, own messages (customer) should sit on the right
-  // and admin replies on the left — opposite of the ops inbox.
   let cfg = baseCfg;
-  if (viewerIsParticipant) {
-    if (message.senderRole === "customer") {
+
+  if (viewerRole === "supplier") {
+    // If a Supplier is viewing:
+    // Supplier's own messages -> right side (yellow)
+    // Customer -> left side (gray)
+    // Admin -> left side (white)
+    if (message.senderRole === "supplier") {
       cfg = {
         ...baseCfg,
         align: "flex-end",
@@ -338,6 +347,7 @@ export function MessageBubble({
         color: "#141414",
         borderRadius: "14px 14px 4px 14px",
         shadow: "0 2px 10px rgba(255,222,88,0.18)",
+        label: null,
       };
     } else if (message.senderRole === "admin") {
       cfg = {
@@ -348,6 +358,26 @@ export function MessageBubble({
         borderRadius: "14px 14px 14px 4px",
         label: "GRIDGO Support",
       };
+    } else {
+      // Customer or Rider -> left side
+      cfg = { ...baseCfg, align: "flex-start" };
+    }
+  } else {
+    // If an Admin is viewing (viewerRole === "admin"):
+    // Admin's own messages -> right side (yellow)
+    // Everyone else (Customer, Supplier, Rider) -> left side
+    if (message.senderRole === "admin") {
+      cfg = {
+        ...baseCfg,
+        align: "flex-end",
+        bg: "#FFDE58",
+        color: "#141414",
+        borderRadius: "14px 14px 4px 14px",
+        shadow: "0 2px 10px rgba(255,222,88,0.18)",
+        label: null,
+      };
+    } else {
+      cfg = { ...baseCfg, align: "flex-start" };
     }
   }
 
@@ -357,7 +387,7 @@ export function MessageBubble({
   const hasContent = (message.content ?? "").trim().length > 0;
   const imageOnly = hasImage && !hasContent;
   const shouldRenderMarkdown =
-    message.senderRole === "bot" || message.senderRole === "admin";
+    message.senderRole === "bot" || message.senderRole === "admin" || message.senderRole === "supplier";
 
   return (
     <div
@@ -412,10 +442,10 @@ export function MessageBubble({
               text={message.content!}
               textColor={cfg.color}
               accentColor={
-                message.senderRole === "admin" ? "#141414" : token.colorPrimary
+                message.senderRole === "admin" || message.senderRole === "supplier" ? "#141414" : token.colorPrimary
               }
               codeBg={
-                message.senderRole === "admin"
+                message.senderRole === "admin" || message.senderRole === "supplier"
                   ? "rgba(0,0,0,0.12)"
                   : "rgba(0,0,0,0.35)"
               }

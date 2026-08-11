@@ -14,6 +14,7 @@ export enum SenderRole {
   ADMIN = 'admin',
   RIDER = 'rider',
   BOT = 'bot',
+  SUPPLIER = 'supplier',
 }
 
 @Entity('chat_messages')

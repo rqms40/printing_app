@@ -69,12 +69,13 @@ class ChatNotifier extends StateNotifier<ChatState> {
     }
   }
 
-  Future<Conversation?> openOrderConversation(Object orderRef) async {
+  Future<Conversation?> openOrderConversation(Object orderRef, {String? type}) async {
     state = state.copyWith(createError: null);
     try {
       final encodedRef = Uri.encodeComponent(orderRef.toString());
       final res = await _dio.post<Map<String, dynamic>>(
         '/chat/orders/$encodedRef/conversation',
+        data: type != null ? {'type': type} : null,
       );
       final conv = Conversation.fromJson(res.data!);
       state = state.copyWith(conversations: _upsertConversation(conv));
@@ -83,6 +84,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
       state = state.copyWith(createError: e.toString());
       return null;
     }
+  }
+
+  Future<Conversation?> openSupplierOrderConversation(Object orderRef) async {
+    return openOrderConversation(orderRef, type: 'supplier');
   }
 
   Future<Conversation?> openRiderOrderConversation(

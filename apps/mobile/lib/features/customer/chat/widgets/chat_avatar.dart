@@ -16,6 +16,7 @@ dynamic chatIconForSender(SenderRole role) => switch (role) {
   SenderRole.admin => HugeIcons.strokeRoundedCustomerSupport,
   SenderRole.rider => HugeIcons.strokeRoundedDeliveryBox01,
   SenderRole.customer => HugeIcons.strokeRoundedUser,
+  SenderRole.supplier => HugeIcons.strokeRoundedStore01,
 };
 
 enum ChatPresence { online, offline }

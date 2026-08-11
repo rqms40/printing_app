@@ -15,6 +15,7 @@ export enum ConversationType {
   AI = 'ai',
   ADMIN = 'admin',
   RIDER = 'rider',
+  SUPPLIER = 'supplier',
 }
 
 export enum ConversationStatus {

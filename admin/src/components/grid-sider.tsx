@@ -21,6 +21,7 @@ const SUPPLIER_PORTAL_RESOURCES = new Set([
   "supplier-jobs",
   "supplier-payouts",
   "supplier-support",
+  "supplier-profile",
 ]);
 
 /** Super Admin–only governance resources (hidden from ops_admin). */

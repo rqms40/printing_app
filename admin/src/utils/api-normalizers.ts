@@ -862,7 +862,7 @@ function normalizeOrderItemSpecs(value: unknown): OrderItemSpec[] | undefined {
           "optionLabel",
         ) ?? rawValue;
 
-      return {
+      const spec: OrderItemSpec = {
         key,
         label,
         value: rawValue,
@@ -873,7 +873,8 @@ function normalizeOrderItemSpecs(value: unknown): OrderItemSpec[] | undefined {
             : toNumberValue(record, 0, "option_id", "optionId"),
         option_label:
           toOptionalString(record, "option_label", "optionLabel") ?? null,
-      } satisfies OrderItemSpec;
+      };
+      return spec;
     })
     .filter((entry): entry is OrderItemSpec => entry != null);
 

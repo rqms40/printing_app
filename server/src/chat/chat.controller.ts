@@ -27,6 +27,7 @@ type JwtUser = { sub: number; role: string; email: string };
 function toChatActorRole(role: string): ChatActorRole {
   if (isAdminRole(role)) return 'admin';
   if (role === UserRole.RIDER || role === 'rider') return 'rider';
+  if (role === UserRole.SUPPLIER || role === 'supplier') return 'supplier';
   return 'customer';
 }
 
@@ -109,6 +110,7 @@ export class ChatController {
   async openOrderConversation(
     @Param('orderId') orderId: string,
     @Request() req: { user: JwtUser },
+    @Body('type') typeStr?: string,
   ): Promise<Conversation> {
     const orderRef = orderId.trim();
     if (!orderRef) {
@@ -122,18 +124,41 @@ export class ChatController {
       );
     }
 
+    if (req.user.role === UserRole.SUPPLIER || req.user.role === 'supplier') {
+      return this.chatService.getOrCreateSupplierOrderConversation(
+        req.user.sub,
+        orderRef,
+      );
+    }
+
     if (req.user.role !== UserRole.CLIENT && req.user.role !== 'client') {
       throw new ForbiddenException();
+    }
+
+    let requestedType: ConversationType | undefined;
+    if (typeStr) {
+      const lower = typeStr.toLowerCase();
+      if (lower === 'rider') requestedType = ConversationType.RIDER;
+      else if (lower === 'supplier') requestedType = ConversationType.SUPPLIER;
+      else if (lower === 'admin') requestedType = ConversationType.ADMIN;
     }
 
     return this.chatService.getOrCreateCustomerOrderConversation(
       req.user.sub,
       orderRef,
+      requestedType,
     );
   }
 
   @Get('conversations')
-  getConversations(@Request() req: { user: JwtUser }): Promise<Conversation[]> {
+  async getConversations(@Request() req: { user: JwtUser }): Promise<Conversation[]> {
+    if (req.user.role === UserRole.SUPPLIER || req.user.role === 'supplier') {
+       // Suppliers need to see both ADMIN type (ops chat) and SUPPLIER type (customer order chats)
+       // Let's modify the service to get conversations by supplier! Wait, getConversations is currently just fetching by customerId...
+       // A supplier acts as the customer in the ADMIN chat, but in the SUPPLIER chat, the customerId is the Client!
+       // But wait! When a supplier chats with a client, the supplier is NOT the customerId.
+       return this.chatService.getSupplierConversations(req.user.sub);
+    }
     return this.chatService.getConversations(req.user.sub);
   }
 

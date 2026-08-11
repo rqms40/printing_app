@@ -14,6 +14,7 @@ export type SupplierDirectoryRow = {
   contactEmail: string | null;
   address: string | null;
   logoUrl: string | null;
+  attributes?: Record<string, string>;
   serviceZones: string[];
   serviceFocusRanks: string[];
   rankedServices: RankedServiceFocus[];
@@ -136,6 +137,7 @@ export function normalizeDirectoryRow(input: unknown): SupplierDirectoryRow {
     contactEmail: toStringOrNull(read(r, "contactEmail", "contact_email")),
     address: toStringOrNull(read(r, "address")),
     logoUrl: toStringOrNull(read(r, "logoUrl", "logo_url")),
+    attributes: asRecord(read(r, "attributes")) as Record<string, string>,
     serviceZones: Array.isArray(zonesRaw)
       ? zonesRaw.map((z) => String(z))
       : [],
@@ -216,6 +218,50 @@ export async function loadSupplierProfile(
     ratingAverage: read(r, "ratingAverage", "rating_average"),
     ratingCount: read(r, "ratingCount", "rating_count"),
     ordersReceived: 0,
+  });
+}
+
+export async function loadMySupplierProfile(): Promise<SupplierDirectoryRow | null> {
+  const res = await apiClient.get('/suppliers/me');
+  if (!res.data) return null;
+  const r = asRecord(res.data);
+  const ranksRaw = read(r, "serviceFocusRanks", "service_focus_ranks");
+  const ranks = Array.isArray(ranksRaw)
+    ? ranksRaw.map((x) => String(x))
+    : [];
+  return normalizeDirectoryRow({
+    ...r,
+    serviceFocusRanks: ranks,
+    rankedServices: toRankedServices(ranks),
+    verificationStatus:
+      read(asRecord(read(r, "verification")), "status") ??
+      read(r, "verificationStatus"),
+    ratingAverage: read(r, "ratingAverage", "rating_average"),
+    ratingCount: read(r, "ratingCount", "rating_count"),
+    ordersReceived: 0,
     ordersAccepted: 0,
   });
+}
+
+export async function updateMySupplierProfile(payload: Record<string, unknown>) {
+  const res = await apiClient.patch('/suppliers/me', payload);
+  return res.data;
+}
+
+export async function addMySupplierCapability(
+  productFamily: string,
+  materials: string[],
+) {
+  const res = await apiClient.post('/suppliers/me/capabilities', {
+    productFamily,
+    materials,
+    maxCapacity: 1000,
+    leadTimeDays: 1,
+  });
+  return res.data;
+}
+
+export async function removeMySupplierCapability(capabilityId: number) {
+  const res = await apiClient.delete(`/suppliers/me/capabilities/${capabilityId}`);
+  return res.data;
 }

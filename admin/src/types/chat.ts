@@ -1,6 +1,6 @@
-export type ConversationType = "ai" | "admin" | "rider";
+export type ConversationType = "ai" | "admin" | "rider" | "supplier";
 export type ConversationStatus = "open" | "assigned" | "closed";
-export type SenderRole = "customer" | "admin" | "rider" | "bot";
+export type SenderRole = "customer" | "admin" | "rider" | "bot" | "supplier";
 /** Account role of the non-admin participant (customer_id user). */
 export type ParticipantRole =
   | "client"

@@ -23,7 +23,7 @@ import { isAdminRole, UserRole } from '../users/entities/user.entity';
 /** Map account roles → chat actor labels (message/conversation domain). */
 const CHAT_ACTOR_ROLE_BY_USER_ROLE: Record<UserRole, ChatActorRole> = {
   [UserRole.CLIENT]: 'customer',
-  [UserRole.SUPPLIER]: 'customer',
+  [UserRole.SUPPLIER]: 'supplier',
   [UserRole.RIDER]: 'rider',
   [UserRole.OPS_ADMIN]: 'admin',
   [UserRole.SUPER_ADMIN]: 'admin',
@@ -116,7 +116,9 @@ export class ChatGateway implements OnGatewayConnection {
         ? SenderRole.ADMIN
         : role === 'rider'
           ? SenderRole.RIDER
-          : SenderRole.CUSTOMER;
+          : role === 'supplier'
+            ? SenderRole.SUPPLIER
+            : SenderRole.CUSTOMER;
 
     const trimmedContent = (data.content ?? '').trim();
     if (!trimmedContent && !data.attachmentFileId) {

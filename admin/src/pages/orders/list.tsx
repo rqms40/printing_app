@@ -42,7 +42,7 @@ import { subscribeToOrderUpdates } from "@/providers/live-provider";
 
 type TabFilter = "new" | "production" | "done" | "all";
 type OrderTypeMeta = {
-  label: "Paper" | "3D" | "Mixed";
+  label: string;
   color: string;
 };
 

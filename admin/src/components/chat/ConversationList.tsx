@@ -14,12 +14,14 @@ const TYPE_LABEL: Record<string, string> = {
   ai: "AI",
   admin: "Support",
   rider: "Rider",
+  supplier: "Print Shop",
 };
 
 const TYPE_COLORS: Record<ConversationType, { bg: string; text: string }> = {
   ai: { bg: "rgba(59,130,246,0.12)", text: "#93C5FD" },
   admin: { bg: "rgba(82,196,26,0.12)", text: "#86EFAC" },
   rider: { bg: "rgba(245,158,11,0.12)", text: "#FCD34D" },
+  supplier: { bg: "rgba(255,222,88,0.12)", text: "#FFDE58" },
 };
 
 function participantRoleOf(conv: Conversation): string | null {

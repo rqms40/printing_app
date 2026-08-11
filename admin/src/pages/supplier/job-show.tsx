@@ -26,10 +26,12 @@ import {
   CloseCircleOutlined,
   FileSearchOutlined,
   InboxOutlined,
+  MessageOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { ShowPage } from '@/components/show-page';
+import { apiClient } from '@/providers/api-client';
 import { StatusBadge } from '@/components/status-badge';
 import {
   acceptSupplierJob,
@@ -462,6 +464,19 @@ export function SupplierJobShowPage() {
     });
   };
 
+  const handleMessageClient = async () => {
+    setSubmitting(true);
+    try {
+      const res = await apiClient.post(`/chat/orders/${detail!.order.orderId}/conversation`);
+      message.success('Chat created/opened');
+      navigate(`/supplier/support?conversationId=${res.data.id}`);
+    } catch (err) {
+      message.error(extractApiError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
@@ -494,7 +509,17 @@ export function SupplierJobShowPage() {
       backLabel="Back to jobs"
       contentCard={false}
       extra={
-        <Tag color="purple">Assignment #{assignment.id}</Tag>
+        <Space>
+          <Tag color="purple">Assignment #{assignment.id}</Tag>
+          <Button
+            type="primary"
+            icon={<MessageOutlined />}
+            loading={submitting}
+            onClick={handleMessageClient}
+          >
+            Message Client
+          </Button>
+        </Space>
       }
     >
       {canAccept && (

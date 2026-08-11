@@ -1,4 +1,4 @@
-import { useGetIdentity, useLogout } from "@refinedev/core";
+import { useGetIdentity, useLogout, useNavigation } from "@refinedev/core";
 import { Layout, Avatar, Dropdown, Typography, Space, App, theme } from "antd";
 import { LogoutOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 import { NotificationBell } from "@/components/notification-bell";
@@ -17,6 +17,8 @@ export function CustomHeader() {
   const supplier = isSupplierRole(identity?.role);
   // Default-deny ops chrome until role is known (suppliers must not see notif bell).
   const showOpsChrome = roleKnown && !supplier;
+
+  const { push } = useNavigation();
 
   const handleLogout = () => {
     modal.confirm({
@@ -46,6 +48,11 @@ export function CustomHeader() {
       disabled: true,
     },
     { type: "divider" as const },
+    {
+      key: "account-settings",
+      label: "Account Settings",
+      onClick: () => push("/account-settings"),
+    },
     {
       key: "logout",
       label: "Sign Out",

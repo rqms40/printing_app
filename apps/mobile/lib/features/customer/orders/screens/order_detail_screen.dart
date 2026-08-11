@@ -83,6 +83,39 @@ class OrderDetailScreen extends ConsumerWidget {
       queryParameters: {
         'type': conv.type.name,
         'orderRef': order.orderId,
+      },
+    );
+    context.push(uri.toString());
+  }
+
+  Future<void> _openSupplierChat(
+    BuildContext context,
+    WidgetRef ref,
+    Order order,
+  ) async {
+    final orderRef = int.tryParse(order.id) == null ? order.orderId : order.id;
+
+    final conv = await ref
+        .read(chatProvider.notifier)
+        .openSupplierOrderConversation(orderRef);
+    if (!context.mounted) return;
+    if (conv == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ref.read(chatProvider).createError ??
+                'Could not open supplier chat. Please try again.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri(
+      path: '/customer/chat/${conv.id}',
+      queryParameters: {
+        'type': conv.type.name,
+        'orderRef': order.orderId,
         'orderStatus': order.orderStatus.displayName,
       },
     );
@@ -430,6 +463,15 @@ class OrderDetailScreen extends ConsumerWidget {
                 isFullWidth: true,
                 icon: HugeIcons.strokeRoundedLocation01,
               ),
+            if (order.orderStatus != OrderStatus.cancelled)
+              AppButton(
+                label: 'Message Print Shop',
+                variant: AppButtonVariant.secondary,
+                onTap: () => _openSupplierChat(context, ref, order),
+                isFullWidth: true,
+                icon: HugeIcons.strokeRoundedMessageMultiple01,
+              ),
+              const SizedBox(height: AppSpacing.sm),
             if (isCancellable)
               AppButton(
                 label: 'Cancel Order',

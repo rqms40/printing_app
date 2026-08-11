@@ -1,4 +1,4 @@
-enum SenderRole { customer, admin, rider, bot }
+enum SenderRole { customer, admin, rider, bot, supplier }
 
 class ChatMessage {
   final int id;

@@ -47,9 +47,19 @@ export function leaveConversation(conversationId: number): void {
   msgListeners.delete(conversationId);
 }
 
-export function sendAdminMessage(conversationId: number, content: string): void {
+export function sendAdminMessage(
+  conversationId: number,
+  content?: string,
+  attachmentFileId?: number,
+  attachmentMimeType?: string
+): void {
   connectChat();
-  socket?.emit("send-message", { conversationId, content });
+  socket?.emit("send-message", {
+    conversationId,
+    content,
+    attachmentFileId,
+    attachmentMimeType,
+  });
 }
 
 export function subscribeToMessages(

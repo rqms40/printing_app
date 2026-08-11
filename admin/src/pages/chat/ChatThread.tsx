@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Input, Tag, theme } from "antd";
-import { SendOutlined } from "@ant-design/icons";
+import { Button, Input, Tag, theme, Upload, Tooltip, App } from "antd";
+import { SendOutlined, PaperClipOutlined } from "@ant-design/icons";
+import { apiClient } from "@/providers/api-client";
 import { useConversationThread } from "@/hooks/useChat";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
@@ -25,7 +26,9 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
   const { messages, isBotTyping, sendMessage } = useConversationThread(
     conversation?.id ?? null,
   );
+  const { message } = App.useApp();
   const [text, setText] = useState("");
+  const [uploading, setUploading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,6 +46,30 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleUpload = async (options: any) => {
+    const { file, onSuccess, onError } = options;
+    if (!conversation) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("purpose", "general");
+
+      const res = await apiClient.post("/files/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const data = res.data;
+      sendMessage("", data.id, data.mimeType);
+      onSuccess?.(data);
+    } catch (err) {
+      console.error(err);
+      onError?.(err as Error);
+      void message.error("Failed to upload file");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -180,10 +207,26 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
           padding: "12px 16px",
           borderTop: `1px solid ${token.colorBorder}`,
           flexShrink: 0,
-          alignItems: "flex-end",
+          alignItems: "center",
           background: token.colorBgElevated,
         }}
       >
+        <Upload
+          customRequest={handleUpload}
+          showUploadList={false}
+          disabled={uploading || conversation.status === "closed"}
+          accept="image/*,.pdf,.doc,.docx"
+        >
+          <Tooltip title="Attach a file">
+            <Button
+              icon={<PaperClipOutlined />}
+              type="text"
+              loading={uploading}
+              disabled={conversation.status === "closed"}
+              style={{ color: token.colorTextSecondary }}
+            />
+          </Tooltip>
+        </Upload>
         <Input.TextArea
           value={text}
           onChange={(e) => setText(e.target.value)}
