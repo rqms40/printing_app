@@ -18,6 +18,7 @@ void main() {
       PaymentMethod.gcash,
       PaymentMethod.maya,
       PaymentMethod.cod,
+      PaymentMethod.qrPhInstapay,
     ]) {
       expect(
         settings.isMethodEnabled(method, creditsBalance: 100),
@@ -26,15 +27,23 @@ void main() {
     }
   });
 
-  test('default pilot mode shows credits + COD, hides live wallets', () {
+  test('default pilot mode shows credits + QR + COD, hides live wallets', () {
     const settings = CheckoutPaymentSettings(creditsOnlyMode: false);
 
     expect(
       settings.visibleMethods,
-      [PaymentMethod.gridCredits, PaymentMethod.cod],
+      [
+        PaymentMethod.gridCredits,
+        PaymentMethod.qrPhInstapay,
+        PaymentMethod.cod,
+      ],
     );
     expect(
       settings.isMethodEnabled(PaymentMethod.cod, creditsBalance: 0),
+      isTrue,
+    );
+    expect(
+      settings.isMethodEnabled(PaymentMethod.qrPhInstapay, creditsBalance: 0),
       isTrue,
     );
     expect(
@@ -55,6 +64,7 @@ void main() {
 
     expect(settings.visibleMethods, [
       PaymentMethod.gridCredits,
+      PaymentMethod.qrPhInstapay,
       PaymentMethod.cod,
       PaymentMethod.gcash,
       PaymentMethod.maya,

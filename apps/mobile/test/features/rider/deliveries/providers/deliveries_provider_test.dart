@@ -825,6 +825,17 @@ void main() {
         'type': 'photo',
         'fileId': 42,
         'otp': '123456',
+        'checklist': {
+          'quantity_match': true,
+          'specification_match': true,
+          'visible_defects': true,
+          'packaging_integrity': true,
+          'documentation': true,
+          'supplier_sign_off': {
+            'pass': true,
+            'signatureData': 'svg:rider-sign',
+          },
+        },
       });
       expect(
         notifier.state.assignments.firstWhere((a) => a.id == id).status,
@@ -866,6 +877,17 @@ void main() {
         'type': 'photo',
         'fileId': 42,
         'otp': '123456',
+        'checklist': {
+          'quantity_match': true,
+          'specification_match': true,
+          'visible_defects': true,
+          'packaging_integrity': true,
+          'documentation': true,
+          'supplier_sign_off': {
+            'pass': true,
+            'signatureData': 'svg:rider-sign',
+          },
+        },
       });
       await notifier.advanceCheckpoint(id);
       await notifier.advanceCheckpoint(id);

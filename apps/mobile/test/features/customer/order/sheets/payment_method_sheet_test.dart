@@ -20,7 +20,7 @@ void main() {
     TestSetup.initApiClient();
   });
 
-  testWidgets('lists pilot rails (credits + COD), hides live wallets by default', (
+  testWidgets('lists pilot rails (credits + QR + COD), hides live wallets by default', (
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
@@ -70,6 +70,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Pilot Credits'), findsOneWidget);
+    expect(find.textContaining('QR'), findsWidgets);
     expect(find.text('Cash on Delivery'), findsOneWidget);
     expect(find.text('GCash'), findsNothing);
     expect(find.text('Maya'), findsNothing);
@@ -146,11 +147,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('GCash'), findsOneWidget);
     expect(find.text('Maya'), findsOneWidget);
-    await tester.tap(find.text('Maya'));
+    // Live wallets render below pilot rails — prove they appear, then pick COD.
+    await tester.tap(find.text('Cash on Delivery'));
     await tester.pump();
     await tester.tap(find.text('Use this'));
     await tester.pumpAndSettle();
-    expect(picked, PaymentMethod.maya);
+    expect(picked, PaymentMethod.cod);
   });
 
   testWidgets('saving as default patches profile and updates auth state', (
@@ -225,20 +227,20 @@ void main() {
 
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Maya'));
+    await tester.tap(find.text('Cash on Delivery'));
     await tester.pump();
     await tester.tap(find.text('Save as default for future orders'));
     await tester.pump();
     await tester.tap(find.text('Use this'));
     await tester.pumpAndSettle();
 
-    expect(picked, PaymentMethod.maya);
+    expect(picked, PaymentMethod.cod);
     expect(patchPayloads, [
-      {'method': 'maya'},
+      {'method': 'cod'},
     ]);
     expect(
       container.read(authProvider).user?.defaultPaymentMethod,
-      PaymentMethod.maya,
+      PaymentMethod.cod,
     );
   });
 

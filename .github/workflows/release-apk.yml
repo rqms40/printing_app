@@ -244,7 +244,12 @@ jobs:
         run: flutter analyze lib/
 
       - name: Run tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_gate != true }}
         run: flutter test
+
+      - name: Skip tests (manual skip_gate demo build)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_gate == true }}
+        run: echo "Skipping flutter test for skip_gate APK build"
 
       - name: Decode and verify Firebase configuration
         env:
