@@ -875,9 +875,9 @@ function normalizeOrderItemSpecs(value: unknown): OrderItemSpec[] | undefined {
           toOptionalString(record, "option_label", "optionLabel") ?? null,
       } satisfies OrderItemSpec;
     })
-    .filter((entry): entry is OrderItemSpec => entry != null);
+    .filter((entry): entry is NonNullable<typeof entry> => entry != null);
 
-  return specs.length > 0 ? specs : undefined;
+  return specs.length > 0 ? (specs as OrderItemSpec[]) : undefined;
 }
 
 function normalizeOrderItems(value: unknown): OrderItem[] | undefined {

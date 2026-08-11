@@ -91,6 +91,8 @@ export interface ProductionMilestone {
   notes?: string | null;
 }
 
+export type PricingStatus = "pending_quote" | "quoted" | "accepted";
+
 export interface Order {
   id: string;
   order_id: string;
@@ -98,15 +100,20 @@ export interface Order {
   customer_id?: number;
   customer_name?: string | null;
   customer_email?: string | null;
-  category: "paper" | "3d" | "batch";
+  category: string;
   file_url?: string;
   file_name?: string;
   file_metadata_id?: number | null;
   paper_specs?: PaperSpecs;
   three_d_specs?: ThreeDSpecs;
   quantity: number;
-  total_price: number;
-  delivery_fee: number;
+  total_price: number | null;
+  delivery_fee: number | null;
+  pricing_status?: PricingStatus;
+  quoted_total_minor?: string | null;
+  quoted_at?: string | null;
+  quote_accepted_at?: string | null;
+  promised_completion_at?: string | null;
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   order_status: OrderStatus;
@@ -162,6 +169,11 @@ export interface OrderItem {
   category_id?: number | null;
   category_slug?: string | null;
   category_name?: string | null;
+  group_slug?: string | null;
+  group_name?: string | null;
+  group_description?: string | null;
+  examples?: string[];
+  pricing_model?: string | null;
   file_url?: string;
   file_name?: string;
   file_metadata_id?: number;
@@ -171,7 +183,7 @@ export interface OrderItem {
   three_d_specs?: ThreeDSpecs;
   special_instructions?: string | null;
   quantity: number;
-  total_price: number;
+  total_price: number | null;
   delivery_address?: OrderDestination | null;
 }
 

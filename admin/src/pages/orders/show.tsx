@@ -826,7 +826,7 @@ export function OrderShow() {
               {formatCurrency(order.delivery_fee)}
             </Descriptions.Item>
             <Descriptions.Item label="Total">
-              {formatCurrency(order.total_price + order.delivery_fee)}
+              {formatCurrency((order.total_price ?? 0) + (order.delivery_fee ?? 0))}
             </Descriptions.Item>
             <Descriptions.Item label="Payment Method">
               <span style={{ textTransform: "uppercase" }}>

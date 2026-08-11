@@ -42,7 +42,7 @@ import { subscribeToOrderUpdates } from "@/providers/live-provider";
 
 type TabFilter = "new" | "production" | "done" | "all";
 type OrderTypeMeta = {
-  label: "Paper" | "3D" | "Mixed";
+  label: string;
   color: string;
 };
 
@@ -156,7 +156,7 @@ function exportDeliveredCSV(orders: Order[]) {
     ORDER_STATUS_LABELS[o.order_status] ?? o.order_status,
     o.total_price,
     o.delivery_fee,
-    o.total_price + o.delivery_fee,
+    (o.total_price ?? 0) + (o.delivery_fee ?? 0),
     o.payment_method,
     o.payment_status,
     o.delivery_option,
@@ -502,7 +502,7 @@ export function OrderList() {
             render={(v: number) => (
               <span style={{ fontWeight: 500 }}>{formatCurrency(v)}</span>
             )}
-            sorter={(a: Order, b: Order) => a.total_price - b.total_price}
+            sorter={(a: Order, b: Order) => (a.total_price ?? 0) - (b.total_price ?? 0)}
           />
           <Table.Column
             dataIndex="payment_status"
