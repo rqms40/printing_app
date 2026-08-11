@@ -438,8 +438,8 @@ async function seed() {
   ]) {
     await ds.query(
       `INSERT INTO supplier_capabilities (
-         supplier_id, product_family, materials, max_capacity, lead_time_days, is_active
-       ) VALUES ($1, $2, $3::jsonb, $4, $5, true)`,
+         supplier_id, product_family, materials, max_capacity, lead_time_days
+       ) VALUES ($1, $2, $3::jsonb, $4, $5)`,
       [supplierProfileId, family, '["standard","premium"]', 50, 3],
     );
   }
