@@ -22,6 +22,7 @@ import {
   ProfileField,
 } from './users/profile.constants';
 import { seedBusinessCatalog } from './products/seed-business-catalog';
+import { upsertCatalogV110 } from './products/catalog-v1-10.persistence';
 
 interface CountRow {
   count: string;
@@ -892,6 +893,9 @@ async function seed() {
 
   // ─── GRIDGO Business hierarchical catalog ───────────────────────────
   const business = await seedBusinessCatalog(ds);
+  // Ensure release 1.10 group-scoped RFQ products are present for mobile catalog.
+  await upsertCatalogV110(ds);
+  console.log('Catalog v1.10 groups upserted');
   console.log(
     `✅ Business catalog: ${business.categories} categories, ${business.subgroups} subgroups, ${business.variants} variants (with temp specs)`,
   );
