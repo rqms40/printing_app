@@ -53,8 +53,19 @@ export class FilesService {
     purpose = 'general',
   ): Promise<FileMetadata> {
     try {
-      const normalizedPurpose = this.normalizeUploadPurpose(purpose);
-      const fileExt = extname(file.originalname).toLowerCase();
+      if (!file) {
+        throw new BadRequestException('No file uploaded');
+      }
+      const normalizedPurpose = this.normalizeUploadPurpose(purpose ?? 'general');
+      // Web image pickers often omit extension; derive from MIME when needed.
+      let fileExt = extname(file.originalname || '').toLowerCase();
+      if (!fileExt && file.mimetype) {
+        const fromMime = MIME_ALLOWED_EXTENSIONS[file.mimetype]?.[0];
+        if (fromMime) {
+          fileExt = fromMime;
+          file.originalname = `${file.originalname || 'upload'}${fromMime}`;
+        }
+      }
       const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
       const extOk =
         MIME_ALLOWED_EXTENSIONS[file.mimetype]?.includes(fileExt) ?? false;
@@ -62,7 +73,9 @@ export class FilesService {
       // Match MIME and filename extension. Generic browser fallbacks are still
       // accepted through MIME_ALLOWED_EXTENSIONS, but only for known extensions.
       if (!fileTypeAllowed) {
-        throw new BadRequestException('File type not allowed');
+        throw new BadRequestException(
+          `File type not allowed (${file.mimetype || 'unknown'}, ${fileExt || 'no extension'})`,
+        );
       }
       const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
       const maxSizeBytes = isThreeDFile
@@ -80,7 +93,8 @@ export class FilesService {
         | undefined;
       if (
         normalizedPurpose === FilePurpose.PROOF_OF_DELIVERY ||
-        normalizedPurpose === FilePurpose.BETA_TESTIMONIAL
+        normalizedPurpose === FilePurpose.BETA_TESTIMONIAL ||
+        normalizedPurpose === FilePurpose.PAYMENT_RECEIPT
       ) {
         try {
           const buffer = await this.readUploadBuffer(file);
@@ -193,7 +207,24 @@ export class FilesService {
         model3dTriangleCount: analysis?.model3dTriangleCount ?? null,
         previewGlbObjectKey,
       });
-      return this.fileRepo.save(meta);
+      try {
+        return await this.fileRepo.save(meta);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(
+          `Failed to save file metadata (purpose=${normalizedPurpose}): ${msg}`,
+        );
+        // Common when migration adding enum value has not been applied yet.
+        if (
+          /invalid input value for enum/i.test(msg) ||
+          /file_metadata_purpose_enum/i.test(msg)
+        ) {
+          throw new BadRequestException(
+            `Unsupported file purpose '${normalizedPurpose}'. Run server migrations (payment_receipt).`,
+          );
+        }
+        throw new InternalServerErrorException('Failed to save uploaded file');
+      }
     } finally {
       await removeUploadedTempFile(file);
     }
@@ -206,6 +237,7 @@ export class FilesService {
       FilePurpose.PAPER,
       FilePurpose.PROOF_OF_DELIVERY,
       FilePurpose.BETA_TESTIMONIAL,
+      FilePurpose.PAYMENT_RECEIPT,
     ]);
     if (!allowed.has(normalized as FilePurpose)) {
       throw new BadRequestException('File purpose not allowed');
@@ -496,14 +528,18 @@ export class FilesService {
          ) AS "orderReferenced",
          EXISTS (
            SELECT 1 FROM order_items WHERE file_metadata_id = $1
-         ) AS "orderItemReferenced"`,
+         ) AS "orderItemReferenced",
+         EXISTS (
+           SELECT 1 FROM qr_payment_receipts WHERE file_id = $1
+         ) AS "qrReceiptReferenced"`,
       [fileId],
     );
     const hasSpecificReference =
       !!references.deliveryProofReferenced ||
       !!references.testimonialReferenced ||
       !!references.orderReferenced ||
-      !!references.orderItemReferenced;
+      !!references.orderItemReferenced ||
+      !!(references as { qrReceiptReferenced?: boolean }).qrReceiptReferenced;
     const referenced = references.referenced ?? hasSpecificReference;
     const hasUnknownReference = referenced && !hasSpecificReference;
     const hasProtectedEvidenceReference =

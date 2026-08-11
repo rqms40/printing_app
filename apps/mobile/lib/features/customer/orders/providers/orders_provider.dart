@@ -125,6 +125,11 @@ OrderStatus _parseOrderStatus(String value) {
 
 PaymentMethod _parsePaymentMethod(String value) {
   final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
+  if (normalized == 'qrphinstapay' ||
+      normalized == 'qrph' ||
+      normalized == 'instapayqr') {
+    return PaymentMethod.qrPhInstapay;
+  }
   if (normalized == 'credits' ||
       normalized == 'gridcredit' ||
       normalized == 'gridcredits' ||
@@ -1137,9 +1142,17 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     List<Map<String, dynamic>> destinations = const [],
     List<int> itemDestinationIndices = const [],
     Map<String, dynamic>? temporaryAddress,
+    int? qrReceiptFileId,
   }) async {
     final sessionGeneration = _sessionGeneration;
     final addressId = _deliveryAddressIdValue(deliveryAddressId);
+
+    if (paymentMethod.requiresPaymentReceipt &&
+        (qrReceiptFileId == null || qrReceiptFileId <= 0)) {
+      throw StateError(
+        'QR Ph (Instapay) requires a digital payment receipt upload',
+      );
+    }
 
     final mappedItems = items.indexed.map((entry) {
       final idx = entry.$1;
@@ -1162,6 +1175,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       if (slotDate != null) 'slotDate': slotDate,
       if (destinations.isNotEmpty) 'destinations': destinations,
       if (temporaryAddress != null) 'temporaryAddress': temporaryAddress,
+      if (qrReceiptFileId != null) 'qrReceiptFileId': qrReceiptFileId,
     };
 
     final Response response;
@@ -1291,6 +1305,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         speedTier: state.speedTier,
         destinations: destinations,
         itemDestinationIndices: indices,
+        qrReceiptFileId: state.qrReceiptFileId,
       );
     }
 
@@ -1307,6 +1322,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       temporaryAddress: hasTemporaryAddress
           ? state.temporaryAddress!.toJson()
           : null,
+      qrReceiptFileId: state.qrReceiptFileId,
     );
   }
 

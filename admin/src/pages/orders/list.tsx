@@ -36,6 +36,7 @@ import {
   humanizeEnumValue,
   normalizeOrders,
   normalizeOrder,
+  orderItemTypeLabel,
 } from "@/utils/api-normalizers";
 import { subscribeToOrderUpdates } from "@/providers/live-provider";
 
@@ -89,6 +90,8 @@ function getOrderLineItems(order: Order): OrderItem[] {
     {
       id: order.id,
       category: order.category === "3d" ? "3d" : "paper",
+      category_name:
+        order.category === "3d" ? "3D Printing" : "Paper Printing",
       file_name: order.file_name,
       quantity: order.quantity,
       total_price: order.total_price,
@@ -99,24 +102,27 @@ function getOrderLineItems(order: Order): OrderItem[] {
 }
 
 function getOrderTypeMeta(order: Order): OrderTypeMeta {
-  const categories = new Set(
-    getOrderLineItems(order)
-      .map((item) => item.category)
-      .filter(
-        (category): category is "paper" | "3d" =>
-          category === "paper" || category === "3d",
-      ),
-  );
+  const items = getOrderLineItems(order);
+  const labels = items.map((item) => orderItemTypeLabel(item));
+  const unique = new Set(labels);
 
-  if (categories.has("paper") && categories.has("3d")) {
+  if (unique.size > 1) {
     return { label: "Mixed", color: "magenta" };
   }
 
-  if (categories.has("3d")) {
-    return { label: "3D", color: "purple" };
+  const only = labels[0] ?? "Paper";
+  const lower = only.toLowerCase();
+  if (lower.includes("3d")) {
+    return { label: only.length > 18 ? "3D" : only, color: "purple" };
   }
-
-  return { label: "Paper", color: "blue" };
+  if (only === "Paper Printing" || only === "Paper") {
+    return { label: "Paper", color: "blue" };
+  }
+  // Business catalog / other product names — keep readable, truncate if long.
+  return {
+    label: only.length > 18 ? `${only.slice(0, 16)}…` : only,
+    color: "geekblue",
+  };
 }
 
 function getOrderCategoryLabel(order: Order) {
@@ -469,8 +475,7 @@ export function OrderList() {
                       .slice(0, 2)
                       .map(
                         (item) =>
-                          item.file_name ??
-                          (item.category === "3d" ? "3D print" : "Paper"),
+                          item.file_name ?? orderItemTypeLabel(item),
                       )
                       .join(" + ")}
                   </span>

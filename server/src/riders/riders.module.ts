@@ -20,6 +20,7 @@ import { UsersModule } from '../users/users.module';
 import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 import { AuditModule } from '../audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { QualityModule } from '../quality/quality.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     RealtimeSessionsModule,
     AuditModule,
     NotificationsModule,
+    QualityModule,
   ],
   controllers: [RidersController],
   providers: [

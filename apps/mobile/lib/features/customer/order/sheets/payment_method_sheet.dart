@@ -165,7 +165,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
                   ? 'Checking payment availability'
                   : creditsOnlyMode
                   ? 'Only Pilot Credits is available during beta testing'
-                  : 'Pilot Credits or eligible COD · live wallets stay sandbox-only',
+                  : 'Pilot Credits, QR Ph (Instapay), or eligible COD',
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,
                 fontSize: 12,
@@ -325,6 +325,8 @@ class _MethodRow extends StatelessWidget {
         return 'Cash on Delivery';
       case PaymentMethod.gridCredits:
         return 'Pilot Credits';
+      case PaymentMethod.qrPhInstapay:
+        return 'QR Ph (Instapay)';
     }
   }
 
@@ -346,6 +348,8 @@ class _MethodRow extends StatelessWidget {
         return CheckoutPaymentSettings.codRulesSubtitle;
       case PaymentMethod.gridCredits:
         return 'Use your Pilot Credits balance';
+      case PaymentMethod.qrPhInstapay:
+        return 'Scan QR · upload receipt to place order';
     }
   }
 

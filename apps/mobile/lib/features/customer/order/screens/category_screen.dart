@@ -12,7 +12,6 @@ import 'package:printing_app/features/customer/order/providers/product_catalog_p
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
-import 'package:printing_app/shared/widgets/app_illustrations.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
 
 /// Step 1/6 -- Category selection with Category → Subgroup → Variant browse.
@@ -187,8 +186,7 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   Widget build(BuildContext context) {
     final colors = _colors(context);
     final catalogAsync = ref.watch(productCatalogProvider);
-    final catalog =
-        catalogAsync.valueOrNull ?? ProductCatalog.fallback();
+    final catalog = catalogAsync.valueOrNull ?? ProductCatalog.fallback();
     final categories = _visibleCategories(catalog);
     final parent = _currentParent(catalog);
 
@@ -208,7 +206,10 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
         elevation: 0,
         title: Text(
           widget.addMode ? 'Add to your order' : 'New Order',
-          style: AppTypography.h3.copyWith(color: colors.onBackground),
+          style: AppTypography.h3.copyWith(
+            color: colors.onBackground,
+            fontSize: 18,
+          ),
         ),
         iconTheme: IconThemeData(color: colors.onBackground),
         leading: _browseStack.isNotEmpty
@@ -262,26 +263,32 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                   },
                 ),
               ],
-              const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.lg),
               Text(
                     heading,
                     style: AppTypography.h1.copyWith(
                       color: colors.onBackground,
+                      fontSize: parent == null ? 26 : 22,
+                      height: 1.2,
                     ),
                   )
                   .animate()
                   .fadeIn(duration: 400.ms, curve: Curves.easeOut)
                   .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
               if (subheading != null && subheading.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.sm),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   subheading,
-                  style: AppTypography.body.copyWith(
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
                     color: colors.onSurfaceDim,
+                    height: 1.35,
+                    fontSize: 12.5,
                   ),
                 ),
               ],
-              const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.lg),
               Expanded(
                 child: ListView(
                   children: [
@@ -315,21 +322,18 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                         padding: EdgeInsets.only(
                           bottom: index == categories.length - 1
                               ? 0
-                              : AppSpacing.md,
+                              : AppSpacing.sm,
                         ),
                         child:
                             _CategoryCard(
                                   tutorialKey: category.slug == 'paper'
                                       ? _paperCategoryKey
                                       : null,
-                                  illustration: _categoryIllustration(
-                                    category,
-                                    colors,
-                                  ),
+                                  icon: categoryIconFor(category),
                                   title: category.name,
                                   description:
-                                      category.audienceLabel ??
                                       category.mobileDescription ??
+                                      category.audienceLabel ??
                                       category.description ??
                                       (canDrill
                                           ? 'Browse products in this group'
@@ -363,6 +367,7 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                                 ),
                       );
                     }),
+                    const SizedBox(height: AppSpacing.lg),
                   ],
                 ),
               ),
@@ -377,14 +382,8 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
     if (category.isOrderable && category.catalogLevel >= 3) return 'Product';
     if (category.catalogLevel == 2) return 'Group';
     if (category.isBrowseGroup && category.catalogLevel == 1) return 'Category';
+    if (category.isOrderable && category.parentId == null) return 'Product';
     return null;
-  }
-
-  Widget _categoryIllustration(ProductCategory category, AppColorSet colors) {
-    if (category.fileProcessingType == 'model_3d' || category.slug == '3d') {
-      return ThreeDCubeIllustration(size: 60, color: colors.accent);
-    }
-    return PrinterIllustration(size: 60, color: colors.accent);
   }
 
   Future<void> _selectCategory(ProductCategory category) async {
@@ -398,6 +397,117 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
       is3d ? '/customer/order/3d-specs' : '/customer/order/paper-specs',
     );
   }
+}
+
+/// Distinct HugeIcons per catalog node (slug-first, then prefix fallbacks).
+List<List<dynamic>> categoryIconFor(ProductCategory category) {
+  final slug = category.slug.toLowerCase();
+
+  // Exact slug map (roots + subgroups + common leaves).
+  const exact = <String, List<List<dynamic>>>{
+    // Legacy roots
+    'paper': HugeIcons.strokeRoundedPrinter,
+    '3d': HugeIcons.strokeRounded3dPrinter,
+
+    // L1 categories
+    'marketing-promo': HugeIcons.strokeRoundedMegaphone01,
+    'corporate-merchandise': HugeIcons.strokeRoundedGift,
+    'recognition-awards': HugeIcons.strokeRoundedAward01,
+    'specialized-prototyping': HugeIcons.strokeRoundedCube,
+
+    // Marketing subgroups
+    'flyers': HugeIcons.strokeRoundedNews01,
+    'brochures': HugeIcons.strokeRoundedBookOpen01,
+    'posters-standees': HugeIcons.strokeRoundedImage01,
+    'business-cards': HugeIcons.strokeRoundedCreditCard,
+    'stickers-labels': HugeIcons.strokeRoundedLabel,
+    'tarpaulins-banners': HugeIcons.strokeRoundedFlag01,
+
+    // Corporate subgroups
+    'lanyards-id': HugeIcons.strokeRoundedIdentityCard,
+    'custom-apparel': HugeIcons.strokeRoundedTShirt,
+    'drinkware': HugeIcons.strokeRoundedCoffee01,
+    'corporate-giveaways': HugeIcons.strokeRoundedShoppingBag01,
+
+    // Recognition subgroups
+    'certificates-diplomas': HugeIcons.strokeRoundedCertificate01,
+    'plaques-trophies': HugeIcons.strokeRoundedAward02,
+    'medals-ribbons': HugeIcons.strokeRoundedMedal01,
+    'business-store-signages': HugeIcons.strokeRoundedStore01,
+
+    // Specialized subgroups
+    '3d-scale-models': HugeIcons.strokeRounded3dPrinter,
+    'blueprint-cad': HugeIcons.strokeRoundedRuler,
+    'packaging-boxes': HugeIcons.strokeRoundedPackage01,
+  };
+
+  final hit = exact[slug];
+  if (hit != null) return hit;
+
+  // Variant / partial slug heuristics (most specific first).
+  if (slug.startsWith('flyers-')) return HugeIcons.strokeRoundedNews01;
+  if (slug.startsWith('brochures-')) return HugeIcons.strokeRoundedBookOpen01;
+  if (slug.startsWith('posters-pull')) return HugeIcons.strokeRoundedFlag02;
+  if (slug.startsWith('posters-x')) return HugeIcons.strokeRoundedLayers01;
+  if (slug.startsWith('posters-')) return HugeIcons.strokeRoundedImage02;
+  if (slug.startsWith('business-cards-qr')) return HugeIcons.strokeRoundedQrCode;
+  if (slug.startsWith('business-cards-')) {
+    return HugeIcons.strokeRoundedCreditCard;
+  }
+  if (slug.startsWith('stickers-')) return HugeIcons.strokeRoundedLabel;
+  if (slug.startsWith('tarpaulins-')) return HugeIcons.strokeRoundedFlag01;
+  if (slug.startsWith('lanyards-badge')) {
+    return HugeIcons.strokeRoundedIdentityCard;
+  }
+  if (slug.startsWith('lanyards-')) return HugeIcons.strokeRoundedId;
+  if (slug.startsWith('apparel-hoodie')) return HugeIcons.strokeRoundedHoodie;
+  if (slug.startsWith('apparel-polo')) return HugeIcons.strokeRoundedShirt01;
+  if (slug.startsWith('apparel-tote')) {
+    return HugeIcons.strokeRoundedShoppingBag02;
+  }
+  if (slug.startsWith('apparel-')) return HugeIcons.strokeRoundedTShirt;
+  if (slug.startsWith('drinkware-mug') || slug.contains('mug')) {
+    return HugeIcons.strokeRoundedCoffee02;
+  }
+  if (slug.startsWith('drinkware-') || slug.contains('bottle')) {
+    return HugeIcons.strokeRoundedDrink;
+  }
+  if (slug.startsWith('giveaways-eco')) return HugeIcons.strokeRoundedLeaf01;
+  if (slug.startsWith('giveaways-umbrella')) {
+    return HugeIcons.strokeRoundedUmbrella;
+  }
+  if (slug.startsWith('giveaways-pen')) return HugeIcons.strokeRoundedPen01;
+  if (slug.startsWith('giveaways-key')) return HugeIcons.strokeRoundedKey01;
+  if (slug.startsWith('giveaways-note')) {
+    return HugeIcons.strokeRoundedNotebook01;
+  }
+  if (slug.startsWith('giveaways-')) return HugeIcons.strokeRoundedGift;
+  if (slug.startsWith('certificates-')) {
+    return HugeIcons.strokeRoundedCertificate02;
+  }
+  if (slug.startsWith('plaques-3d') || slug.contains('3d-printed')) {
+    return HugeIcons.strokeRoundedCube;
+  }
+  if (slug.startsWith('plaques-wood')) return HugeIcons.strokeRoundedAward03;
+  if (slug.startsWith('plaques-')) return HugeIcons.strokeRoundedAward02;
+  if (slug.startsWith('medals-')) return HugeIcons.strokeRoundedMedal02;
+  if (slug.startsWith('signage-')) return HugeIcons.strokeRoundedStore02;
+  if (slug.startsWith('3d-rapid') || slug.startsWith('3d-custom')) {
+    return HugeIcons.strokeRounded3dPrinter;
+  }
+  if (slug.startsWith('3d-architectural') || slug.startsWith('3d-')) {
+    return HugeIcons.strokeRoundedBuilding01;
+  }
+  if (slug.startsWith('blueprint-')) return HugeIcons.strokeRoundedRuler;
+  if (slug.startsWith('packaging-')) return HugeIcons.strokeRoundedPackage02;
+
+  // Level / processing fallbacks.
+  if (category.fileProcessingType == 'model_3d') {
+    return HugeIcons.strokeRounded3dPrinter;
+  }
+  if (category.catalogLevel == 1) return HugeIcons.strokeRoundedFolder01;
+  if (category.catalogLevel == 2) return HugeIcons.strokeRoundedLayers01;
+  return HugeIcons.strokeRoundedFile02;
 }
 
 class _Breadcrumb extends StatelessWidget {
@@ -457,7 +567,7 @@ class _Breadcrumb extends StatelessWidget {
 
 class _CategoryCard extends StatelessWidget {
   const _CategoryCard({
-    required this.illustration,
+    required this.icon,
     required this.title,
     required this.description,
     required this.onTap,
@@ -465,7 +575,7 @@ class _CategoryCard extends StatelessWidget {
     this.badge,
   });
 
-  final Widget illustration;
+  final List<List<dynamic>> icon;
   final String title;
   final String description;
   final VoidCallback onTap;
@@ -486,59 +596,105 @@ class _CategoryCard extends StatelessWidget {
       key: tutorialKey,
       child: AppCard(
         onTap: onTap,
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.md,
+        ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            illustration,
-            const SizedBox(width: AppSpacing.xl),
+            // Icon column with level badge under the icon.
+            SizedBox(
+              width: 64,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceVariant.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: colors.outline.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: HugeIcon(
+                      icon: icon,
+                      size: 24,
+                      color: colors.accent,
+                    ),
+                  ),
+                  if (badge != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceVariant,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: colors.outline.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Text(
+                        badge!,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          height: 1.1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: AppTypography.h3.copyWith(
-                            color: colors.onBackground,
-                          ),
-                        ),
-                      ),
-                      if (badge != null) ...[
-                        const SizedBox(width: AppSpacing.xs),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colors.surfaceVariant,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            badge!,
-                            style: AppTypography.caption.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodyBold.copyWith(
+                      color: colors.onBackground,
+                      fontSize: 15,
+                      height: 1.25,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  const SizedBox(height: AppSpacing.xs),
+                  const SizedBox(height: 4),
                   Text(
                     description,
-                    style: AppTypography.body.copyWith(
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption.copyWith(
                       color: colors.onSurfaceDim,
+                      fontSize: 12,
+                      height: 1.35,
                     ),
                   ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: colors.onSurfaceDim),
+            const SizedBox(width: AppSpacing.sm),
+            Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: colors.onSurfaceDim,
+            ),
           ],
         ),
       ),

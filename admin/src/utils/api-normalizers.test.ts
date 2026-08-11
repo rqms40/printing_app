@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatOrderItemSpecLines,
   humanizeEnumValue,
   normalizeAdminUser,
   normalizeAdminRider,
@@ -10,6 +11,7 @@ import {
   normalizeServiceAddon,
   normalizeServiceCategory,
   normalizeSpecOption,
+  orderItemTypeLabel,
 } from "./api-normalizers";
 
 const validDispatchStop = (overrides: Record<string, unknown> = {}) => ({
@@ -219,6 +221,79 @@ describe("api normalizers", () => {
       created_at: "2026-03-31T10:00:00.000Z",
       updated_at: "2026-03-31T10:30:00.000Z",
     });
+  });
+
+  it("maps order item catalog specs for admin Order Items display", () => {
+    const order = normalizeOrder({
+      id: 12,
+      order_id: "ORD-FLYER-1",
+      user_id: 3,
+      category: "batch",
+      total_price: 80,
+      delivery_fee: 50,
+      payment_method: "gcash",
+      payment_status: "paid",
+      order_status: "submitted",
+      delivery_option: "delivery",
+      created_at: "2026-08-11T10:00:00.000Z",
+      updated_at: "2026-08-11T10:00:00.000Z",
+      items: [
+        {
+          id: 55,
+          category: "flyers-single-sheets",
+          category_id: 20,
+          category_slug: "flyers-single-sheets",
+          category_name: "Single sheets",
+          quantity: 50,
+          total_price: 80,
+          specs: [
+            {
+              key: "paper_size",
+              label: "Paper Size",
+              value: "a4",
+              display_value: "A4",
+            },
+            {
+              key: "color_mode",
+              label: "Color Mode",
+              value: "color",
+              display_value: "Color",
+            },
+            {
+              key: "paper_stock",
+              label: "Paper Stock",
+              value: "matte_120",
+              display_value: "Matte 120gsm",
+            },
+            {
+              key: "page_count",
+              label: "Page Count",
+              value: "1",
+              display_value: "1",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(order.items?.[0]).toMatchObject({
+      category: "flyers-single-sheets",
+      category_slug: "flyers-single-sheets",
+      category_name: "Single sheets",
+    });
+    expect(order.items?.[0]?.specs?.map((s) => s.key)).toEqual([
+      "paper_size",
+      "color_mode",
+      "paper_stock",
+      "page_count",
+    ]);
+    // page_count is kept on the item but hidden from ops summary lines
+    expect(formatOrderItemSpecLines(order.items![0])).toEqual([
+      "Paper Size: A4",
+      "Color Mode: Color",
+      "Paper Stock: Matte 120gsm",
+    ]);
+    expect(orderItemTypeLabel(order.items![0])).toBe("Single sheets");
   });
 
   it("preserves order destination snapshots and coordinates", () => {

@@ -44,6 +44,8 @@ import {
   ProductionStatusDto,
 } from './dto/production-status.dto';
 import { SelfQcDto } from './dto/self-qc.dto';
+import { QualityService } from '../quality/quality.service';
+import { AuditEvent } from '../audit/entities/audit-event.entity';
 
 export type SupplierJobActor = {
   userId: number;
@@ -183,6 +185,11 @@ export type SupplierJobDetail = {
   pickupOtp: string | null;
   deliveryAssignmentStatus: string | null;
   allowedActions: string[];
+  productionMilestones?: Array<{
+    milestone: string;
+    reachedAt: Date;
+    notes: string | null;
+  }>;
 };
 
 export type SupplierJobActionResult = {
@@ -278,6 +285,7 @@ export class SupplierJobsService {
     private readonly dataSource: DataSource,
     private readonly auditService: AuditService,
     private readonly filesService: FilesService,
+    private readonly qualityService: QualityService,
     @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
@@ -430,8 +438,49 @@ export class SupplierJobsService {
       /** Ops/supplier handoff code the rider must enter at pickup. */
       pickupOtp,
       deliveryAssignmentStatus,
+      productionMilestones: await this.loadProductionMilestones(order.id),
       allowedActions: this.computeAllowedActions(assignment, order),
     };
+  }
+
+  /**
+   * First-reach times for supplier production milestones (from audit).
+   * Used so UI can hide already-updated milestones.
+   */
+  private async loadProductionMilestones(
+    orderId: number,
+  ): Promise<
+    Array<{ milestone: string; reachedAt: Date; notes: string | null }>
+  > {
+    try {
+      const events = await this.dataSource.getRepository(AuditEvent).find({
+        where: {
+          orderId,
+          action: 'supplier_production_milestone',
+        },
+        order: { createdAt: 'ASC' },
+      });
+      const byMilestone = new Map<
+        string,
+        { milestone: string; reachedAt: Date; notes: string | null }
+      >();
+      for (const event of events) {
+        const raw = event.metadata?.milestone;
+        const milestone =
+          typeof raw === 'string' && raw.trim()
+            ? raw.trim().toLowerCase()
+            : null;
+        if (!milestone || byMilestone.has(milestone)) continue;
+        byMilestone.set(milestone, {
+          milestone,
+          reachedAt: event.createdAt,
+          notes: event.reason ?? null,
+        });
+      }
+      return [...byMilestone.values()];
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -808,14 +857,29 @@ export class SupplierJobsService {
       });
     }
 
-    const resolvedMilestone =
+    const resolvedMilestone = String(
       milestone ??
-      (dto.status?.trim().toLowerCase() as ProductionMilestone | string);
+        (dto.status?.trim().toLowerCase() as ProductionMilestone | string),
+    )
+      .trim()
+      .toLowerCase();
+
+    const validMilestones = new Set(Object.values(ProductionMilestone));
+    if (
+      !validMilestones.has(resolvedMilestone as ProductionMilestone) &&
+      resolvedMilestone !== 'production'
+    ) {
+      throw new BadRequestException({
+        code: 'invalid_milestone',
+        message: `Unknown production milestone: ${resolvedMilestone}`,
+      });
+    }
 
     const result = await this.dataSource.transaction(async (manager) => {
       const assignmentRepo = manager.getRepository(SupplierAssignment);
       const ordersRepo = manager.getRepository(Order);
       const historyRepo = manager.getRepository(OrderStatusHistory);
+      const auditRepo = manager.getRepository(AuditEvent);
 
       const locked = await assignmentRepo.findOne({
         where: { id: jobId },
@@ -840,6 +904,42 @@ export class SupplierJobsService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!order) throw new NotFoundException('Order not found');
+
+      // Reject re-submitting a milestone that was already recorded for this order, or an earlier one.
+      if (validMilestones.has(resolvedMilestone as ProductionMilestone)) {
+        const prior = await auditRepo.find({
+          where: {
+            orderId: order.id,
+            action: 'supplier_production_milestone',
+          },
+          order: { createdAt: 'ASC' },
+        });
+
+        const validArr = Object.values(ProductionMilestone);
+        const targetIdx = validArr.indexOf(
+          resolvedMilestone as ProductionMilestone,
+        );
+
+        const alreadyReached = prior.some((event) => {
+          const m = event.metadata?.milestone;
+          if (
+            typeof m === 'string' &&
+            validMilestones.has(m.trim().toLowerCase() as ProductionMilestone)
+          ) {
+            const priorIdx = validArr.indexOf(
+              m.trim().toLowerCase() as ProductionMilestone,
+            );
+            return priorIdx >= targetIdx;
+          }
+          return false;
+        });
+        if (alreadyReached) {
+          throw new BadRequestException({
+            code: 'milestone_already_reached',
+            message: `Production milestone "${resolvedMilestone}" or a later milestone was already updated`,
+          });
+        }
+      }
 
       let fromStatus = order.orderStatus;
       let toStatus = order.orderStatus;
@@ -991,6 +1091,14 @@ export class SupplierJobsService {
       });
     }
 
+    if (!dto.checklist || typeof dto.checklist !== 'object') {
+      throw new BadRequestException({
+        code: 'pickup_qa_checklist_required',
+        message:
+          'Pickup QA checklist is required. Complete every check before submitting.',
+      });
+    }
+
     const result = await this.dataSource.transaction(async (manager) => {
       const assignmentRepo = manager.getRepository(SupplierAssignment);
       const ordersRepo = manager.getRepository(Order);
@@ -1079,6 +1187,21 @@ export class SupplierJobsService {
       );
       await assignmentRepo.save(locked);
 
+      // Require full Pickup QA checklist (all pass) and store for ops review.
+      const { checklistResults } =
+        await this.qualityService.recordPickupQaSubmission(
+          {
+            orderId: order.id,
+            actorRole: 'supplier',
+            actorUserId: actor.userId,
+            checklist: dto.checklist as Record<string, unknown>,
+            notes: dto.notes ?? null,
+            evidenceFileIds: uniqueEvidenceIds,
+            supplierAssignmentId: locked.id,
+          },
+          manager,
+        );
+
       const updateResult = await ordersRepo.update(
         { id: order.id, orderStatus: fromStatus },
         { orderStatus: toStatus },
@@ -1107,7 +1230,7 @@ export class SupplierJobsService {
             source: 'supplierJobs.submitSelfQc',
             assignmentId: locked.id,
             evidenceFileIds: uniqueEvidenceIds,
-            checklist: dto.checklist ?? {},
+            checklist: checklistResults,
           },
         },
         manager,

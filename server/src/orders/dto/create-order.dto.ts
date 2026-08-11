@@ -71,9 +71,23 @@ export class CreateOrderDto {
   @Min(0)
   deliveryFee: number;
 
-  @ApiProperty({ example: 'gcash', enum: ['gcash', 'maya', 'cod'] })
+  @ApiProperty({
+    example: 'gcash',
+    enum: ['gcash', 'maya', 'cod', 'pilot_credit', 'qr_ph_instapay'],
+  })
   @IsString()
   paymentMethod: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Required when paymentMethod is qr_ph_instapay — uploaded payment receipt file id',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsInt()
+  @IsPositive()
+  qrReceiptFileId?: number;
 
   @ApiProperty({ example: 'delivery', enum: ['pickup', 'delivery'] })
   @IsString()
@@ -277,9 +291,23 @@ export class CreateBatchOrderDto {
   @Min(0)
   deliveryFee?: number;
 
-  @ApiProperty({ example: 'gcash', enum: ['gcash', 'maya', 'cod'] })
+  @ApiProperty({
+    example: 'gcash',
+    enum: ['gcash', 'maya', 'cod', 'pilot_credit', 'qr_ph_instapay'],
+  })
   @IsString()
   paymentMethod: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Required when paymentMethod is qr_ph_instapay — uploaded payment receipt file id',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsInt()
+  @IsPositive()
+  qrReceiptFileId?: number;
 
   @ApiPropertyOptional({ example: 'pending' })
   @IsOptional()

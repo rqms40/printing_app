@@ -144,15 +144,32 @@ export interface Order {
   destinations?: OrderDestination[];
 }
 
+/** Catalog-driven spec snapshot stored on order items (and returned by admin API). */
+export interface OrderItemSpec {
+  key: string;
+  label: string;
+  value: string;
+  display_value: string;
+  option_id?: number | null;
+  option_label?: string | null;
+}
+
 export interface OrderItem {
   id: string;
   order_id?: string;
-  category: "paper" | "3d";
+  /** Legacy paper/3d or product slug for catalog orders. */
+  category: string;
+  category_id?: number | null;
+  category_slug?: string | null;
+  category_name?: string | null;
   file_url?: string;
   file_name?: string;
   file_metadata_id?: number;
+  /** Full dynamic catalog specs (preferred for display). */
+  specs?: OrderItemSpec[];
   paper_specs?: PaperSpecs;
   three_d_specs?: ThreeDSpecs;
+  special_instructions?: string | null;
   quantity: number;
   total_price: number;
   delivery_address?: OrderDestination | null;

@@ -110,7 +110,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No community feedback yet.'), findsOneWidget);
-    expect(find.text('Reviews appear here after deliveries.'), findsOneWidget);
+    expect(find.text('Reviews appear here.'), findsOneWidget);
     expect(find.text('Community feedback.'), findsOneWidget);
   });
 

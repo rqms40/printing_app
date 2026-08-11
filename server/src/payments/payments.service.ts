@@ -6,12 +6,16 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
 import {
   CodCollection,
   CodCollectionStatus,
 } from './entities/cod-collection.entity';
+import {
+  QrPaymentReceipt,
+  QrPaymentReceiptStatus,
+} from './entities/qr-payment-receipt.entity';
 import { CreatePaymentIntentDto } from './dto/create-payment-intent.dto';
 import {
   FailCodCollectionDto,
@@ -24,12 +28,18 @@ import {
   evaluateCodEligibility,
   isCodPaymentMethod,
 } from './cod-eligibility';
+import { isQrPhInstapayPaymentMethod } from './qr-ph-instapay';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { BatchOrder } from '../orders/entities/batch-order.entity';
 import { User } from '../users/entities/user.entity';
 import {
   Payout,
   PayoutSettlementState,
 } from '../payouts/entities/payout.entity';
+import {
+  FileMetadata,
+  FilePurpose,
+} from '../files/entities/file-metadata.entity';
 
 /** Order statuses that no longer count as active unpaid COD. */
 const COD_INACTIVE_ORDER_STATUSES: OrderStatus[] = [
@@ -61,12 +71,16 @@ export class PaymentsService {
     private txnRepo: Repository<PaymentTransaction>,
     @InjectRepository(CodCollection)
     private codCollectionRepo: Repository<CodCollection>,
+    @InjectRepository(QrPaymentReceipt)
+    private qrReceiptRepo: Repository<QrPaymentReceipt>,
     @InjectRepository(Order)
     private ordersRepo: Repository<Order>,
     @InjectRepository(User)
     private usersRepo: Repository<User>,
     @InjectRepository(Payout)
     private payoutRepo: Repository<Payout>,
+    @InjectRepository(FileMetadata)
+    private fileRepo: Repository<FileMetadata>,
     private readonly config: ConfigService,
   ) {}
 
@@ -641,6 +655,297 @@ export class PaymentsService {
         message:
           'Supplier payout is blocked until COD cash is reconciled (cash_reconciled)',
         holdReason: COD_PAYOUT_HOLD_REASON,
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // QR Ph (Instapay) receipt verification
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Validate a customer-owned payment receipt file before order create.
+   */
+  async assertOwnedPaymentReceiptFile(
+    fileId: number,
+    userId: number,
+  ): Promise<FileMetadata> {
+    if (!Number.isInteger(fileId) || fileId <= 0) {
+      throw new BadRequestException({
+        code: 'qr_receipt_required',
+        message: 'QR Ph (Instapay) requires a digital payment receipt upload',
+      });
+    }
+    const file = await this.fileRepo.findOne({ where: { id: fileId } });
+    if (!file || file.uploadedBy !== userId) {
+      throw new BadRequestException({
+        code: 'qr_receipt_invalid',
+        message: 'Payment receipt file is invalid or does not belong to you',
+      });
+    }
+    if (file.purpose !== FilePurpose.PAYMENT_RECEIPT) {
+      throw new BadRequestException({
+        code: 'qr_receipt_invalid',
+        message: 'Uploaded file is not a payment receipt',
+      });
+    }
+    return file;
+  }
+
+  /**
+   * Attach a pending QR receipt to a newly created order (same transaction).
+   */
+  async createPendingQrReceipt(
+    input: {
+      orderId: number;
+      batchOrderId?: number | null;
+      userId: number;
+      fileId: number;
+    },
+    manager?: EntityManager,
+  ): Promise<QrPaymentReceipt> {
+    const repo = manager
+      ? manager.getRepository(QrPaymentReceipt)
+      : this.qrReceiptRepo;
+    const receipt = repo.create({
+      orderId: input.orderId,
+      batchOrderId: input.batchOrderId ?? null,
+      userId: input.userId,
+      fileId: input.fileId,
+      status: QrPaymentReceiptStatus.PENDING,
+      verifiedByUserId: null,
+      verifiedAt: null,
+      rejectionReason: null,
+    });
+    return repo.save(receipt);
+  }
+
+  async getPendingQrReceiptCount(): Promise<number> {
+    return this.qrReceiptRepo.count({
+      where: { status: QrPaymentReceiptStatus.PENDING },
+    });
+  }
+
+  async listQrPaymentReceipts(status?: string): Promise<
+    Array<{
+      id: number;
+      orderId: number;
+      orderRef: string | null;
+      batchOrderId: number | null;
+      userId: number;
+      userEmail: string | null;
+      userName: string | null;
+      fileId: number;
+      receiptUrl: string | null;
+      receiptFileName: string | null;
+      status: QrPaymentReceiptStatus;
+      paymentMethod: string | null;
+      paymentStatus: string | null;
+      orderTotal: number | null;
+      rejectionReason: string | null;
+      verifiedByUserId: number | null;
+      verifiedAt: Date | null;
+      createdAt: Date;
+    }>
+  > {
+    const allowed = new Set(['pending', 'verified', 'rejected']);
+    const normalized =
+      status && allowed.has(status.toLowerCase())
+        ? (status.toLowerCase() as QrPaymentReceiptStatus)
+        : undefined;
+
+    const qb = this.qrReceiptRepo
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.order', 'o')
+      .leftJoinAndSelect('r.user', 'u')
+      .leftJoinAndSelect('r.file', 'f')
+      .orderBy('r.createdAt', 'DESC')
+      .take(200);
+
+    if (normalized) {
+      qb.andWhere('r.status = :status', { status: normalized });
+    }
+
+    const rows = await qb.getMany();
+    return rows.map((r) => ({
+      id: r.id,
+      orderId: r.orderId,
+      orderRef: r.order?.orderId ?? null,
+      batchOrderId: r.batchOrderId,
+      userId: r.userId,
+      userEmail: r.user?.email ?? null,
+      userName: r.user?.fullName ?? r.user?.nickname ?? null,
+      fileId: r.fileId,
+      receiptUrl: r.file?.url ?? null,
+      receiptFileName: r.file?.originalName ?? null,
+      status: r.status,
+      paymentMethod: r.order?.paymentMethod ?? null,
+      paymentStatus: r.order?.paymentStatus ?? null,
+      orderTotal:
+        r.order?.totalPrice != null
+          ? Number(r.order.totalPrice) + Number(r.order.deliveryFee ?? 0)
+          : null,
+      rejectionReason: r.rejectionReason,
+      verifiedByUserId: r.verifiedByUserId,
+      verifiedAt: r.verifiedAt,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  /**
+   * Ops verifies QR receipt → marks order (and batch) payment_status paid.
+   * Production still requires authorizePayment separately.
+   */
+  async verifyQrPaymentReceipt(
+    receiptId: number,
+    actorUserId: number,
+  ): Promise<QrPaymentReceipt> {
+    if (!Number.isInteger(actorUserId) || actorUserId <= 0) {
+      throw new BadRequestException('Verifier is required');
+    }
+
+    return this.ordersRepo.manager.transaction(async (manager) => {
+      const receiptRepo = manager.getRepository(QrPaymentReceipt);
+      const ordersRepo = manager.getRepository(Order);
+      const batchRepo = manager.getRepository(BatchOrder);
+
+      const receipt = await receiptRepo.findOne({
+        where: { id: receiptId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!receipt) {
+        throw new NotFoundException(`QR payment receipt ${receiptId} not found`);
+      }
+      if (receipt.status === QrPaymentReceiptStatus.VERIFIED) {
+        return receipt;
+      }
+      if (receipt.status === QrPaymentReceiptStatus.REJECTED) {
+        throw new BadRequestException({
+          code: 'qr_receipt_already_rejected',
+          message: 'Rejected receipts cannot be verified. Ask the customer to re-order.',
+        });
+      }
+
+      const order = await ordersRepo.findOne({
+        where: { id: receipt.orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!order) {
+        throw new NotFoundException(`Order ${receipt.orderId} not found`);
+      }
+      if (!isQrPhInstapayPaymentMethod(order.paymentMethod)) {
+        throw new BadRequestException({
+          code: 'not_qr_payment_order',
+          message: 'Order is not a QR Ph (Instapay) payment',
+        });
+      }
+
+      receipt.status = QrPaymentReceiptStatus.VERIFIED;
+      receipt.verifiedByUserId = actorUserId;
+      receipt.verifiedAt = new Date();
+      receipt.rejectionReason = null;
+      await receiptRepo.save(receipt);
+
+      order.paymentStatus = 'paid';
+      await ordersRepo.save(order);
+
+      if (order.batchOrderId) {
+        const batch = await batchRepo.findOne({
+          where: { id: order.batchOrderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (batch) {
+          batch.paymentStatus = 'paid';
+          await batchRepo.save(batch);
+        }
+      }
+
+      return receipt;
+    });
+  }
+
+  async rejectQrPaymentReceipt(
+    receiptId: number,
+    actorUserId: number,
+    reason?: string,
+  ): Promise<QrPaymentReceipt> {
+    if (!Number.isInteger(actorUserId) || actorUserId <= 0) {
+      throw new BadRequestException('Actor is required');
+    }
+
+    return this.ordersRepo.manager.transaction(async (manager) => {
+      const receiptRepo = manager.getRepository(QrPaymentReceipt);
+      const ordersRepo = manager.getRepository(Order);
+      const batchRepo = manager.getRepository(BatchOrder);
+
+      const receipt = await receiptRepo.findOne({
+        where: { id: receiptId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!receipt) {
+        throw new NotFoundException(`QR payment receipt ${receiptId} not found`);
+      }
+      if (receipt.status === QrPaymentReceiptStatus.VERIFIED) {
+        throw new BadRequestException({
+          code: 'qr_receipt_already_verified',
+          message: 'Verified receipts cannot be rejected',
+        });
+      }
+      if (receipt.status === QrPaymentReceiptStatus.REJECTED) {
+        return receipt;
+      }
+
+      const order = await ordersRepo.findOne({
+        where: { id: receipt.orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      receipt.status = QrPaymentReceiptStatus.REJECTED;
+      receipt.verifiedByUserId = actorUserId;
+      receipt.verifiedAt = new Date();
+      receipt.rejectionReason = reason?.trim() || 'Receipt rejected by ops';
+      await receiptRepo.save(receipt);
+
+      if (order && isQrPhInstapayPaymentMethod(order.paymentMethod)) {
+        order.paymentStatus = 'failed';
+        await ordersRepo.save(order);
+        if (order.batchOrderId) {
+          const batch = await batchRepo.findOne({
+            where: { id: order.batchOrderId },
+          });
+          if (batch) {
+            batch.paymentStatus = 'failed';
+            await batchRepo.save(batch);
+          }
+        }
+      }
+
+      return receipt;
+    });
+  }
+
+  /**
+   * Whether QR payment is verified (paid) for production authorization.
+   */
+  async assertQrPaymentVerifiedForAuthorization(order: Order): Promise<void> {
+    if (!isQrPhInstapayPaymentMethod(order.paymentMethod)) {
+      return;
+    }
+    const receipt = await this.qrReceiptRepo.findOne({
+      where: { orderId: order.id },
+      order: { id: 'ASC' },
+    });
+    if (!receipt || receipt.status !== QrPaymentReceiptStatus.VERIFIED) {
+      throw new BadRequestException({
+        code: 'qr_payment_not_verified',
+        message:
+          'QR Ph (Instapay) payment receipt must be verified in QR Payments before authorizing production',
+      });
+    }
+    if (String(order.paymentStatus ?? '').toLowerCase() !== 'paid') {
+      throw new BadRequestException({
+        code: 'qr_payment_not_verified',
+        message: 'QR Ph (Instapay) payment is not marked paid yet',
       });
     }
   }

@@ -58,6 +58,8 @@ export enum MarketplacePaymentMethod {
   PILOT_CREDIT = 'pilot_credit',
   COD = 'cod',
   PAYMONGO = 'paymongo',
+  /** Manual QR Ph / InstaPay with receipt verification by ops. */
+  QR_PH_INSTAPAY = 'qr_ph_instapay',
 }
 
 /** Payment authorization gate status (production requires authorized). */

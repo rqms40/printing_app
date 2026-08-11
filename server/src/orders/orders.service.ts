@@ -51,6 +51,7 @@ import {
 } from '../credits/credits.service';
 import { PaymentsService } from '../payments/payments.service';
 import { isCodPaymentMethod } from '../payments/cod-eligibility';
+import { isQrPhInstapayPaymentMethod } from '../payments/qr-ph-instapay';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
@@ -1241,6 +1242,27 @@ export class OrdersService {
         codEligibleForBatch = codResult?.eligible === true;
       }
 
+      // QR Ph (Instapay): digital receipt required at place-order.
+      let qrReceiptFileId: number | null = null;
+      if (isQrPhInstapayPaymentMethod(dto.paymentMethod)) {
+        if (
+          dto.qrReceiptFileId == null ||
+          !Number.isInteger(dto.qrReceiptFileId) ||
+          dto.qrReceiptFileId <= 0
+        ) {
+          throw new BadRequestException({
+            code: 'qr_receipt_required',
+            message:
+              'QR Ph (Instapay) requires a digital payment receipt before placing the order',
+          });
+        }
+        await this.paymentsService.assertOwnedPaymentReceiptFile(
+          dto.qrReceiptFileId,
+          userId,
+        );
+        qrReceiptFileId = dto.qrReceiptFileId;
+      }
+
       const { batchRef, orderRef } = await this.nextBatchReferences(manager);
       const creditPayment = OrdersService.isCreditPaymentMethod(
         dto.paymentMethod,
@@ -1381,6 +1403,18 @@ export class OrdersService {
           eligible: true,
           eligibilityReason: null,
         });
+      }
+
+      if (qrReceiptFileId != null) {
+        await this.paymentsService.createPendingQrReceipt(
+          {
+            orderId: savedOrder.id,
+            batchOrderId: savedBatch.id,
+            userId,
+            fileId: qrReceiptFileId,
+          },
+          manager,
+        );
       }
 
       for (const [index, item] of normalizedItems.entries()) {
@@ -1687,8 +1721,9 @@ export class OrdersService {
       const paymentMethod = String(locked.paymentMethod ?? '');
       const isCredit = OrdersService.isCreditPaymentMethod(paymentMethod);
       const isCod = isCodPaymentMethod(paymentMethod);
+      const isQr = isQrPhInstapayPaymentMethod(paymentMethod);
 
-      if (!isCredit && !isCod) {
+      if (!isCredit && !isCod && !isQr) {
         throw new BadRequestException({
           code: 'unsupported_payment_method',
           message: `Payment authorization does not support method '${paymentMethod}'`,
@@ -1700,6 +1735,12 @@ export class OrdersService {
           locked,
           context.actorUserId,
           manager,
+        );
+        locked.paymentStatus = 'paid';
+      } else if (isQr) {
+        // QR Ph (Instapay): receipt must already be ops-verified (payment paid).
+        await this.paymentsService.assertQrPaymentVerifiedForAuthorization(
+          locked,
         );
         locked.paymentStatus = 'paid';
       } else {

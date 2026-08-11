@@ -12,7 +12,7 @@ const STATUS_DOT: Record<ConversationStatus, string> = {
 
 const TYPE_LABEL: Record<string, string> = {
   ai: "AI",
-  admin: "Admin",
+  admin: "Support",
   rider: "Rider",
 };
 
@@ -21,6 +21,14 @@ const TYPE_COLORS: Record<ConversationType, { bg: string; text: string }> = {
   admin: { bg: "rgba(82,196,26,0.12)", text: "#86EFAC" },
   rider: { bg: "rgba(245,158,11,0.12)", text: "#FCD34D" },
 };
+
+function participantRoleOf(conv: Conversation): string | null {
+  return conv.participantRole ?? conv.customer?.role ?? null;
+}
+
+function isSupplierConversation(conv: Conversation): boolean {
+  return participantRoleOf(conv) === "supplier";
+}
 
 function timeAgo(iso: string): string {
   const ms = new Date(iso).getTime();
@@ -68,7 +76,16 @@ export function ConversationList({ conversations, activeId, onSelect }: Props) {
       {conversations.map((conv) => {
         const isActive = conv.id === activeId;
         const isHovered = conv.id === hoveredId && !isActive;
-        const customerName = conv.customer?.name ?? conv.customer?.fullName ?? conv.customer?.nickname ?? (conv.type === 'rider' ? `Rider #${conv.customerId}` : `Customer #${conv.customerId}`);
+        const supplier = isSupplierConversation(conv);
+        const customerName =
+          conv.customer?.name ??
+          conv.customer?.fullName ??
+          conv.customer?.nickname ??
+          (conv.type === "rider"
+            ? `Rider #${conv.customerId}`
+            : supplier
+              ? `Supplier #${conv.customerId}`
+              : `Customer #${conv.customerId}`);
         const dotColor = STATUS_DOT[conv.status] ?? token.colorTextSecondary;
         const typeColors = TYPE_COLORS[conv.type];
 
@@ -167,6 +184,23 @@ export function ConversationList({ conversations, activeId, onSelect }: Props) {
                 >
                   {TYPE_LABEL[conv.type] ?? conv.type}
                 </span>
+                {supplier && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      fontFamily: MONO,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: "#C4B5FD",
+                      background: "rgba(139,92,246,0.15)",
+                      padding: "2px 7px",
+                      borderRadius: 4,
+                    }}
+                  >
+                    Supplier
+                  </span>
+                )}
                 {conv.orderId && (
                   <span
                     style={{

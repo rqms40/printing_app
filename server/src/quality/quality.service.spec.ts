@@ -15,6 +15,7 @@ import {
   QualityReviewDecision,
   QualityReviewRiskLevel,
 } from './entities/quality-review.entity';
+import { PickupQaSubmission } from './entities/pickup-qa-submission.entity';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { AuditService } from '../audit/audit.service';
@@ -167,6 +168,15 @@ describe('QualityService', () => {
       providers: [
         QualityService,
         { provide: getRepositoryToken(QualityReview), useValue: reviewRepo },
+        {
+          provide: getRepositoryToken(PickupQaSubmission),
+          useValue: {
+            find: jest.fn().mockResolvedValue([]),
+            findOne: jest.fn(),
+            save: jest.fn(),
+            create: jest.fn((x) => x),
+          },
+        },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: DataSource, useValue: dataSource },
         { provide: AuditService, useValue: auditService },

@@ -48,6 +48,7 @@ import {
   OrdersGateway,
 } from '../orders/orders.gateway';
 import { AuditService } from '../audit/audit.service';
+import { QualityService } from '../quality/quality.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 const OTP_SECRET_FIELDS = [
@@ -264,6 +265,7 @@ export class RidersService {
     private dispatchPlanService: DispatchPlanService,
     private auditService: AuditService,
     private notificationsService: NotificationsService,
+    private qualityService: QualityService,
   ) {}
 
   async createProfile(data: { userId: number }): Promise<RiderProfile> {
@@ -805,6 +807,7 @@ export class RidersService {
     declineReason?: string,
     proof?: ProofOfDeliveryDto,
     otp?: string,
+    checklist?: Record<string, unknown>,
   ): Promise<DeliveryAssignment> {
     const profile = await this.getProfile(userId);
     const candidateAssignment = await this.assignmentRepo.findOne({
@@ -895,6 +898,25 @@ export class RidersService {
           assignment.pickupOtpVerifiedAt,
           'pickup',
         );
+        // Rider must re-verify the same Pickup QA checklist before leaving shop.
+        if (!checklist || typeof checklist !== 'object') {
+          throw new BadRequestException({
+            code: 'pickup_qa_checklist_required',
+            message:
+              'Pickup QA checklist is required before marking picked up. Complete every check.',
+          });
+        }
+        await this.qualityService.recordPickupQaSubmission(
+          {
+            orderId: assignment.orderId,
+            actorRole: 'rider',
+            actorUserId: userId,
+            checklist,
+            deliveryAssignmentId: assignment.id,
+            evidenceFileIds: proof?.fileId ? [proof.fileId] : [],
+          },
+          manager,
+        );
         // Pickup requires photo; signature is optional extra on the photo path.
         pickupProofMetadata = await this.validateProofOfDelivery(
           proof,
@@ -970,7 +992,10 @@ export class RidersService {
           if (assignment.pickupOtpCode && assignment.pickupOtpHash) {
             assignment.deliveryOtpCode = assignment.pickupOtpCode;
             assignment.deliveryOtpHash = assignment.pickupOtpHash;
-          } else if (!assignment.deliveryOtpCode || !assignment.deliveryOtpHash) {
+          } else if (
+            !assignment.deliveryOtpCode ||
+            !assignment.deliveryOtpHash
+          ) {
             const customerOtpCode = generateDeliveryOtpCode();
             const customerOtpHash = hashDeliveryOtp(customerOtpCode);
             assignment.pickupOtpCode = customerOtpCode;

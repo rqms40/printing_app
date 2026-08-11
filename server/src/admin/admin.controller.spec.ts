@@ -11,6 +11,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
+import { PaymentsService } from '../payments/payments.service';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
 import { RiderProfile } from '../riders/entities/rider-profile.entity';
@@ -38,6 +39,7 @@ describe('AdminController analytics', () => {
   let riderProfilesRepo: jest.Mocked<Partial<Repository<RiderProfile>>>;
   let assignmentsRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
   let creditsService: jest.Mocked<Partial<CreditsService>>;
+  let paymentsService: jest.Mocked<Partial<PaymentsService>>;
   let ordersService: jest.Mocked<Pick<OrdersService, 'updateStatus'>>;
   let ridersService: {
     getAllRidersWithUser: jest.Mock;
@@ -63,6 +65,7 @@ describe('AdminController analytics', () => {
       save: jest.fn(),
     };
     creditsService = { getPendingCount: jest.fn() };
+    paymentsService = { getPendingQrReceiptCount: jest.fn() };
     ordersService = {
       updateStatus: jest.fn(),
     };
@@ -91,6 +94,7 @@ describe('AdminController analytics', () => {
           useValue: ridersService,
         },
         { provide: CreditsService, useValue: creditsService },
+        { provide: PaymentsService, useValue: paymentsService },
         { provide: OrdersGateway, useValue: ordersGateway },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: SuppliersService, useValue: suppliersService },
@@ -330,6 +334,11 @@ describe('AdminController analytics', () => {
       (
         creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>
       ).getPendingCount.mockResolvedValue(2);
+      (
+        paymentsService as jest.Mocked<
+          Pick<PaymentsService, 'getPendingQrReceiptCount'>
+        >
+      ).getPendingQrReceiptCount.mockResolvedValue(4);
 
       const result = await controller.getBadgeCounts();
 
@@ -342,7 +351,11 @@ describe('AdminController analytics', () => {
           ]),
         },
       });
-      expect(result).toEqual({ newOrders: 3, pendingTopUps: 2 });
+      expect(result).toEqual({
+        newOrders: 3,
+        pendingTopUps: 2,
+        pendingQrPayments: 4,
+      });
     });
 
     it('returns 0 for both when nothing is pending', async () => {
@@ -350,10 +363,19 @@ describe('AdminController analytics', () => {
       (
         creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>
       ).getPendingCount.mockResolvedValue(0);
+      (
+        paymentsService as jest.Mocked<
+          Pick<PaymentsService, 'getPendingQrReceiptCount'>
+        >
+      ).getPendingQrReceiptCount.mockResolvedValue(0);
 
       const result = await controller.getBadgeCounts();
 
-      expect(result).toEqual({ newOrders: 0, pendingTopUps: 0 });
+      expect(result).toEqual({
+        newOrders: 0,
+        pendingTopUps: 0,
+        pendingQrPayments: 0,
+      });
     });
   });
 

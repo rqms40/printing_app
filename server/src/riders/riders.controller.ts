@@ -84,6 +84,7 @@ export class RidersController {
         dto.declineReason,
         dto.proof,
         dto.otp,
+        dto.checklist,
       );
     } catch (e) {
       console.error('ERROR IN updateDeliveryStatus:', e);

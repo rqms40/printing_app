@@ -46,6 +46,13 @@ import {
 } from '@/services/supplierJobsApi';
 import { formatDateTime, statusLabel } from '@/utils/format';
 import type { OrderStatus } from '@/types/enums';
+import { PickupQaChecklistForm } from '@/components/pickup-qa-checklist';
+import {
+  allPickupQaChecksPassed,
+  emptyPickupQaChecklist,
+  pickupQaChecklistPayload,
+  type PickupQaChecklistState,
+} from '@/constants/pickup-qa-checklist';
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
@@ -149,6 +156,13 @@ export function SupplierJobShowPage() {
 
   // Proof of Fulfillment
   const [selfQcNotes, setSelfQcNotes] = useState('');
+  const [pickupQa, setPickupQa] = useState<PickupQaChecklistState>(
+    emptyPickupQaChecklist(),
+  );
+  const [pickupQaSignature, setPickupQaSignature] = useState<string | null>(
+    null,
+  );
+  const [signatureResetKey, setSignatureResetKey] = useState(0);
   const [evidenceFile, setEvidenceFile] = useState<UploadFile | null>(null);
 
   const load = useCallback(async () => {
@@ -183,6 +197,36 @@ export function SupplierJobShowPage() {
   const canProduction = hasAction(detail, 'production-status');
   const canSelfQc = hasAction(detail, 'self-qc');
   const canReady = hasAction(detail, 'ready-for-pickup');
+
+  const reachedMilestoneKeys = useMemo(() => {
+    const list = detail?.productionMilestones ?? [];
+    const reached = new Set(
+      list
+        .map((m) => (m.milestone ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+    let maxIndex = -1;
+    MILESTONES.forEach((m, i) => {
+      if (reached.has(m.value)) maxIndex = i;
+    });
+    for (let i = 0; i <= maxIndex; i++) {
+      reached.add(MILESTONES[i].value);
+    }
+    return reached;
+  }, [detail?.productionMilestones]);
+
+  const availableMilestones = useMemo(
+    () => MILESTONES.filter((m) => !reachedMilestoneKeys.has(m.value)),
+    [reachedMilestoneKeys],
+  );
+
+  // Keep selected milestone among remaining options.
+  useEffect(() => {
+    if (availableMilestones.length === 0) return;
+    if (!availableMilestones.some((m) => m.value === milestone)) {
+      setMilestone(availableMilestones[0].value);
+    }
+  }, [availableMilestones, milestone]);
 
   // Live clock so Accept UI disables the moment the SLA window ends.
   const [now, setNow] = useState(() => Date.now());
@@ -351,23 +395,39 @@ export function SupplierJobShowPage() {
       message.warning('Attach proof of fulfillment (photo or PDF)');
       return;
     }
+    if (!allPickupQaChecksPassed(pickupQa, pickupQaSignature)) {
+      message.warning(
+        'Complete every checklist line and draw your digital signature',
+      );
+      return;
+    }
     modal.confirm({
-      title: 'Submit proof of fulfillment?',
-      content: 'Evidence will be recorded and the job moves to supplier proof of fulfillment.',
-      okText: 'Submit proof',
+      title: 'Submit Pickup QA + proof of fulfillment?',
+      content:
+        'All checklist lines must pass with a digital signature. Evidence is stored and the job moves to supplier self-QC — then you can mark ready for pickup.',
+      okText: 'Submit QA',
       onOk: async () => {
         setSubmitting(true);
         try {
           const result = await submitSupplierSelfQc(
             jobId,
-            { notes: selfQcNotes.trim() || undefined },
+            {
+              notes: selfQcNotes.trim() || undefined,
+              checklist: pickupQaChecklistPayload(
+                pickupQa,
+                pickupQaSignature!,
+              ),
+            },
             file,
           );
           message.success(
-            `Proof of fulfillment submitted → ${statusLabel(result.toStatus as OrderStatus)}`,
+            `Pickup QA submitted → ${statusLabel(result.toStatus as OrderStatus)}`,
           );
           setEvidenceFile(null);
           setSelfQcNotes('');
+          setPickupQa(emptyPickupQaChecklist());
+          setPickupQaSignature(null);
+          setSignatureResetKey((k) => k + 1);
           await load();
         } catch (err) {
           message.error(extractApiError(err));
@@ -712,47 +772,121 @@ export function SupplierJobShowPage() {
               style={{ marginBottom: 16 }}
             >
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Completed milestones stay grayed out and cannot be set again.
+                </Text>
                 <Radio.Group
-                  value={milestone}
+                  value={
+                    availableMilestones.some((m) => m.value === milestone)
+                      ? milestone
+                      : undefined
+                  }
                   onChange={(e) => setMilestone(e.target.value)}
                   style={{ width: '100%' }}
+                  disabled={submitting || availableMilestones.length === 0}
                 >
                   <Space direction="vertical" style={{ width: '100%' }}>
-                    {MILESTONES.map((m) => (
-                      <Radio key={m.value} value={m.value}>
-                        <span>
-                          <Text strong>{m.label}</Text>
-                          <br />
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {m.description}
-                          </Text>
-                        </span>
-                      </Radio>
-                    ))}
+                    {MILESTONES.map((m) => {
+                      const reached = reachedMilestoneKeys.has(m.value);
+                      return (
+                        <div
+                          key={m.value}
+                          style={{
+                            opacity: reached ? 0.5 : 1,
+                            padding: '10px 12px',
+                            borderRadius: 8,
+                            border: `1px solid ${reached ? '#333' : '#2E2E2E'}`,
+                            background: reached ? '#121212' : '#1A1A1A',
+                          }}
+                        >
+                          <Radio value={m.value} disabled={reached || submitting}>
+                            <span>
+                              <Text
+                                strong
+                                style={{
+                                  color: reached ? '#666' : undefined,
+                                }}
+                              >
+                                {m.label}
+                              </Text>
+                              {reached && (
+                                <Tag
+                                  color="success"
+                                  style={{ marginLeft: 8, fontSize: 11 }}
+                                >
+                                  Done
+                                </Tag>
+                              )}
+                              <br />
+                              <Text
+                                type="secondary"
+                                style={{
+                                  fontSize: 12,
+                                  color: reached ? '#555' : undefined,
+                                }}
+                              >
+                                {m.description}
+                              </Text>
+                            </span>
+                          </Radio>
+                        </div>
+                      );
+                    })}
                   </Space>
                 </Radio.Group>
-                <TextArea
-                  rows={2}
-                  value={prodNotes}
-                  onChange={(e) => setProdNotes(e.target.value)}
-                  placeholder="Optional notes"
-                  maxLength={2000}
-                />
-                <Button
-                  type="primary"
-                  block
-                  loading={submitting}
-                  onClick={handleProduction}
-                >
-                  Update production status
-                </Button>
+                {availableMilestones.length === 0 ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="All production milestones are complete"
+                    description="Proceed to Pickup QA / proof of fulfillment when ready."
+                  />
+                ) : (
+                  <>
+                    <TextArea
+                      rows={2}
+                      value={prodNotes}
+                      onChange={(e) => setProdNotes(e.target.value)}
+                      placeholder="Optional notes"
+                      maxLength={2000}
+                    />
+                    <Button
+                      type="primary"
+                      block
+                      loading={submitting}
+                      disabled={
+                        !availableMilestones.some((m) => m.value === milestone)
+                      }
+                      onClick={handleProduction}
+                    >
+                      Update production status
+                    </Button>
+                  </>
+                )}
               </Space>
             </Card>
           )}
 
           {canSelfQc && (
-            <Card title="Proof of Fulfillment" size="small" style={{ marginBottom: 16 }}>
+            <Card
+              title="Pickup QA Checklist + Proof of Fulfillment"
+              size="small"
+              style={{ marginBottom: 16 }}
+            >
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <Alert
+                  type="info"
+                  showIcon
+                  message="After production is complete, finish this Pickup QA checklist, attach evidence, then submit. You can mark Ready for pickup only after this step."
+                />
+                <PickupQaChecklistForm
+                  value={pickupQa}
+                  onChange={setPickupQa}
+                  signatureData={pickupQaSignature}
+                  onSignatureChange={setPickupQaSignature}
+                  signatureResetKey={signatureResetKey}
+                  disabled={submitting}
+                />
                 <Upload.Dragger
                   maxCount={1}
                   accept="image/png,image/jpeg,image/webp,application/pdf"
@@ -785,9 +919,12 @@ export function SupplierJobShowPage() {
                   type="primary"
                   block
                   loading={submitting}
+                  disabled={
+                    !allPickupQaChecksPassed(pickupQa, pickupQaSignature)
+                  }
                   onClick={handleSelfQc}
                 >
-                  Submit proof of fulfillment
+                  Submit Pickup QA
                 </Button>
               </Space>
             </Card>

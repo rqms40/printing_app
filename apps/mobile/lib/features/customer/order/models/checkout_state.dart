@@ -32,6 +32,8 @@ class CheckoutState {
     this.speedTier = DeliverySpeedTier.standard,
     this.scheduledSlot,
     this.paymentMethod,
+    this.qrReceiptFileId,
+    this.qrReceiptLocalPath,
     this.leaveAtDoor = false,
     this.riderNote = '',
     this.unitAssignments = const {},
@@ -45,6 +47,13 @@ class CheckoutState {
   final DeliverySpeedTier speedTier;
   final ScheduledSlot? scheduledSlot;
   final PaymentMethod? paymentMethod;
+
+  /// Server file id of the uploaded QR Ph (Instapay) payment receipt.
+  final int? qrReceiptFileId;
+
+  /// Local preview path/name for the uploaded receipt image.
+  final String? qrReceiptLocalPath;
+
   final bool leaveAtDoor;
   final String riderNote;
 
@@ -66,6 +75,8 @@ class CheckoutState {
     DeliverySpeedTier? speedTier,
     ScheduledSlot? scheduledSlot,
     PaymentMethod? paymentMethod,
+    int? qrReceiptFileId,
+    String? qrReceiptLocalPath,
     bool? leaveAtDoor,
     String? riderNote,
     Map<String, List<String?>>? unitAssignments,
@@ -73,6 +84,7 @@ class CheckoutState {
     bool clearTemporaryAddress = false,
     bool clearPaymentMethod = false,
     bool clearScheduledSlot = false,
+    bool clearQrReceipt = false,
   }) => CheckoutState(
     items: items ?? this.items,
     mode: mode ?? this.mode,
@@ -90,6 +102,12 @@ class CheckoutState {
     paymentMethod: clearPaymentMethod
         ? null
         : paymentMethod ?? this.paymentMethod,
+    qrReceiptFileId: clearQrReceipt
+        ? null
+        : qrReceiptFileId ?? this.qrReceiptFileId,
+    qrReceiptLocalPath: clearQrReceipt
+        ? null
+        : qrReceiptLocalPath ?? this.qrReceiptLocalPath,
     leaveAtDoor: leaveAtDoor ?? this.leaveAtDoor,
     riderNote: riderNote ?? this.riderNote,
     unitAssignments: unitAssignments ?? this.unitAssignments,

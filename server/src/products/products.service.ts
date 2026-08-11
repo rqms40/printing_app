@@ -442,8 +442,7 @@ export class ProductsService {
           ? undefined
           : ((dto as Partial<ProductCategory>).parentId ?? null),
       allowedExtensions:
-        allowedExtensions ??
-        (isOrderable === false ? [] : undefined),
+        allowedExtensions ?? (isOrderable === false ? [] : undefined),
       fileProcessingType:
         (dto as Partial<ProductCategory>).fileProcessingType ??
         this.defaultFileProcessingType(dto.slug),

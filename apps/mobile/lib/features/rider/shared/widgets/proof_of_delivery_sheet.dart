@@ -10,8 +10,11 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/shared/models/pickup_qa_checklist.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
+import 'package:printing_app/shared/widgets/pickup_qa_checklist.dart';
+import 'package:printing_app/shared/widgets/signature_pad.dart';
 
 Future<MultipartFile> buildProofPhotoMultipart(XFile picked) async {
   final bytes = await picked.readAsBytes();
@@ -53,6 +56,9 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
   String? _error;
   XFile? _pendingPhoto;
   Uint8List? _pendingPhotoBytes;
+  Map<String, bool> _pickupQa = emptyPickupQaChecklist();
+  String? _pickupQaSignature;
+  final _signaturePadKey = GlobalKey<SignaturePadState>();
 
   @override
   void initState() {
@@ -89,11 +95,25 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
   }
 
   Map<String, dynamic> _withOtp(Map<String, dynamic> proof) {
-    return {...proof, 'otp': _otpController.text.trim()};
+    final payload = {...proof, 'otp': _otpController.text.trim()};
+    if (widget.kind == ProofSheetKind.pickup) {
+      payload['checklist'] = pickupQaChecklistPayload(
+        _pickupQa,
+        signatureData: _pickupQaSignature ?? '',
+      );
+    }
+    return payload;
   }
 
+  bool get _pickupQaOk =>
+      widget.kind != ProofSheetKind.pickup ||
+      allPickupQaChecksPassed(
+        _pickupQa,
+        signatureData: _pickupQaSignature,
+      );
+
   Future<void> _submitSignature() async {
-    if (!_hasSignature || !_otpValid) return;
+    if (!_hasSignature || !_otpValid || !_pickupQaOk) return;
     final payload = {
       'format': 'gridgo-signature-v1',
       'points': _points
@@ -124,6 +144,12 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
     final picked = _pendingPhoto;
     if (picked == null || !_otpValid) {
       setState(() => _error = 'Enter a valid OTP before uploading photo proof');
+      return;
+    }
+    if (!_pickupQaOk) {
+      setState(
+        () => _error = 'Complete every Pickup QA checklist line before pickup',
+      );
       return;
     }
     setState(() {
@@ -308,13 +334,25 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                   onSelectionChanged: (value) =>
                       setState(() => _mode = value.first),
                 )
-              else
+              else ...[
                 Text(
                   'Photo proof is required for pickup',
                   style: AppTypography.caption.copyWith(
                     color: colors.onSurfaceDim,
                   ),
                 ),
+                const SizedBox(height: AppSpacing.md),
+                PickupQaChecklistWidget(
+                  value: _pickupQa,
+                  onChanged: (next) => setState(() => _pickupQa = next),
+                  onSignatureChanged: (sig) =>
+                      setState(() => _pickupQaSignature = sig),
+                  signaturePadKey: _signaturePadKey,
+                  enabled: !_isUploading,
+                  signOffHint:
+                      'Draw your digital signature for pickup sign-off (required).',
+                ),
+              ],
               const SizedBox(height: AppSpacing.md),
               if (_mode == 'signature' && !isPickup) ...[
                 Semantics(
@@ -416,7 +454,7 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                       child: AppButton(
                         label: _error == null ? 'Use photo' : 'Retry upload',
                         isLoading: _isUploading,
-                        onTap: (_isUploading || !_otpValid)
+                        onTap: (_isUploading || !_otpValid || !_pickupQaOk)
                             ? null
                             : _uploadPendingPhoto,
                         isDisabled: !_otpValid,

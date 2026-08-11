@@ -12,6 +12,7 @@ import { RidersModule } from '../riders/riders.module';
 import { CreditsModule } from '../credits/credits.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SuppliersModule } from '../suppliers/suppliers.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
 import { RiderProfile } from '../riders/entities/rider-profile.entity';
@@ -40,6 +41,7 @@ import { AuditEvent } from '../audit/entities/audit-event.entity';
     CreditsModule,
     NotificationsModule,
     SuppliersModule,
+    PaymentsModule,
   ],
   controllers: [AdminController],
 })

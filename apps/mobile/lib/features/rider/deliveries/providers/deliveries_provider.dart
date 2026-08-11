@@ -423,17 +423,31 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       return false;
     }
 
-    final proof = Map<String, dynamic>.from(proofPayload)..remove('otp');
+    final proof = Map<String, dynamic>.from(proofPayload)
+      ..remove('otp')
+      ..remove('checklist');
     // Ensure numeric fileId for class-validator @IsInt on the server.
     final rawId = proof['fileId'];
     if (rawId is String) {
       proof['fileId'] = int.tryParse(rawId) ?? rawId;
+    }
+    final checklistRaw = proofPayload['checklist'];
+    final checklist = checklistRaw is Map
+        ? Map<String, dynamic>.from(checklistRaw)
+        : null;
+    if (checklist == null || checklist.isEmpty) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Complete the Pickup QA checklist before marking picked up',
+      );
+      return false;
     }
     return _patchStatus(
       assignmentId,
       DeliveryStatus.pickedUp,
       proof: proof,
       otp: otp,
+      checklist: checklist,
     );
   }
 
@@ -576,6 +590,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     DeliveryStatus nextStatus, {
     Map<String, dynamic>? proof,
     String? otp,
+    Map<String, dynamic>? checklist,
   }) async {
     try {
       final data = <String, dynamic>{
@@ -586,6 +601,9 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       }
       if (otp != null && otp.isNotEmpty) {
         data['otp'] = otp;
+      }
+      if (checklist != null && checklist.isNotEmpty) {
+        data['checklist'] = checklist;
       }
       await ApiClient.instance.patch(
         '/riders/assignments/$assignmentId/status',

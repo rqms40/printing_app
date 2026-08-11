@@ -84,6 +84,7 @@ import 'package:printing_app/features/supplier/screens/supplier_payouts_screen.d
 import 'package:printing_app/features/supplier/screens/supplier_profile_edit_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_profile_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_service_focus_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_support_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Admin screens
@@ -957,6 +958,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             state,
           );
         },
+      ),
+      GoRoute(
+        path: '/supplier/support',
+        pageBuilder: (_, state) =>
+            slideTransition(const SupplierSupportScreen(), state),
       ),
 
       // -----------------------------------------------------------------------

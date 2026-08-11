@@ -25,7 +25,9 @@ function normalizeNewConversationEvent(
       id: event.customerId,
       name: event.customerName,
       email: "",
+      role: event.participantRole ?? undefined,
     },
+    participantRole: event.participantRole ?? null,
     type: event.type,
     orderId: event.orderId,
     assignedAdminId: null,
@@ -45,6 +47,12 @@ function mergeConversation(
     ...current,
     ...updated,
     customer: updated.customer ?? current.customer,
+    participantRole:
+      updated.participantRole ??
+      updated.customer?.role ??
+      current.participantRole ??
+      current.customer?.role ??
+      null,
   };
 }
 

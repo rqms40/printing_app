@@ -132,9 +132,28 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
     );
   }
 
-  void setPaymentMethod(PaymentMethod method) =>
-      state = state.copyWith(paymentMethod: method);
-  void clearPaymentMethod() => state = state.copyWith(clearPaymentMethod: true);
+  void setPaymentMethod(PaymentMethod method) {
+    // Switching away from QR clears any attached receipt.
+    final clearReceipt = method != PaymentMethod.qrPhInstapay;
+    state = state.copyWith(
+      paymentMethod: method,
+      clearQrReceipt: clearReceipt,
+    );
+  }
+
+  void clearPaymentMethod() => state = state.copyWith(
+    clearPaymentMethod: true,
+    clearQrReceipt: true,
+  );
+
+  void setQrReceipt({required int fileId, String? localPath}) =>
+      state = state.copyWith(
+        qrReceiptFileId: fileId,
+        qrReceiptLocalPath: localPath,
+      );
+
+  void clearQrReceipt() => state = state.copyWith(clearQrReceipt: true);
+
   void setLeaveAtDoor(bool value) => state = state.copyWith(leaveAtDoor: value);
   void setRiderNote(String note) => state = state.copyWith(riderNote: note);
   void reset() => state = const CheckoutState();

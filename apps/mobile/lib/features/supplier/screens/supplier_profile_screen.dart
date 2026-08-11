@@ -502,6 +502,61 @@ class SupplierProfileScreen extends ConsumerWidget {
                   ),
                 ),
 
+                const SizedBox(height: AppSpacing.md),
+
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                  child: AppCard(
+                    onTap: () => context.push('/supplier/support'),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: colors.surfaceVariant,
+                            borderRadius: AppRadius.borderMd,
+                          ),
+                          child: Center(
+                            child: HugeIcon(
+                              icon: HugeIcons.strokeRoundedCustomerService01,
+                              color: colors.accent,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Support chat',
+                                style: AppTypography.bodyBold.copyWith(
+                                  color: colors.onBackground,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Message GRIDGO ops or superadmin',
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        HugeIcon(
+                          icon: HugeIcons.strokeRoundedArrowRight01,
+                          color: colors.onSurfaceDim,
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: AppSpacing.lg),
 
                 Padding(

@@ -35,6 +35,13 @@ class PaymentMethodGlyph extends StatelessWidget {
           icon: HugeIcons.strokeRoundedCoins01,
           iconColor: Colors.black,
         );
+      case PaymentMethod.qrPhInstapay:
+        return _Glyph.icon(
+          size: size,
+          bg: const Color(0xFF6C2BD9),
+          icon: HugeIcons.strokeRoundedQrCode,
+          iconColor: Colors.white,
+        );
     }
   }
 }

@@ -79,6 +79,7 @@ export class OrdersController {
       ],
       deliveryFee: dto.deliveryFee,
       paymentMethod: dto.paymentMethod,
+      qrReceiptFileId: dto.qrReceiptFileId,
       deliveryOption: dto.deliveryOption,
       deliveryAddressId: dto.deliveryAddressId,
     });

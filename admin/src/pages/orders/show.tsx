@@ -43,9 +43,11 @@ import type {
 import { apiClient } from "@/providers/api-client";
 import { FileInspectorModal } from "@/components/file-inspector/file-inspector-modal";
 import {
+  formatOrderItemSpecLines,
   humanizeEnumValue,
   normalizeAdminRiders,
   normalizeOrder,
+  orderItemTypeLabel,
 } from "@/utils/api-normalizers";
 import { loadOrderFilePreview, type OrderFilePreview } from "./preview";
 import { ManualStatusCard } from "./components/manual-status-card";
@@ -214,6 +216,8 @@ function getOrderLineItems(order: Order): OrderItem[] {
     {
       id: order.id,
       category: order.category === "3d" ? "3d" : "paper",
+      category_name:
+        order.category === "3d" ? "3D Printing" : "Paper Printing",
       file_name: order.file_name,
       quantity: order.quantity,
       total_price: order.total_price,
@@ -224,24 +228,17 @@ function getOrderLineItems(order: Order): OrderItem[] {
 }
 
 function getOrderTypeLabel(order: Order) {
-  const categories = new Set(
-    getOrderLineItems(order)
-      .map((item) => item.category)
-      .filter(
-        (category): category is "paper" | "3d" =>
-          category === "paper" || category === "3d",
-      ),
-  );
-
-  if (categories.has("paper") && categories.has("3d")) {
-    return "Mixed Printing";
+  const items = getOrderLineItems(order);
+  if (items.length === 1) {
+    return orderItemTypeLabel(items[0]);
   }
 
-  if (categories.has("3d")) {
-    return "3D Printing";
+  const labels = new Set(items.map((item) => orderItemTypeLabel(item)));
+  if (labels.size === 1) {
+    return labels.values().next().value as string;
   }
 
-  return "Paper Printing";
+  return `Mixed · ${items.length} items`;
 }
 
 export function OrderShow() {
@@ -713,16 +710,38 @@ export function OrderShow() {
           <Table dataSource={items} rowKey="id" pagination={false} size="small">
             <Table.Column
               title="Type"
-              render={(_: unknown, item: any) => (
-                <Tag color={item.category === "paper" ? "blue" : "purple"}>
-                  {item.category === "paper" ? "Paper" : "3D"}
-                </Tag>
-              )}
+              width={180}
+              render={(_: unknown, item: OrderItem) => {
+                const label = orderItemTypeLabel(item);
+                const is3d =
+                  item.category === "3d" ||
+                  item.category_slug === "3d" ||
+                  (item.category_slug ?? "").includes("3d") ||
+                  label.toLowerCase().includes("3d");
+                return (
+                  <div>
+                    <Tag color={is3d ? "purple" : "blue"}>{label}</Tag>
+                    {item.category_slug &&
+                      item.category_slug !== item.category && (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#888",
+                            marginTop: 4,
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {item.category_slug}
+                        </div>
+                      )}
+                  </div>
+                );
+              }}
             />
             <Table.Column
               title="File"
               dataIndex="file_name"
-              render={(v: string | null, item: any) =>
+              render={(v: string | null, item: OrderItem) =>
                 v && item.file_url ? (
                   <Button
                     type="link"
@@ -759,23 +778,38 @@ export function OrderShow() {
                 }}
               />
             )}
-            <Table.Column title="Qty" dataIndex="quantity" width={80} />
+            <Table.Column title="Qty" dataIndex="quantity" width={70} />
             <Table.Column
               title="Specs"
-              render={(_: unknown, item: any) => {
-                if (item.paper_specs) {
-                  return `${item.paper_specs.paper_size?.toUpperCase()} · ${humanizeEnumValue(item.paper_specs.color_mode)} · ${humanizeEnumValue(item.paper_specs.print_sides)}`;
+              render={(_: unknown, item: OrderItem) => {
+                const lines = formatOrderItemSpecLines(item);
+                if (lines.length === 0 && !item.special_instructions) {
+                  return <span style={{ color: "#888" }}>—</span>;
                 }
-                if (item.three_d_specs) {
-                  return `${item.three_d_specs.file_format?.toUpperCase()} · ${item.three_d_specs.material?.toUpperCase()} · ${item.three_d_specs.infill_percentage}% infill`;
-                }
-                return "—";
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {lines.map((line) => (
+                      <span
+                        key={line}
+                        style={{ fontSize: 12, color: "#F0F0F0", lineHeight: 1.35 }}
+                      >
+                        {line}
+                      </span>
+                    ))}
+                    {item.special_instructions ? (
+                      <span style={{ fontSize: 11, color: "#A0A0A0", marginTop: 2 }}>
+                        Note: {item.special_instructions}
+                      </span>
+                    ) : null}
+                  </div>
+                );
               }}
             />
             <Table.Column
               title="Amount"
               align="right"
-              render={(_: unknown, item: any) =>
+              width={110}
+              render={(_: unknown, item: OrderItem) =>
                 formatCurrency(item.total_price ?? 0)
               }
             />

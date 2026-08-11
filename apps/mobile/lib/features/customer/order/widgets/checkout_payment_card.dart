@@ -9,6 +9,7 @@ import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_payment_settings_provider.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/sheets/payment_method_sheet.dart';
+import 'package:printing_app/features/customer/order/widgets/checkout_qr_payment_section.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_section_card.dart';
 import 'package:printing_app/features/customer/order/widgets/payment_method_glyph.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -23,6 +24,8 @@ String _labelFor(PaymentMethod m) {
       return 'Cash on Delivery';
     case PaymentMethod.gridCredits:
       return 'Pilot Credits';
+    case PaymentMethod.qrPhInstapay:
+      return 'QR Ph (Instapay)';
   }
 }
 
@@ -164,6 +167,10 @@ class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
                   ),
                 ),
               ],
+              if (method == PaymentMethod.qrPhInstapay) ...[
+                const SizedBox(height: AppSpacing.md),
+                const CheckoutQrPaymentSection(),
+              ],
             ],
           ),
         ),
@@ -253,6 +260,8 @@ class _SelectedPaymentRow extends StatelessWidget {
               Text(
                 method == PaymentMethod.gridCredits
                     ? 'Pay with your GRIDGO balance'
+                    : method == PaymentMethod.qrPhInstapay
+                    ? 'Scan QR · upload receipt to place order'
                     : 'Tap Change to pick another',
                 style: AppTypography.caption.copyWith(
                   color: colors.onSurfaceDim,

@@ -30,6 +30,7 @@ import { DispatchPlanStatus } from './entities/dispatch-plan.entity';
 import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
 import { OrdersGateway } from '../orders/orders.gateway';
 import { AuditService } from '../audit/audit.service';
+import { QualityService } from '../quality/quality.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 describe('RidersService', () => {
@@ -256,6 +257,15 @@ describe('RidersService', () => {
         { provide: DispatchPlanService, useValue: dispatchPlanService },
         { provide: AuditService, useValue: auditService },
         { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: QualityService,
+          useValue: {
+            recordPickupQaSubmission: jest.fn().mockResolvedValue({
+              checklistResults: {},
+              submission: { id: 1 },
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -817,6 +827,14 @@ describe('RidersService', () => {
         undefined,
         { type: 'photo', fileId: 55 } as any,
         TEST_OTP,
+        {
+          quantity_match: true,
+          specification_match: true,
+          visible_defects: true,
+          packaging_integrity: true,
+          documentation: true,
+          supplier_sign_off: true,
+        },
       );
 
       expect(result.status).toBe(DeliveryStatus.PICKED_UP);
@@ -897,6 +915,14 @@ describe('RidersService', () => {
           undefined,
           { type: 'photo', fileId: 55 } as any,
           TEST_OTP,
+          {
+            quantity_match: true,
+            specification_match: true,
+            visible_defects: true,
+            packaging_integrity: true,
+            documentation: true,
+            supplier_sign_off: true,
+          },
         ),
       ).resolves.toMatchObject({ status: DeliveryStatus.PICKED_UP });
 
@@ -1247,6 +1273,14 @@ describe('RidersService', () => {
           undefined,
           { type: 'signature', signatureData: validSignatureProof } as any,
           TEST_OTP,
+          {
+            quantity_match: true,
+            specification_match: true,
+            visible_defects: true,
+            packaging_integrity: true,
+            documentation: true,
+            supplier_sign_off: true,
+          },
         ),
       ).rejects.toThrow('Photo proof is required');
       expect(assignmentRepo.save).not.toHaveBeenCalled();
@@ -2006,6 +2040,14 @@ describe('RidersService', () => {
         undefined,
         { type: 'photo', fileId: 55 } as any,
         TEST_OTP,
+        {
+          quantity_match: true,
+          specification_match: true,
+          visible_defects: true,
+          packaging_integrity: true,
+          documentation: true,
+          supplier_sign_off: true,
+        },
       );
       expect(pickedUp.status).toBe(DeliveryStatus.PICKED_UP);
 

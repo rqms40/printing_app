@@ -9,6 +9,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 class CheckoutFooter extends ConsumerWidget {
@@ -42,10 +43,14 @@ class CheckoutFooter extends ConsumerWidget {
       DeliveryMode.delivery => hasDeliveryAddress,
       DeliveryMode.multidrop => hasMultidropDestinations,
     };
+    final needsQrReceipt =
+        state.paymentMethod == PaymentMethod.qrPhInstapay &&
+        state.qrReceiptFileId == null;
     final canPlace =
         state.items.isNotEmpty &&
         state.paymentMethod != null &&
-        hasRequiredDestination;
+        hasRequiredDestination &&
+        !needsQrReceipt;
 
     return Container(
       padding: EdgeInsets.fromLTRB(

@@ -95,4 +95,3 @@ export class CatalogReadService {
     return attach(null);
   }
 }
-

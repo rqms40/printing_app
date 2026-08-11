@@ -112,4 +112,26 @@ export class UpdateDeliveryStatusDto {
   @ValidateNested()
   @Type(() => ProofOfDeliveryDto)
   proof?: ProofOfDeliveryDto;
+
+  /**
+   * Pickup QA checklist (required when status = picked_up).
+   * All six lines must pass: quantity_match, specification_match,
+   * visible_defects, packaging_integrity, documentation, supplier_sign_off.
+   */
+  @ApiPropertyOptional({
+    description: 'Pickup QA checklist results (required for picked_up)',
+    type: 'object',
+    additionalProperties: true,
+    example: {
+      quantity_match: true,
+      specification_match: true,
+      visible_defects: true,
+      packaging_integrity: true,
+      documentation: true,
+      supplier_sign_off: true,
+    },
+  })
+  @IsOptional()
+  @IsObject()
+  checklist?: Record<string, unknown>;
 }

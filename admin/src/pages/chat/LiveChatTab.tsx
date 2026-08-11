@@ -8,14 +8,19 @@ import type { Conversation } from "@/types/chat";
 
 const { Sider, Content } = Layout;
 
-type FilterKey = "all" | "open" | "mine" | "closed";
+type FilterKey = "all" | "open" | "suppliers" | "mine" | "closed";
 
 const FILTER_TABS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "open", label: "Open" },
+  { key: "suppliers", label: "Suppliers" },
   { key: "mine", label: "Mine" },
   { key: "closed", label: "Closed" },
 ];
+
+function isSupplierConversation(c: Conversation): boolean {
+  return (c.participantRole ?? c.customer?.role) === "supplier";
+}
 
 export function LiveChatTab() {
   const { token } = theme.useToken();
@@ -47,6 +52,8 @@ export function LiveChatTab() {
     switch (filter) {
       case "open":
         return conversations.filter((c) => c.status === "open");
+      case "suppliers":
+        return conversations.filter((c) => isSupplierConversation(c));
       case "mine":
         return conversations.filter((c) => c.assignedAdminId !== null);
       case "closed":

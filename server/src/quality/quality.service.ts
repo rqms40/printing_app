@@ -29,6 +29,14 @@ import {
 } from './dto/quality-decision.dto';
 import { ResubmitCorrectionDto } from './dto/resubmit-correction.dto';
 import { RejectProofDto } from './dto/reject-proof.dto';
+import { PickupQaSubmission } from './entities/pickup-qa-submission.entity';
+import {
+  assertPickupQaChecklistPassed,
+  PICKUP_QA_CHECKLIST_ITEMS,
+  type PickupQaActorRole,
+  type PickupQaChecklistResults,
+} from './pickup-qa-checklist';
+import type { EntityManager } from 'typeorm';
 
 /** Queue statuses — submitted is auto-promoted into needs_qa on workspace/decision. */
 const QA_QUEUE_STATUSES: OrderStatus[] = [
@@ -229,12 +237,172 @@ export class QualityService {
   constructor(
     @InjectRepository(QualityReview)
     private readonly reviewRepo: Repository<QualityReview>,
+    @InjectRepository(PickupQaSubmission)
+    private readonly pickupQaRepo: Repository<PickupQaSubmission>,
     @InjectRepository(Order)
     private readonly ordersRepo: Repository<Order>,
     private readonly dataSource: DataSource,
     private readonly auditService: AuditService,
     private readonly filesService: FilesService,
   ) {}
+
+  /** Canonical Pickup QA checklist definition for clients / admin UI. */
+  getPickupQaChecklistDefinition() {
+    return {
+      title: 'Pickup QA Checklist',
+      description:
+        'Physical quality gate before an order leaves supplier custody. Do not accept an order that fails any line without flagging it first.',
+      items: PICKUP_QA_CHECKLIST_ITEMS,
+    };
+  }
+
+  /**
+   * Persist a fully-passed supplier/rider pickup QA checklist.
+   * Call inside an existing transaction via `manager`, or without for standalone.
+   */
+  async recordPickupQaSubmission(
+    input: {
+      orderId: number;
+      actorRole: PickupQaActorRole;
+      actorUserId: number;
+      checklist: Record<string, unknown>;
+      notes?: string | null;
+      evidenceFileIds?: number[];
+      supplierAssignmentId?: number | null;
+      deliveryAssignmentId?: number | null;
+    },
+    manager?: EntityManager,
+  ): Promise<{
+    submission: PickupQaSubmission;
+    checklistResults: PickupQaChecklistResults;
+  }> {
+    let checklistResults: PickupQaChecklistResults;
+    try {
+      checklistResults = assertPickupQaChecklistPassed(input.checklist);
+    } catch (err) {
+      throw new BadRequestException({
+        code: 'pickup_qa_checklist_incomplete',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Pickup QA checklist incomplete — all checks must pass',
+      });
+    }
+
+    const repo = manager
+      ? manager.getRepository(PickupQaSubmission)
+      : this.pickupQaRepo;
+
+    const submission = await repo.save(
+      repo.create({
+        orderId: input.orderId,
+        actorRole: input.actorRole,
+        actorUserId: input.actorUserId,
+        supplierAssignmentId: input.supplierAssignmentId ?? null,
+        deliveryAssignmentId: input.deliveryAssignmentId ?? null,
+        checklistResults,
+        notes: input.notes?.trim() || null,
+        evidenceFileIds: input.evidenceFileIds ?? [],
+      }),
+    );
+
+    if (manager) {
+      await this.auditService.append(
+        {
+          actorId: input.actorUserId,
+          actorRole: input.actorRole,
+          action: 'pickup_qa_submitted',
+          entityType: 'pickup_qa_submission',
+          entityId: String(submission.id),
+          orderId: input.orderId,
+          reason: `${input.actorRole} completed Pickup QA checklist`,
+          metadata: {
+            checklistResults,
+            supplierAssignmentId: input.supplierAssignmentId ?? null,
+            deliveryAssignmentId: input.deliveryAssignmentId ?? null,
+            evidenceFileIds: input.evidenceFileIds ?? [],
+          },
+        },
+        manager,
+      );
+    } else {
+      await this.auditService.append({
+        actorId: input.actorUserId,
+        actorRole: input.actorRole,
+        action: 'pickup_qa_submitted',
+        entityType: 'pickup_qa_submission',
+        entityId: String(submission.id),
+        orderId: input.orderId,
+        reason: `${input.actorRole} completed Pickup QA checklist`,
+        metadata: {
+          checklistResults,
+          supplierAssignmentId: input.supplierAssignmentId ?? null,
+          deliveryAssignmentId: input.deliveryAssignmentId ?? null,
+          evidenceFileIds: input.evidenceFileIds ?? [],
+        },
+      });
+    }
+
+    return { submission, checklistResults };
+  }
+
+  /** Ops/superadmin: list supplier + rider pickup QA submissions (newest first). */
+  async getPickupQaQueue(limit = 100) {
+    const take = Math.min(Math.max(limit, 1), 200);
+    const rows = await this.pickupQaRepo.find({
+      relations: ['order', 'order.user', 'actor'],
+      order: { createdAt: 'DESC' },
+      take,
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      orderId: row.orderId,
+      orderPublicId: row.order?.orderId ?? null,
+      orderStatus: row.order?.orderStatus ?? null,
+      actorRole: row.actorRole,
+      actorUserId: row.actorUserId,
+      actorName: row.actor?.fullName ?? row.actor?.email ?? null,
+      actorEmail: row.actor?.email ?? null,
+      supplierAssignmentId: row.supplierAssignmentId,
+      deliveryAssignmentId: row.deliveryAssignmentId,
+      checklistResults: row.checklistResults,
+      notes: row.notes,
+      evidenceFileIds: row.evidenceFileIds ?? [],
+      createdAt: row.createdAt,
+      clientName: row.order?.user?.fullName ?? null,
+      clientEmail: row.order?.user?.email ?? null,
+    }));
+  }
+
+  async getPickupQaSubmission(id: number) {
+    const row = await this.pickupQaRepo.findOne({
+      where: { id },
+      relations: ['order', 'order.user', 'actor'],
+    });
+    if (!row) {
+      throw new NotFoundException(`Pickup QA submission ${id} not found`);
+    }
+    return {
+      id: row.id,
+      orderId: row.orderId,
+      orderPublicId: row.order?.orderId ?? null,
+      orderStatus: row.order?.orderStatus ?? null,
+      actorRole: row.actorRole,
+      actorUserId: row.actorUserId,
+      actorName: row.actor?.fullName ?? row.actor?.email ?? null,
+      actorEmail: row.actor?.email ?? null,
+      supplierAssignmentId: row.supplierAssignmentId,
+      deliveryAssignmentId: row.deliveryAssignmentId,
+      checklistResults: row.checklistResults,
+      checklistDefinition: PICKUP_QA_CHECKLIST_ITEMS,
+      notes: row.notes,
+      evidenceFileIds: row.evidenceFileIds ?? [],
+      createdAt: row.createdAt,
+      clientName: row.order?.user?.fullName ?? null,
+      clientEmail: row.order?.user?.email ?? null,
+    };
+  }
 
   /**
    * Orders awaiting Ops QA. Includes `submitted` (auto-promote on open/decision)

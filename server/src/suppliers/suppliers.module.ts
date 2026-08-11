@@ -11,6 +11,7 @@ import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { AuditModule } from '../audit/audit.module';
 import { FilesModule } from '../files/files.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { QualityModule } from '../quality/quality.module';
 import { SuppliersService } from './suppliers.service';
 import { SuppliersController } from './suppliers.controller';
 import { SupplierJobsService } from './supplier-jobs.service';
@@ -31,6 +32,7 @@ import { SupplierJobsController } from './supplier-jobs.controller';
     AuditModule,
     FilesModule,
     NotificationsModule,
+    QualityModule,
   ],
   controllers: [SuppliersController, SupplierJobsController],
   providers: [SuppliersService, SupplierJobsService],

@@ -27,6 +27,8 @@ import { AuditService } from '../audit/audit.service';
 import { FilesService } from '../files/files.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ProductionMilestone } from './dto/production-status.dto';
+import { QualityService } from '../quality/quality.service';
+import { AuditEvent } from '../audit/entities/audit-event.entity';
 
 describe('SupplierJobsService', () => {
   let service: SupplierJobsService;
@@ -118,6 +120,7 @@ describe('SupplierJobsService', () => {
     txAssignmentRepo = {
       findOne: jest.fn(),
       save: jest.fn(async (row) => row),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     txOrdersRepo = {
       findOne: jest.fn(),
@@ -128,6 +131,9 @@ describe('SupplierJobsService', () => {
     };
     txFileRepo = {
       findOne: jest.fn(),
+    };
+    const txAuditRepo = {
+      find: jest.fn().mockResolvedValue([]),
     };
 
     assignmentRepo = {
@@ -159,6 +165,19 @@ describe('SupplierJobsService', () => {
     notificationsService = {
       create: jest.fn().mockResolvedValue({}),
     };
+    const qualityService = {
+      recordPickupQaSubmission: jest.fn().mockResolvedValue({
+        checklistResults: {
+          quantity_match: { pass: true },
+          specification_match: { pass: true },
+          visible_defects: { pass: true },
+          packaging_integrity: { pass: true },
+          documentation: { pass: true },
+          supplier_sign_off: { pass: true },
+        },
+        submission: { id: 1 },
+      }),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -175,6 +194,10 @@ describe('SupplierJobsService', () => {
         {
           provide: DataSource,
           useValue: {
+            getRepository: jest.fn((entity: unknown) => {
+              if (entity === AuditEvent) return txAuditRepo;
+              return { find: jest.fn().mockResolvedValue([]) };
+            }),
             transaction: jest.fn(async (fn: (m: unknown) => unknown) =>
               fn({
                 getRepository: (entity: unknown) => {
@@ -182,7 +205,8 @@ describe('SupplierJobsService', () => {
                   if (entity === Order) return txOrdersRepo;
                   if (entity === OrderStatusHistory) return txHistoryRepo;
                   if (entity === FileMetadata) return txFileRepo;
-                  return {};
+                  if (entity === AuditEvent) return txAuditRepo;
+                  return { find: jest.fn().mockResolvedValue([]) };
                 },
               }),
             ),
@@ -191,6 +215,7 @@ describe('SupplierJobsService', () => {
         { provide: AuditService, useValue: auditService },
         { provide: FilesService, useValue: filesService },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: QualityService, useValue: qualityService },
       ],
     }).compile();
 
@@ -578,6 +603,24 @@ describe('SupplierJobsService', () => {
       } as FileMetadata;
     }
 
+    const fullChecklist = {
+      quantity_match: true,
+      specification_match: true,
+      visible_defects: true,
+      packaging_integrity: true,
+      documentation: true,
+      supplier_sign_off: {
+        pass: true,
+        signatureData: JSON.stringify({
+          format: 'gridgo-signature-v1',
+          points: [
+            [1, 2],
+            [3, 4],
+          ],
+        }),
+      },
+    };
+
     it('production → supplier_self_qc with owned evidence files', async () => {
       // also persists evidence ids on the assignment for client display
       txAssignmentRepo.findOne.mockResolvedValue(
@@ -595,7 +638,7 @@ describe('SupplierJobsService', () => {
         7,
         {
           evidenceFileIds: [200],
-          checklist: { print_quality: true },
+          checklist: fullChecklist,
           notes: 'Looks good',
         },
         actor,
@@ -616,7 +659,6 @@ describe('SupplierJobsService', () => {
           action: 'supplier_self_qc',
           metadata: expect.objectContaining({
             evidenceFileIds: [200],
-            checklist: { print_quality: true },
           }),
         }),
         expect.anything(),
@@ -627,6 +669,16 @@ describe('SupplierJobsService', () => {
       await expect(service.submitSelfQc(7, {}, actor)).rejects.toMatchObject({
         response: expect.objectContaining({
           code: 'self_qc_evidence_required',
+        }),
+      });
+    });
+
+    it('rejects self-qc without pickup QA checklist', async () => {
+      await expect(
+        service.submitSelfQc(7, { evidenceFileIds: [200] }, actor),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'pickup_qa_checklist_required',
         }),
       });
     });
@@ -644,7 +696,11 @@ describe('SupplierJobsService', () => {
       txFileRepo.findOne.mockResolvedValue(ownedEvidence({ uploadedBy: 999 }));
 
       await expect(
-        service.submitSelfQc(7, { evidenceFileIds: [200] }, actor),
+        service.submitSelfQc(
+          7,
+          { evidenceFileIds: [200], checklist: fullChecklist },
+          actor,
+        ),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'evidence_not_owned' }),
       });
@@ -663,7 +719,11 @@ describe('SupplierJobsService', () => {
       txFileRepo.findOne.mockResolvedValue(ownedEvidence());
 
       await expect(
-        service.submitSelfQc(7, { evidenceFileIds: [200] }, actor),
+        service.submitSelfQc(
+          7,
+          { evidenceFileIds: [200], checklist: fullChecklist },
+          actor,
+        ),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'not_in_production' }),
       });
@@ -681,7 +741,11 @@ describe('SupplierJobsService', () => {
       );
 
       await expect(
-        service.submitSelfQc(7, { evidenceFileIds: [200] }, actor),
+        service.submitSelfQc(
+          7,
+          { evidenceFileIds: [200], checklist: fullChecklist },
+          actor,
+        ),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'payment_not_authorized' }),
       });
@@ -696,7 +760,11 @@ describe('SupplierJobsService', () => {
       );
 
       await expect(
-        service.submitSelfQc(7, { evidenceFileIds: [200] }, actor),
+        service.submitSelfQc(
+          7,
+          { evidenceFileIds: [200], checklist: fullChecklist },
+          actor,
+        ),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'not_own_assignment' }),
       });
@@ -730,7 +798,12 @@ describe('SupplierJobsService', () => {
         buffer: Buffer.from('fake'),
       } as Express.Multer.File;
 
-      const result = await service.submitSelfQc(7, {}, actor, file);
+      const result = await service.submitSelfQc(
+        7,
+        { checklist: fullChecklist },
+        actor,
+        file,
+      );
 
       expect(filesService.storeMetadata).toHaveBeenCalled();
       expect(result.evidenceFileIds).toEqual([301]);

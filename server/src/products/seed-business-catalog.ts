@@ -68,7 +68,17 @@ type SpecTemplateKey =
   | 'blueprint'
   | 'packaging';
 
-const DOC_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'docx', 'ai', 'psd'];
+const DOC_EXTS = [
+  'pdf',
+  'png',
+  'jpg',
+  'jpeg',
+  'tif',
+  'tiff',
+  'docx',
+  'ai',
+  'psd',
+];
 const IMAGE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'ai', 'psd', 'svg'];
 const MODEL_EXTS = ['stl', 'obj', '3mf', 'glb', 'gltf'];
 const CAD_EXTS = ['pdf', 'dwg', 'dxf', 'plt', 'png'];
@@ -89,7 +99,8 @@ const BUSINESS_CATALOG: CategorySeed[] = [
         name: 'Flyers',
         slug: 'flyers',
         description: 'Single-sheet promotional flyers.',
-        mobileDescription: 'Single sheets, event promos, product announcements.',
+        mobileDescription:
+          'Single sheets, event promos, product announcements.',
         sortOrder: 10,
         variants: [
           {
@@ -567,8 +578,7 @@ const BUSINESS_CATALOG: CategorySeed[] = [
   {
     name: 'Recognition, Awards & Signage',
     slug: 'recognition-awards',
-    description:
-      'Certificates, plaques, medals, and business/store signage.',
+    description: 'Certificates, plaques, medals, and business/store signage.',
     mobileDescription: 'Certificates, plaques, medals, and store signs.',
     audienceLabel:
       'Best for: Competitions, graduations, guest speakers, store branding, and office spaces.',
@@ -578,7 +588,8 @@ const BUSINESS_CATALOG: CategorySeed[] = [
       {
         name: 'Certificates & Diplomas',
         slug: 'certificates-diplomas',
-        description: 'Specialty paper, foil-stamped, and embossed certificates.',
+        description:
+          'Specialty paper, foil-stamped, and embossed certificates.',
         mobileDescription: 'Specialty, foil, and embossed certificates.',
         sortOrder: 10,
         variants: [
@@ -753,8 +764,7 @@ const BUSINESS_CATALOG: CategorySeed[] = [
   {
     name: 'Specialized & Prototyping Services',
     slug: 'specialized-prototyping',
-    description:
-      '3D models, CAD plotting, and custom packaging production.',
+    description: '3D models, CAD plotting, and custom packaging production.',
     mobileDescription: '3D models, blueprints, and custom packaging.',
     audienceLabel:
       'Best for: Architecture students, engineers, industrial designers, and specialized builds.',
@@ -1010,271 +1020,960 @@ async function seedTemporarySpecs(
 ): Promise<void> {
   switch (template) {
     case 'print_sheet':
-      await insertSpec(ds, categoryId, 'paper_size', 'Paper Size', 'multiplier', 10, [
-        { label: 'A5', value: 'a5', multiplier: 0.8, sortOrder: 10 },
-        { label: 'A4', value: 'a4', multiplier: 1, isDefault: true, sortOrder: 20 },
-        { label: 'A3', value: 'a3', multiplier: 1.5, sortOrder: 30 },
-        { label: 'Letter', value: 'letter', multiplier: 1, sortOrder: 40 },
-      ]);
-      await insertSpec(ds, categoryId, 'color_mode', 'Color Mode', 'multiplier', 20, [
-        { label: 'B&W', value: 'bw', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Color', value: 'color', multiplier: 2.5, sortOrder: 20 },
-      ]);
-      await insertSpec(ds, categoryId, 'paper_stock', 'Paper Stock', 'multiplier', 30, [
-        { label: 'Matte 120gsm', value: 'matte_120', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Gloss 150gsm', value: 'gloss_150', multiplier: 1.3, sortOrder: 20 },
-        { label: 'Cardstock 250gsm', value: 'card_250', multiplier: 1.8, sortOrder: 30 },
-      ]);
-      await insertSpec(ds, categoryId, 'print_sides', 'Print Sides', 'multiplier', 40, [
-        { label: 'Single-sided', value: 'simplex', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Double-sided', value: 'duplex', multiplier: 1.7, sortOrder: 20 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'paper_size',
+        'Paper Size',
+        'multiplier',
+        10,
+        [
+          { label: 'A5', value: 'a5', multiplier: 0.8, sortOrder: 10 },
+          {
+            label: 'A4',
+            value: 'a4',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 20,
+          },
+          { label: 'A3', value: 'a3', multiplier: 1.5, sortOrder: 30 },
+          { label: 'Letter', value: 'letter', multiplier: 1, sortOrder: 40 },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'color_mode',
+        'Color Mode',
+        'multiplier',
+        20,
+        [
+          {
+            label: 'B&W',
+            value: 'bw',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: 'Color', value: 'color', multiplier: 2.5, sortOrder: 20 },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'paper_stock',
+        'Paper Stock',
+        'multiplier',
+        30,
+        [
+          {
+            label: 'Matte 120gsm',
+            value: 'matte_120',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Gloss 150gsm',
+            value: 'gloss_150',
+            multiplier: 1.3,
+            sortOrder: 20,
+          },
+          {
+            label: 'Cardstock 250gsm',
+            value: 'card_250',
+            multiplier: 1.8,
+            sortOrder: 30,
+          },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'print_sides',
+        'Print Sides',
+        'multiplier',
+        40,
+        [
+          {
+            label: 'Single-sided',
+            value: 'simplex',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Double-sided',
+            value: 'duplex',
+            multiplier: 1.7,
+            sortOrder: 20,
+          },
+        ],
+      );
       break;
 
     case 'brochure':
-      await insertSpec(ds, categoryId, 'finished_size', 'Finished Size', 'multiplier', 10, [
-        { label: 'A5', value: 'a5', multiplier: 0.9, sortOrder: 10 },
-        { label: 'A4', value: 'a4', multiplier: 1, isDefault: true, sortOrder: 20 },
-        { label: 'DL', value: 'dl', multiplier: 0.85, sortOrder: 30 },
-      ]);
-      await insertSpec(ds, categoryId, 'paper_stock', 'Paper Stock', 'multiplier', 20, [
-        { label: 'Matte 150gsm', value: 'matte_150', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Gloss 200gsm', value: 'gloss_200', multiplier: 1.4, sortOrder: 20 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'finished_size',
+        'Finished Size',
+        'multiplier',
+        10,
+        [
+          { label: 'A5', value: 'a5', multiplier: 0.9, sortOrder: 10 },
+          {
+            label: 'A4',
+            value: 'a4',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 20,
+          },
+          { label: 'DL', value: 'dl', multiplier: 0.85, sortOrder: 30 },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'paper_stock',
+        'Paper Stock',
+        'multiplier',
+        20,
+        [
+          {
+            label: 'Matte 150gsm',
+            value: 'matte_150',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Gloss 200gsm',
+            value: 'gloss_200',
+            multiplier: 1.4,
+            sortOrder: 20,
+          },
+        ],
+      );
       await insertSpec(ds, categoryId, 'finish', 'Finish', 'fixed_fee', 30, [
-        { label: 'None', value: 'none', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'Lamination', value: 'lamination', fixedFee: 15, sortOrder: 20 },
+        {
+          label: 'None',
+          value: 'none',
+          fixedFee: 0,
+          isDefault: true,
+          sortOrder: 10,
+        },
+        {
+          label: 'Lamination',
+          value: 'lamination',
+          fixedFee: 15,
+          sortOrder: 20,
+        },
         { label: 'Spot UV', value: 'spot_uv', fixedFee: 35, sortOrder: 30 },
       ]);
       break;
 
     case 'poster_banner':
       await insertSpec(ds, categoryId, 'size', 'Size', 'multiplier', 10, [
-        { label: 'A2', value: 'a2', multiplier: 1, isDefault: true, sortOrder: 10 },
+        {
+          label: 'A2',
+          value: 'a2',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 10,
+        },
         { label: 'A1', value: 'a1', multiplier: 1.6, sortOrder: 20 },
         { label: 'A0', value: 'a0', multiplier: 2.4, sortOrder: 30 },
         { label: '2x5 ft', value: '2x5', multiplier: 2.0, sortOrder: 40 },
         { label: '3x6 ft', value: '3x6', multiplier: 3.0, sortOrder: 50 },
       ]);
-      await insertSpec(ds, categoryId, 'material', 'Material', 'multiplier', 20, [
-        { label: 'Photo paper', value: 'photo_paper', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Vinyl', value: 'vinyl', multiplier: 1.4, sortOrder: 20 },
-        { label: 'Fabric', value: 'fabric', multiplier: 1.8, sortOrder: 30 },
-      ]);
-      await insertSpec(ds, categoryId, 'hardware', 'Hardware', 'fixed_fee', 30, [
-        { label: 'Print only', value: 'print_only', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'With stand', value: 'with_stand', fixedFee: 450, sortOrder: 20 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'material',
+        'Material',
+        'multiplier',
+        20,
+        [
+          {
+            label: 'Photo paper',
+            value: 'photo_paper',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: 'Vinyl', value: 'vinyl', multiplier: 1.4, sortOrder: 20 },
+          { label: 'Fabric', value: 'fabric', multiplier: 1.8, sortOrder: 30 },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'hardware',
+        'Hardware',
+        'fixed_fee',
+        30,
+        [
+          {
+            label: 'Print only',
+            value: 'print_only',
+            fixedFee: 0,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'With stand',
+            value: 'with_stand',
+            fixedFee: 450,
+            sortOrder: 20,
+          },
+        ],
+      );
       break;
 
     case 'business_card':
       await insertSpec(ds, categoryId, 'size', 'Size', 'multiplier', 10, [
-        { label: 'Standard (3.5×2 in)', value: 'standard', multiplier: 1, isDefault: true, sortOrder: 10 },
+        {
+          label: 'Standard (3.5×2 in)',
+          value: 'standard',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 10,
+        },
         { label: 'Square', value: 'square', multiplier: 1.15, sortOrder: 20 },
         { label: 'Mini', value: 'mini', multiplier: 0.9, sortOrder: 30 },
       ]);
-      await insertSpec(ds, categoryId, 'sides', 'Print Sides', 'multiplier', 20, [
-        { label: 'Single-sided', value: 'simplex', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Double-sided', value: 'duplex', multiplier: 1.6, sortOrder: 20 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'sides',
+        'Print Sides',
+        'multiplier',
+        20,
+        [
+          {
+            label: 'Single-sided',
+            value: 'simplex',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Double-sided',
+            value: 'duplex',
+            multiplier: 1.6,
+            sortOrder: 20,
+          },
+        ],
+      );
       await insertSpec(ds, categoryId, 'corner', 'Corners', 'fixed_fee', 30, [
-        { label: 'Square', value: 'square', fixedFee: 0, isDefault: true, sortOrder: 10 },
+        {
+          label: 'Square',
+          value: 'square',
+          fixedFee: 0,
+          isDefault: true,
+          sortOrder: 10,
+        },
         { label: 'Rounded', value: 'rounded', fixedFee: 20, sortOrder: 20 },
       ]);
       break;
 
     case 'sticker':
-      await insertSpec(ds, categoryId, 'material', 'Material', 'multiplier', 10, [
-        { label: 'Paper', value: 'paper', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Vinyl', value: 'vinyl', multiplier: 1.5, sortOrder: 20 },
-        { label: 'Clear vinyl', value: 'clear_vinyl', multiplier: 1.8, sortOrder: 30 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'material',
+        'Material',
+        'multiplier',
+        10,
+        [
+          {
+            label: 'Paper',
+            value: 'paper',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: 'Vinyl', value: 'vinyl', multiplier: 1.5, sortOrder: 20 },
+          {
+            label: 'Clear vinyl',
+            value: 'clear_vinyl',
+            multiplier: 1.8,
+            sortOrder: 30,
+          },
+        ],
+      );
       await insertSpec(ds, categoryId, 'finish', 'Finish', 'multiplier', 20, [
-        { label: 'Matte', value: 'matte', multiplier: 1, isDefault: true, sortOrder: 10 },
+        {
+          label: 'Matte',
+          value: 'matte',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 10,
+        },
         { label: 'Gloss', value: 'gloss', multiplier: 1.1, sortOrder: 20 },
-        { label: 'Waterproof', value: 'waterproof', multiplier: 1.4, sortOrder: 30 },
+        {
+          label: 'Waterproof',
+          value: 'waterproof',
+          multiplier: 1.4,
+          sortOrder: 30,
+        },
       ]);
-      await insertSpec(ds, categoryId, 'cut_type', 'Cut Type', 'fixed_fee', 30, [
-        { label: 'Kiss-cut', value: 'kiss_cut', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'Die-cut', value: 'die_cut', fixedFee: 50, sortOrder: 20 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'cut_type',
+        'Cut Type',
+        'fixed_fee',
+        30,
+        [
+          {
+            label: 'Kiss-cut',
+            value: 'kiss_cut',
+            fixedFee: 0,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: 'Die-cut', value: 'die_cut', fixedFee: 50, sortOrder: 20 },
+        ],
+      );
       break;
 
     case 'tarpaulin':
       await insertSpec(ds, categoryId, 'finish', 'Finish', 'multiplier', 10, [
-        { label: 'Standard', value: 'standard', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Blockout', value: 'blockout', multiplier: 1.25, sortOrder: 20 },
+        {
+          label: 'Standard',
+          value: 'standard',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 10,
+        },
+        {
+          label: 'Blockout',
+          value: 'blockout',
+          multiplier: 1.25,
+          sortOrder: 20,
+        },
         { label: 'Mesh', value: 'mesh', multiplier: 1.35, sortOrder: 30 },
       ]);
-      await insertSpec(ds, categoryId, 'eyelets', 'Eyelets / Hem', 'fixed_fee', 20, [
-        { label: 'None', value: 'none', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'Eyelets', value: 'eyelets', fixedFee: 80, sortOrder: 20 },
-        { label: 'Hem + eyelets', value: 'hem_eyelets', fixedFee: 150, sortOrder: 30 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'eyelets',
+        'Eyelets / Hem',
+        'fixed_fee',
+        20,
+        [
+          {
+            label: 'None',
+            value: 'none',
+            fixedFee: 0,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: 'Eyelets', value: 'eyelets', fixedFee: 80, sortOrder: 20 },
+          {
+            label: 'Hem + eyelets',
+            value: 'hem_eyelets',
+            fixedFee: 150,
+            sortOrder: 30,
+          },
+        ],
+      );
       break;
 
     case 'lanyard':
       await insertSpec(ds, categoryId, 'width', 'Width', 'multiplier', 10, [
         { label: '15mm', value: '15mm', multiplier: 0.9, sortOrder: 10 },
-        { label: '20mm', value: '20mm', multiplier: 1, isDefault: true, sortOrder: 20 },
+        {
+          label: '20mm',
+          value: '20mm',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 20,
+        },
         { label: '25mm', value: '25mm', multiplier: 1.15, sortOrder: 30 },
       ]);
-      await insertSpec(ds, categoryId, 'attachment', 'Attachment', 'fixed_fee', 20, [
-        { label: 'J-hook', value: 'j_hook', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'Breakaway', value: 'breakaway', fixedFee: 8, sortOrder: 20 },
-        { label: 'Badge reel', value: 'badge_reel', fixedFee: 25, sortOrder: 30 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'attachment',
+        'Attachment',
+        'fixed_fee',
+        20,
+        [
+          {
+            label: 'J-hook',
+            value: 'j_hook',
+            fixedFee: 0,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Breakaway',
+            value: 'breakaway',
+            fixedFee: 8,
+            sortOrder: 20,
+          },
+          {
+            label: 'Badge reel',
+            value: 'badge_reel',
+            fixedFee: 25,
+            sortOrder: 30,
+          },
+        ],
+      );
       break;
 
     case 'apparel':
       await insertSpec(ds, categoryId, 'size', 'Size', 'multiplier', 10, [
         { label: 'S', value: 's', multiplier: 1, sortOrder: 10 },
-        { label: 'M', value: 'm', multiplier: 1, isDefault: true, sortOrder: 20 },
+        {
+          label: 'M',
+          value: 'm',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 20,
+        },
         { label: 'L', value: 'l', multiplier: 1, sortOrder: 30 },
         { label: 'XL', value: 'xl', multiplier: 1.05, sortOrder: 40 },
         { label: '2XL', value: '2xl', multiplier: 1.1, sortOrder: 50 },
       ]);
-      await insertSpec(ds, categoryId, 'print_method', 'Print Method', 'multiplier', 20, [
-        { label: 'DTF', value: 'dtf', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Screen print', value: 'screen', multiplier: 0.9, sortOrder: 20 },
-        { label: 'Embroidery', value: 'embroidery', multiplier: 1.5, sortOrder: 30 },
-      ]);
-      await insertSpec(ds, categoryId, 'placement', 'Placement', 'fixed_fee', 30, [
-        { label: 'Front only', value: 'front', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'Front + back', value: 'front_back', fixedFee: 80, sortOrder: 20 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'print_method',
+        'Print Method',
+        'multiplier',
+        20,
+        [
+          {
+            label: 'DTF',
+            value: 'dtf',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Screen print',
+            value: 'screen',
+            multiplier: 0.9,
+            sortOrder: 20,
+          },
+          {
+            label: 'Embroidery',
+            value: 'embroidery',
+            multiplier: 1.5,
+            sortOrder: 30,
+          },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'placement',
+        'Placement',
+        'fixed_fee',
+        30,
+        [
+          {
+            label: 'Front only',
+            value: 'front',
+            fixedFee: 0,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Front + back',
+            value: 'front_back',
+            fixedFee: 80,
+            sortOrder: 20,
+          },
+        ],
+      );
       break;
 
     case 'drinkware':
-      await insertSpec(ds, categoryId, 'capacity', 'Capacity', 'multiplier', 10, [
-        { label: '11oz', value: '11oz', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: '15oz', value: '15oz', multiplier: 1.15, sortOrder: 20 },
-        { label: '20oz', value: '20oz', multiplier: 1.3, sortOrder: 30 },
-      ]);
-      await insertSpec(ds, categoryId, 'decoration', 'Decoration', 'multiplier', 20, [
-        { label: 'Sublimation', value: 'sublimation', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Laser engrave', value: 'laser', multiplier: 1.25, sortOrder: 20 },
-        { label: 'UV print', value: 'uv', multiplier: 1.15, sortOrder: 30 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'capacity',
+        'Capacity',
+        'multiplier',
+        10,
+        [
+          {
+            label: '11oz',
+            value: '11oz',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: '15oz', value: '15oz', multiplier: 1.15, sortOrder: 20 },
+          { label: '20oz', value: '20oz', multiplier: 1.3, sortOrder: 30 },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'decoration',
+        'Decoration',
+        'multiplier',
+        20,
+        [
+          {
+            label: 'Sublimation',
+            value: 'sublimation',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Laser engrave',
+            value: 'laser',
+            multiplier: 1.25,
+            sortOrder: 20,
+          },
+          { label: 'UV print', value: 'uv', multiplier: 1.15, sortOrder: 30 },
+        ],
+      );
       break;
 
     case 'giveaway':
-      await insertSpec(ds, categoryId, 'branding', 'Branding', 'multiplier', 10, [
-        { label: '1-color print', value: '1color', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Full color', value: 'full_color', multiplier: 1.4, sortOrder: 20 },
-        { label: 'Laser engrave', value: 'laser', multiplier: 1.3, sortOrder: 30 },
-      ]);
-      await insertSpec(ds, categoryId, 'packaging', 'Packaging', 'fixed_fee', 20, [
-        { label: 'Bulk pack', value: 'bulk', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'Individual wrap', value: 'individual', fixedFee: 5, sortOrder: 20 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'branding',
+        'Branding',
+        'multiplier',
+        10,
+        [
+          {
+            label: '1-color print',
+            value: '1color',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Full color',
+            value: 'full_color',
+            multiplier: 1.4,
+            sortOrder: 20,
+          },
+          {
+            label: 'Laser engrave',
+            value: 'laser',
+            multiplier: 1.3,
+            sortOrder: 30,
+          },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'packaging',
+        'Packaging',
+        'fixed_fee',
+        20,
+        [
+          {
+            label: 'Bulk pack',
+            value: 'bulk',
+            fixedFee: 0,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Individual wrap',
+            value: 'individual',
+            fixedFee: 5,
+            sortOrder: 20,
+          },
+        ],
+      );
       break;
 
     case 'certificate':
       await insertSpec(ds, categoryId, 'size', 'Size', 'multiplier', 10, [
-        { label: 'A4 landscape', value: 'a4_landscape', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'A4 portrait', value: 'a4_portrait', multiplier: 1, sortOrder: 20 },
+        {
+          label: 'A4 landscape',
+          value: 'a4_landscape',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 10,
+        },
+        {
+          label: 'A4 portrait',
+          value: 'a4_portrait',
+          multiplier: 1,
+          sortOrder: 20,
+        },
         { label: 'Letter', value: 'letter', multiplier: 1, sortOrder: 30 },
       ]);
       await insertSpec(ds, categoryId, 'stock', 'Stock', 'multiplier', 20, [
-        { label: 'Parchment', value: 'parchment', multiplier: 1, isDefault: true, sortOrder: 10 },
+        {
+          label: 'Parchment',
+          value: 'parchment',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 10,
+        },
         { label: 'Linen', value: 'linen', multiplier: 1.2, sortOrder: 20 },
-        { label: 'Premium card', value: 'premium_card', multiplier: 1.35, sortOrder: 30 },
+        {
+          label: 'Premium card',
+          value: 'premium_card',
+          multiplier: 1.35,
+          sortOrder: 30,
+        },
       ]);
       break;
 
     case 'plaque':
       await insertSpec(ds, categoryId, 'size', 'Size', 'multiplier', 10, [
-        { label: '6×8 in', value: '6x8', multiplier: 1, isDefault: true, sortOrder: 10 },
+        {
+          label: '6×8 in',
+          value: '6x8',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 10,
+        },
         { label: '8×10 in', value: '8x10', multiplier: 1.4, sortOrder: 20 },
         { label: '10×12 in', value: '10x12', multiplier: 1.8, sortOrder: 30 },
       ]);
-      await insertSpec(ds, categoryId, 'plate', 'Plate Finish', 'fixed_fee', 20, [
-        { label: 'Gold', value: 'gold', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'Silver', value: 'silver', fixedFee: 0, sortOrder: 20 },
-        { label: 'Black metal', value: 'black_metal', fixedFee: 50, sortOrder: 30 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'plate',
+        'Plate Finish',
+        'fixed_fee',
+        20,
+        [
+          {
+            label: 'Gold',
+            value: 'gold',
+            fixedFee: 0,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: 'Silver', value: 'silver', fixedFee: 0, sortOrder: 20 },
+          {
+            label: 'Black metal',
+            value: 'black_metal',
+            fixedFee: 50,
+            sortOrder: 30,
+          },
+        ],
+      );
       break;
 
     case 'medal':
-      await insertSpec(ds, categoryId, 'diameter', 'Diameter', 'multiplier', 10, [
-        { label: '50mm', value: '50mm', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: '60mm', value: '60mm', multiplier: 1.2, sortOrder: 20 },
-        { label: '70mm', value: '70mm', multiplier: 1.4, sortOrder: 30 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'diameter',
+        'Diameter',
+        'multiplier',
+        10,
+        [
+          {
+            label: '50mm',
+            value: '50mm',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: '60mm', value: '60mm', multiplier: 1.2, sortOrder: 20 },
+          { label: '70mm', value: '70mm', multiplier: 1.4, sortOrder: 30 },
+        ],
+      );
       await insertSpec(ds, categoryId, 'finish', 'Finish', 'multiplier', 20, [
-        { label: 'Gold', value: 'gold', multiplier: 1, isDefault: true, sortOrder: 10 },
+        {
+          label: 'Gold',
+          value: 'gold',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 10,
+        },
         { label: 'Silver', value: 'silver', multiplier: 1, sortOrder: 20 },
         { label: 'Bronze', value: 'bronze', multiplier: 1, sortOrder: 30 },
-        { label: 'Custom color', value: 'custom', multiplier: 1.25, sortOrder: 40 },
+        {
+          label: 'Custom color',
+          value: 'custom',
+          multiplier: 1.25,
+          sortOrder: 40,
+        },
       ]);
       break;
 
     case 'signage':
-      await insertSpec(ds, categoryId, 'mounting', 'Mounting', 'fixed_fee', 10, [
-        { label: 'None / pickup', value: 'none', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'Wall mount kit', value: 'wall_mount', fixedFee: 350, sortOrder: 20 },
-        { label: 'Install assist', value: 'install', fixedFee: 1500, sortOrder: 30 },
-      ]);
-      await insertSpec(ds, categoryId, 'lighting', 'Lighting', 'multiplier', 20, [
-        { label: 'None', value: 'none', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Backlit', value: 'backlit', multiplier: 1.5, sortOrder: 20 },
-        { label: 'Front-lit', value: 'front_lit', multiplier: 1.35, sortOrder: 30 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'mounting',
+        'Mounting',
+        'fixed_fee',
+        10,
+        [
+          {
+            label: 'None / pickup',
+            value: 'none',
+            fixedFee: 0,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Wall mount kit',
+            value: 'wall_mount',
+            fixedFee: 350,
+            sortOrder: 20,
+          },
+          {
+            label: 'Install assist',
+            value: 'install',
+            fixedFee: 1500,
+            sortOrder: 30,
+          },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'lighting',
+        'Lighting',
+        'multiplier',
+        20,
+        [
+          {
+            label: 'None',
+            value: 'none',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Backlit',
+            value: 'backlit',
+            multiplier: 1.5,
+            sortOrder: 20,
+          },
+          {
+            label: 'Front-lit',
+            value: 'front_lit',
+            multiplier: 1.35,
+            sortOrder: 30,
+          },
+        ],
+      );
       break;
 
     case 'model_3d':
-      await insertSpec(ds, categoryId, 'material', 'Material', 'unit_cost', 10, [
-        { label: 'PLA', value: 'pla', unitCost: 3.5, isDefault: true, sortOrder: 10 },
-        { label: 'PETG', value: 'petg', unitCost: 4.5, sortOrder: 20 },
-        { label: 'ABS', value: 'abs', unitCost: 4.0, sortOrder: 30 },
-        { label: 'Resin', value: 'resin', unitCost: 8.0, sortOrder: 40 },
-      ]);
-      await insertSpec(ds, categoryId, 'quality', 'Print Quality', 'multiplier', 20, [
-        { label: 'Draft (0.28mm)', value: 'draft', multiplier: 0.85, sortOrder: 10 },
-        { label: 'Standard (0.2mm)', value: 'standard', multiplier: 1, isDefault: true, sortOrder: 20 },
-        { label: 'Fine (0.12mm)', value: 'fine', multiplier: 1.4, sortOrder: 30 },
-      ]);
-      await insertSpec(ds, categoryId, 'supports', 'Supports', 'fixed_fee', 30, [
-        { label: 'Auto', value: 'auto', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'None', value: 'none', fixedFee: 0, sortOrder: 20 },
-        { label: 'Manual dense', value: 'dense', fixedFee: 40, sortOrder: 30 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'material',
+        'Material',
+        'unit_cost',
+        10,
+        [
+          {
+            label: 'PLA',
+            value: 'pla',
+            unitCost: 3.5,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: 'PETG', value: 'petg', unitCost: 4.5, sortOrder: 20 },
+          { label: 'ABS', value: 'abs', unitCost: 4.0, sortOrder: 30 },
+          { label: 'Resin', value: 'resin', unitCost: 8.0, sortOrder: 40 },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'quality',
+        'Print Quality',
+        'multiplier',
+        20,
+        [
+          {
+            label: 'Draft (0.28mm)',
+            value: 'draft',
+            multiplier: 0.85,
+            sortOrder: 10,
+          },
+          {
+            label: 'Standard (0.2mm)',
+            value: 'standard',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 20,
+          },
+          {
+            label: 'Fine (0.12mm)',
+            value: 'fine',
+            multiplier: 1.4,
+            sortOrder: 30,
+          },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'supports',
+        'Supports',
+        'fixed_fee',
+        30,
+        [
+          {
+            label: 'Auto',
+            value: 'auto',
+            fixedFee: 0,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: 'None', value: 'none', fixedFee: 0, sortOrder: 20 },
+          {
+            label: 'Manual dense',
+            value: 'dense',
+            fixedFee: 40,
+            sortOrder: 30,
+          },
+        ],
+      );
       break;
 
     case 'blueprint':
-      await insertSpec(ds, categoryId, 'paper_size', 'Sheet Size', 'multiplier', 10, [
-        { label: 'A3', value: 'a3', multiplier: 0.7, sortOrder: 10 },
-        { label: 'A2', value: 'a2', multiplier: 1, isDefault: true, sortOrder: 20 },
-        { label: 'A1', value: 'a1', multiplier: 1.6, sortOrder: 30 },
-        { label: 'A0', value: 'a0', multiplier: 2.5, sortOrder: 40 },
-      ]);
-      await insertSpec(ds, categoryId, 'color_mode', 'Color Mode', 'multiplier', 20, [
-        { label: 'B&W', value: 'bw', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Color', value: 'color', multiplier: 2.2, sortOrder: 20 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'paper_size',
+        'Sheet Size',
+        'multiplier',
+        10,
+        [
+          { label: 'A3', value: 'a3', multiplier: 0.7, sortOrder: 10 },
+          {
+            label: 'A2',
+            value: 'a2',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 20,
+          },
+          { label: 'A1', value: 'a1', multiplier: 1.6, sortOrder: 30 },
+          { label: 'A0', value: 'a0', multiplier: 2.5, sortOrder: 40 },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'color_mode',
+        'Color Mode',
+        'multiplier',
+        20,
+        [
+          {
+            label: 'B&W',
+            value: 'bw',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          { label: 'Color', value: 'color', multiplier: 2.2, sortOrder: 20 },
+        ],
+      );
       await insertSpec(ds, categoryId, 'media', 'Media', 'multiplier', 30, [
-        { label: 'Bond paper', value: 'bond', multiplier: 1, isDefault: true, sortOrder: 10 },
+        {
+          label: 'Bond paper',
+          value: 'bond',
+          multiplier: 1,
+          isDefault: true,
+          sortOrder: 10,
+        },
         { label: 'Vellum', value: 'vellum', multiplier: 1.3, sortOrder: 20 },
-        { label: 'Polyester film', value: 'polyester', multiplier: 1.8, sortOrder: 30 },
+        {
+          label: 'Polyester film',
+          value: 'polyester',
+          multiplier: 1.8,
+          sortOrder: 30,
+        },
       ]);
       break;
 
     case 'packaging':
-      await insertSpec(ds, categoryId, 'material', 'Material', 'multiplier', 10, [
-        { label: 'Corrugated', value: 'corrugated', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: 'Chipboard', value: 'chipboard', multiplier: 1.2, sortOrder: 20 },
-        { label: 'Kraft', value: 'kraft', multiplier: 1.1, sortOrder: 30 },
-      ]);
-      await insertSpec(ds, categoryId, 'print_coverage', 'Print Coverage', 'multiplier', 20, [
-        { label: '1-side 1-color', value: '1s1c', multiplier: 1, isDefault: true, sortOrder: 10 },
-        { label: '1-side full color', value: '1s_fc', multiplier: 1.5, sortOrder: 20 },
-        { label: '2-side full color', value: '2s_fc', multiplier: 2.0, sortOrder: 30 },
-      ]);
+      await insertSpec(
+        ds,
+        categoryId,
+        'material',
+        'Material',
+        'multiplier',
+        10,
+        [
+          {
+            label: 'Corrugated',
+            value: 'corrugated',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: 'Chipboard',
+            value: 'chipboard',
+            multiplier: 1.2,
+            sortOrder: 20,
+          },
+          { label: 'Kraft', value: 'kraft', multiplier: 1.1, sortOrder: 30 },
+        ],
+      );
+      await insertSpec(
+        ds,
+        categoryId,
+        'print_coverage',
+        'Print Coverage',
+        'multiplier',
+        20,
+        [
+          {
+            label: '1-side 1-color',
+            value: '1s1c',
+            multiplier: 1,
+            isDefault: true,
+            sortOrder: 10,
+          },
+          {
+            label: '1-side full color',
+            value: '1s_fc',
+            multiplier: 1.5,
+            sortOrder: 20,
+          },
+          {
+            label: '2-side full color',
+            value: '2s_fc',
+            multiplier: 2.0,
+            sortOrder: 30,
+          },
+        ],
+      );
       await insertSpec(ds, categoryId, 'finish', 'Finish', 'fixed_fee', 30, [
-        { label: 'None', value: 'none', fixedFee: 0, isDefault: true, sortOrder: 10 },
-        { label: 'Matte laminate', value: 'matte_lam', fixedFee: 25, sortOrder: 20 },
-        { label: 'Gloss laminate', value: 'gloss_lam', fixedFee: 25, sortOrder: 30 },
+        {
+          label: 'None',
+          value: 'none',
+          fixedFee: 0,
+          isDefault: true,
+          sortOrder: 10,
+        },
+        {
+          label: 'Matte laminate',
+          value: 'matte_lam',
+          fixedFee: 25,
+          sortOrder: 20,
+        },
+        {
+          label: 'Gloss laminate',
+          value: 'gloss_lam',
+          fixedFee: 25,
+          sortOrder: 30,
+        },
       ]);
       break;
   }

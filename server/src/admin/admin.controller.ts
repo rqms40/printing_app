@@ -24,6 +24,7 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { adminAllowedNextOrderStatuses } from '../orders/order-status-transition';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
+import { PaymentsService } from '../payments/payments.service';
 import {
   buildAdminUserDetailPayload,
   buildAdminUsersAnalyticsPayload,
@@ -79,6 +80,7 @@ export class AdminController {
     private ordersService: OrdersService,
     private ridersService: RidersService,
     private creditsService: CreditsService,
+    private paymentsService: PaymentsService,
     private ordersGateway: OrdersGateway,
     private notificationsService: NotificationsService,
     private suppliersService: SuppliersService,
@@ -838,7 +840,9 @@ export class AdminController {
       },
     });
     const pendingTopUps = await this.creditsService.getPendingCount();
-    return { newOrders, pendingTopUps };
+    const pendingQrPayments =
+      await this.paymentsService.getPendingQrReceiptCount();
+    return { newOrders, pendingTopUps, pendingQrPayments };
   }
 
   // All orders (not filtered by user)
@@ -925,9 +929,7 @@ export class AdminController {
     for (const event of events) {
       const raw = event.metadata?.milestone;
       const milestone =
-        typeof raw === 'string' && raw.trim()
-          ? raw.trim().toLowerCase()
-          : null;
+        typeof raw === 'string' && raw.trim() ? raw.trim().toLowerCase() : null;
       if (!milestone) continue;
       // Keep first reach time for each milestone key.
       if (byMilestone.has(milestone)) continue;

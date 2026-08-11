@@ -13,12 +13,14 @@ import {
   CodCollection,
   CodCollectionStatus,
 } from './entities/cod-collection.entity';
+import { QrPaymentReceipt } from './entities/qr-payment-receipt.entity';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import {
   Payout,
   PayoutSettlementState,
 } from '../payouts/entities/payout.entity';
+import { FileMetadata } from '../files/entities/file-metadata.entity';
 import {
   COD_PAYOUT_HOLD_REASON,
   CodIneligibilityReason,
@@ -28,13 +30,16 @@ describe('PaymentsService', () => {
   let service: PaymentsService;
   let txnRepo: jest.Mocked<Partial<Repository<PaymentTransaction>>>;
   let codRepo: jest.Mocked<Partial<Repository<CodCollection>>>;
+  let qrReceiptRepo: jest.Mocked<Partial<Repository<QrPaymentReceipt>>>;
   let ordersRepo: jest.Mocked<
     Partial<Repository<Order>> & {
       createQueryBuilder: jest.Mock;
+      manager?: { transaction: jest.Mock };
     }
   >;
   let usersRepo: jest.Mocked<Partial<Repository<User>>>;
   let payoutRepo: jest.Mocked<Partial<Repository<Payout>>>;
+  let fileRepo: jest.Mocked<Partial<Repository<FileMetadata>>>;
   let configValues: Record<string, string | undefined>;
 
   const mockTxn = {
@@ -72,10 +77,28 @@ describe('PaymentsService', () => {
       create: jest.fn((row) => row as CodCollection),
       save: jest.fn(async (row) => ({ id: 10, ...row }) as CodCollection),
     };
+    qrReceiptRepo = {
+      findOne: jest.fn(),
+      create: jest.fn((row) => row as QrPaymentReceipt),
+      save: jest.fn(async (row) => ({ id: 20, ...row }) as QrPaymentReceipt),
+      count: jest.fn().mockResolvedValue(0),
+      createQueryBuilder: jest.fn(),
+    };
     ordersRepo = {
       findOne: jest.fn(),
       save: jest.fn(async (o) => o as Order),
       createQueryBuilder: jest.fn(),
+      manager: {
+        transaction: jest.fn(async (fn) =>
+          fn({
+            getRepository: jest.fn(() => ({
+              findOne: jest.fn(),
+              save: jest.fn(async (x) => x),
+              create: jest.fn((x) => x),
+            })),
+          }),
+        ),
+      },
     };
     usersRepo = {
       findOne: jest.fn(),
@@ -84,15 +107,20 @@ describe('PaymentsService', () => {
       find: jest.fn().mockResolvedValue([]),
       save: jest.fn(async (p) => p as Payout),
     };
+    fileRepo = {
+      findOne: jest.fn(),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
         PaymentsService,
         { provide: getRepositoryToken(PaymentTransaction), useValue: txnRepo },
         { provide: getRepositoryToken(CodCollection), useValue: codRepo },
+        { provide: getRepositoryToken(QrPaymentReceipt), useValue: qrReceiptRepo },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
         { provide: getRepositoryToken(Payout), useValue: payoutRepo },
+        { provide: getRepositoryToken(FileMetadata), useValue: fileRepo },
         { provide: ConfigService, useValue: mockConfig },
       ],
     }).compile();
