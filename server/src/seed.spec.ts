@@ -96,7 +96,7 @@ describe('seed script', () => {
     expect(build).not.toContain('softprops/action-gh-release');
     expect(publisher).toContain('permissions:');
     expect(publisher).toContain('contents: write');
-    expect(publisher).toContain('needs: build');
+    expect(publisher).toMatch(/needs:\s*(\[gate, build\]|build)/);
     expect(publisher).toContain(
       'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
     );
@@ -181,6 +181,18 @@ describe('seed script', () => {
     expect(seedSource).toContain("label: 'Print Mode'");
     expect(seedSource).toContain("label: 'Fit to Scale'");
     expect(seedSource).toContain("label: 'Actual Size'");
+  });
+
+  it('seeds a verified supplier profile for the demo supplier account', () => {
+    const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
+
+    expect(seedSource).toContain("email: 'supplier@gridgo.ph'");
+    expect(seedSource).toContain('INSERT INTO supplier_profiles');
+    expect(seedSource).toContain('INSERT INTO supplier_verifications');
+    expect(seedSource).toContain("status, payout_details_ref");
+    expect(seedSource).toContain("'verified'");
+    expect(seedSource).toContain('INSERT INTO supplier_capabilities');
+    expect(seedSource).toContain('supplier_profiles');
   });
 
   it('seeds accounts with zero orders and no delivery fixtures', () => {
