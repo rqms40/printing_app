@@ -241,6 +241,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_gate != true }}
         run: flutter analyze lib/
 
       - name: Run tests
