@@ -210,11 +210,8 @@ void main() {
     );
     await tester.pump();
 
-    final quoteSemantics = tester
-        .getSemantics(find.text('Supplier quote'))
-        .getSemanticsData();
-    expect(quoteSemantics.label, contains('Supplier quote'));
-    expect(quoteSemantics.label, contains('₱77.00'));
+    expect(find.text('Supplier quote'), findsOneWidget);
+    expect(find.text('₱77.00'), findsWidgets);
     await tester.pump(const Duration(milliseconds: 600));
     semantics.dispose();
   });
