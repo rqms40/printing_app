@@ -48,6 +48,7 @@ import {
 } from '../matching/entities/supplier-assignment.entity';
 import { UpdateAdminRiderDto } from './dto/update-admin-rider.dto';
 import { AuditEvent } from '../audit/entities/audit-event.entity';
+import { ChatService } from '../chat/chat.service';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -98,6 +99,7 @@ export class AdminController {
     private supplierAssignmentsRepo: Repository<SupplierAssignment>,
     @InjectRepository(AuditEvent)
     private auditEventsRepo: Repository<AuditEvent>,
+    private chatService: ChatService,
   ) {}
 
   @Patch('tam-surveys/settings')
@@ -115,6 +117,16 @@ export class AdminController {
     }
     await this.tamSurveySettingsRepo.save(settings);
     return settings;
+  }
+
+  @Get('chat/settings')
+  async getChatSettings() {
+    return this.chatService.getChatSettings();
+  }
+
+  @Patch('chat/settings')
+  async updateChatSettings(@Body() body: { isFileSendingEnabled: boolean; filteredWords: string[] }) {
+    return this.chatService.updateChatSettings(body.isFileSendingEnabled, body.filteredWords);
   }
 
   private normalizeAnalyticsPeriod(period?: string): AnalyticsPeriod {

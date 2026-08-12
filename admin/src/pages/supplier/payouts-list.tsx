@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Space, Table, Tag, Typography } from 'antd';
 import { List } from '@refinedev/antd';
+import { useGetIdentity } from '@refinedev/core';
+import { Navigate } from 'react-router-dom';
 import { apiClient } from '@/providers/api-client';
 import { formatDateTime, formatCurrency } from '@/utils/format';
 import { minorToPesos } from '@/services/superAdminApi';
+import { isSupplierRole } from '@/types/enums';
+import type { AdminIdentity } from '@/utils/api-normalizers';
 
 const { Text } = Typography;
 
@@ -33,8 +37,10 @@ export function SupplierPayoutsListPage() {
   const [rows, setRows] = useState<SupplierPayout[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { data: identity, isLoading: isIdentityLoading } = useGetIdentity<AdminIdentity>();
 
   const reload = useCallback(async () => {
+    if (!isSupplierRole(identity?.role)) return;
     setLoading(true);
     setError(null);
     try {
@@ -45,11 +51,17 @@ export function SupplierPayoutsListPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [identity?.role]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if (!isIdentityLoading) {
+      void reload();
+    }
+  }, [reload, isIdentityLoading]);
+
+  if (!isIdentityLoading && !isSupplierRole(identity?.role)) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <List title="My payouts">

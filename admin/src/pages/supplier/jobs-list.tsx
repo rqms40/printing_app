@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
+import { useGetIdentity } from '@refinedev/core';
 import {
   App,
   Button,
@@ -25,6 +26,8 @@ import {
 import { formatRelativeTime, formatDateTime } from '@/utils/format';
 import { StatusBadge } from '@/components/status-badge';
 import type { OrderStatus } from '@/types/enums';
+import { isSupplierRole } from '@/types/enums';
+import type { AdminIdentity } from '@/utils/api-normalizers';
 
 const { Text } = Typography;
 
@@ -88,8 +91,10 @@ export function SupplierJobsListPage() {
   const [filter, setFilter] = useState<SupplierJobListFilter>('all');
   const [rows, setRows] = useState<SupplierJobListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { data: identity, isLoading: isIdentityLoading } = useGetIdentity<AdminIdentity>();
 
   const load = useCallback(async () => {
+    if (!isSupplierRole(identity?.role)) return;
     setLoading(true);
     try {
       const data = await fetchSupplierJobs(filter);
@@ -99,11 +104,17 @@ export function SupplierJobsListPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter, message]);
+  }, [filter, message, identity?.role]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!isIdentityLoading) {
+      void load();
+    }
+  }, [load, isIdentityLoading]);
+
+  if (!isIdentityLoading && !isSupplierRole(identity?.role)) {
+    return <Navigate to="/" replace />;
+  }
 
   const assignedPendingCount = useMemo(
     () =>

@@ -90,6 +90,7 @@ import { OpsClaimsPage } from '@/pages/ops/claims';
 import { SupplierProfilesListPage } from '@/pages/suppliers/list';
 import { SupplierProfileShowPage } from '@/pages/suppliers/show';
 import { SupplierLeaderboardPage } from '@/pages/suppliers/leaderboard';
+import { ChatSettings } from '@/pages/admin/ChatSettings';
 
 /** Home: ops dashboard or supplier jobs inbox. */
 function RoleHomeRedirect() {
@@ -336,6 +337,11 @@ function App() {
                 meta: { label: 'Printer Profile', parent: "others" },
               },
               {
+                name: 'chat-settings',
+                list: '/settings/chat',
+                meta: { label: 'Chat Settings', parent: "others" },
+              },
+              {
                 name: "super-admin",
                 meta: {
                   label: "Super Admin",
@@ -454,6 +460,7 @@ function App() {
                 <Route path="/external-deliveries" element={<ExternalDeliveriesPage />} />
                 <Route path="/settings/delivery" element={<DeliverySettingsPage />} />
                 <Route path="/settings/printer" element={<PrinterProfilePage />} />
+                <Route path="/settings/chat" element={<ChatSettings />} />
                 <Route path="/super/verification" element={<SuperVerificationPage />} />
                 <Route path="/super/zones" element={<SuperZonesPage />} />
                 <Route path="/super/audit" element={<SuperAuditPage />} />

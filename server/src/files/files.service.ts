@@ -371,7 +371,28 @@ export class FilesService {
       !isAdmin &&
       (file.uploadedBy == null || file.uploadedBy !== requestingUserId)
     ) {
-      throw new ForbiddenException();
+      const [{ hasChatAccess = false } = {}] = await this.dataSource.query(
+        `SELECT EXISTS (
+           SELECT 1
+           FROM chat_messages cm
+           JOIN chat_conversations c ON cm.conversation_id = c.id
+           LEFT JOIN orders o ON c.order_id = o.id
+           LEFT JOIN supplier_assignments sa ON sa.order_id = o.id AND sa.decision IN ('accepted', 'pending')
+           LEFT JOIN supplier_profiles sp ON sp.id = sa.supplier_id
+           WHERE cm.attachment_file_id = $1
+             AND (
+               c.customer_id = $2
+               OR c.assigned_admin_id = $2
+               OR c.assigned_rider_id = $2
+               OR sp.user_id = $2
+             )
+         ) AS "hasChatAccess"`,
+        [fileId, requestingUserId],
+      );
+
+      if (!hasChatAccess) {
+        throw new ForbiddenException();
+      }
     }
     if (!file.objectKey) throw new NotFoundException('File has no storage key');
     try {

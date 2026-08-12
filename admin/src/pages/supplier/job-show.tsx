@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Navigate } from 'react-router-dom';
+import { useGetIdentity } from '@refinedev/core';
 import {
   Alert,
   App,
@@ -55,6 +56,8 @@ import {
   pickupQaChecklistPayload,
   type PickupQaChecklistState,
 } from '@/constants/pickup-qa-checklist';
+import { isSupplierRole } from '@/types/enums';
+import type { AdminIdentity } from '@/utils/api-normalizers';
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
@@ -166,8 +169,10 @@ export function SupplierJobShowPage() {
   );
   const [signatureResetKey, setSignatureResetKey] = useState(0);
   const [evidenceFile, setEvidenceFile] = useState<UploadFile | null>(null);
+  const { data: identity, isLoading: isIdentityLoading } = useGetIdentity<AdminIdentity>();
 
   const load = useCallback(async () => {
+    if (!id || !isSupplierRole(identity?.role)) return;
     if (!Number.isFinite(jobId) || jobId <= 0) {
       message.error('Invalid job id');
       return;
@@ -188,11 +193,17 @@ export function SupplierJobShowPage() {
     } finally {
       setLoading(false);
     }
-  }, [jobId, message]);
+  }, [jobId, message, id, identity?.role]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!isIdentityLoading) {
+      void load();
+    }
+  }, [load, isIdentityLoading]);
+
+  if (!isIdentityLoading && !isSupplierRole(identity?.role)) {
+    return <Navigate to="/" replace />;
+  }
 
   const canAccept = hasAction(detail, 'accept');
   const canDecline = hasAction(detail, 'decline');

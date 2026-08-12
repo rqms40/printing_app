@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Conversation } from './entities/conversation.entity';
 import { ChatMessage } from './entities/chat-message.entity';
+import { ChatSettings } from './entities/chat-settings.entity';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { ChatController } from './chat.controller';
@@ -14,7 +15,7 @@ import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.mod
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Conversation, ChatMessage, Order]),
+    TypeOrmModule.forFeature([Conversation, ChatMessage, Order, ChatSettings]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

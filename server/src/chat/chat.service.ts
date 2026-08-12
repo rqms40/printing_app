@@ -22,6 +22,7 @@ import { OpenRouterService } from './openrouter.service';
 import { GRIDBOT_SYSTEM_PROMPT } from './gridbot.prompt';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { Order } from '../orders/entities/order.entity';
+import { ChatSettings } from './entities/chat-settings.entity';
 
 export type ChatActorRole = 'admin' | 'customer' | 'rider' | 'supplier';
 
@@ -36,9 +37,30 @@ export class ChatService {
     private readonly msgRepo: Repository<ChatMessage>,
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
+    @InjectRepository(ChatSettings)
+    private readonly settingsRepo: Repository<ChatSettings>,
     private readonly dataSource: DataSource,
     private readonly openRouter: OpenRouterService,
   ) {}
+
+  async getChatSettings(): Promise<ChatSettings> {
+    let settings = await this.settingsRepo.findOne({ where: {} });
+    if (!settings) {
+      settings = this.settingsRepo.create();
+      await this.settingsRepo.save(settings);
+    }
+    return settings;
+  }
+
+  async updateChatSettings(
+    isFileSendingEnabled: boolean,
+    filteredWords: string[],
+  ): Promise<ChatSettings> {
+    const settings = await this.getChatSettings();
+    settings.isFileSendingEnabled = isFileSendingEnabled;
+    settings.filteredWords = filteredWords;
+    return this.settingsRepo.save(settings);
+  }
 
   async createConversation(
     customerId: number,
@@ -370,10 +392,10 @@ export class ChatService {
       userId,
       role,
       true,
-      (manager) =>
+      (manager, conversation) =>
         this.saveMessageInTransaction(
           manager,
-          conversationId,
+          conversation,
           userId,
           senderRole,
           content,
@@ -406,9 +428,10 @@ export class ChatService {
       if (conversation.status === ConversationStatus.CLOSED) {
         throw new BadRequestException('Conversation is closed');
       }
+
       return this.saveMessageInTransaction(
         manager,
-        conversationId,
+        conversation,
         senderId,
         senderRole,
         content,
@@ -420,17 +443,32 @@ export class ChatService {
 
   private async saveMessageInTransaction(
     manager: EntityManager,
-    conversationId: number,
+    conversation: Conversation,
     senderId: number | null,
     senderRole: SenderRole,
     content: string | null,
     attachmentFileId?: number | null,
     attachmentMimeType?: string | null,
   ): Promise<ChatMessage> {
+    if (conversation.type === ConversationType.SUPPLIER) {
+      const settings = await this.getChatSettings();
+      if (!settings.isFileSendingEnabled && attachmentFileId != null) {
+        throw new BadRequestException('File sending is currently disabled in this chat.');
+      }
+      if (content && settings.filteredWords.length > 0) {
+        const lowerContent = content.toLowerCase();
+        for (const word of settings.filteredWords) {
+          if (lowerContent.includes(word.toLowerCase())) {
+            throw new BadRequestException('Message contains prohibited words.');
+          }
+        }
+      }
+    }
+
     const messageRepo = manager.getRepository(ChatMessage);
     const conversationRepo = manager.getRepository(Conversation);
     const msg = messageRepo.create({
-      conversationId,
+      conversationId: conversation.id,
       senderId,
       senderRole,
       content: content && content.length > 0 ? content : null,
@@ -438,7 +476,7 @@ export class ChatService {
       attachmentMimeType: attachmentMimeType ?? null,
     });
     const saved = await messageRepo.save(msg);
-    await conversationRepo.update(conversationId, { updatedAt: new Date() });
+    await conversationRepo.update(conversation.id, { updatedAt: new Date() });
     return saved;
   }
 

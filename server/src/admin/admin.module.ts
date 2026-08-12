@@ -19,6 +19,7 @@ import { RiderProfile } from '../riders/entities/rider-profile.entity';
 import { DeliveryAssignment } from '../riders/entities/delivery-assignment.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 import { AuditEvent } from '../audit/entities/audit-event.entity';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { AuditEvent } from '../audit/entities/audit-event.entity';
     NotificationsModule,
     SuppliersModule,
     PaymentsModule,
+    ChatModule,
   ],
   controllers: [AdminController],
 })
