@@ -9,7 +9,7 @@ const isMobile = () => window.innerWidth < 768
 
 // ─── GRIDGO text layers (zero-gravity scatter) ───────────────────────────────
 function GridTextLayer({ index, isDarkMode }: { index: number, isDarkMode?: boolean }) {
-  const mesh = useRef<(THREE.Mesh & { fillOpacity: number; outlineOpacity: number })>(null)
+  const mesh = useRef<(THREE.Mesh & { fillOpacity: number; outlineOpacity: number; sync?: () => void })>(null)
 
   // Each layer has a fixed offset so the stack looks tight at rest
   const baseZ = -1.2 - (index * 0.18)
@@ -80,7 +80,7 @@ function GridTextLayer({ index, isDarkMode }: { index: number, isDarkMode?: bool
   )
 }
 
-function GridTextLayers({ isDarkMode }: { isDarkMode?: boolean }) {
+export function GridTextLayers({ isDarkMode }: { isDarkMode?: boolean }) {
   return (
     <group>
       {[0, 1, 2, 3, 4].map(i => (
@@ -101,7 +101,7 @@ function CameraRig() {
 }
 
 // ─── Phone state machine ────────────────────────────────────────────────────
-function getPhoneState(vh: number, fromBottomVh: number) {
+function getPhoneState(_vh: number, fromBottomVh: number) {
   const mobile = isMobile()
 
   // ╔══════════════════════════════════════════════╗
@@ -146,13 +146,6 @@ function getPhoneState(vh: number, fromBottomVh: number) {
 // ─── Phone rig ──────────────────────────────────────────────────────────────
 function PhoneRig() {
   const group = useRef<THREE.Group>(null)
-  const [mobile, setMobile] = React.useState(window.innerWidth < 768)
-
-  React.useEffect(() => {
-    const handleResize = () => setMobile(window.innerWidth < 768)
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
 
   useFrame(() => {
     if (!group.current) return
@@ -234,7 +227,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 // ─── Scene export ────────────────────────────────────────────────────────────
-export function PhoneScene({ isDarkMode }: { isDarkMode?: boolean }) {
+export function PhoneScene({ isDarkMode: _isDarkMode }: { isDarkMode?: boolean }) {
   const [mobile, setMobile] = React.useState(window.innerWidth < 768)
 
   React.useEffect(() => {

@@ -25,7 +25,7 @@ function AnimatedEcosystemIcon({ icon: Icon, size = 28 }: { icon: any, size?: nu
   return <Icon ref={iconRef} size={size} />;
 }
 
-export function EcosystemSection({ isDarkMode }: { isDarkMode?: boolean }) {
+export function EcosystemSection({ isDarkMode: _isDarkMode }: { isDarkMode?: boolean }) {
   const [activeIndex, setActiveIndex] = useState(1);
   const [isHovered, setIsHovered] = useState(false);
 
