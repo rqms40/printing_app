@@ -10,8 +10,8 @@ void main() {
       multiLine: true,
     ).firstMatch(pubspec);
     expect(match, isNotNull);
-    expect(match!.group(1), '1.12.1');
-    expect(match.group(2), '29');
+    expect(match!.group(1), '1.12.2');
+    expect(match.group(2), '30');
     expect(AppVersion.version, match.group(1));
     expect(AppVersion.buildNumber, match.group(2));
   });
