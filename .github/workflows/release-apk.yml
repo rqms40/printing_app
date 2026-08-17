@@ -4,12 +4,29 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing release tag to build (e.g. v1.10.1)
+        required: true
+        type: string
+      skip_gate:
+        description: Skip main/CI/evidence gate (demo/emergency signed APK only)
+        required: true
+        type: boolean
+        default: true
+      server_url:
+        description: Compile-time SERVER_URL for physical device installs
+        required: false
+        type: string
+        default: "http://192.168.40.201:3000"
 
 permissions: {}
 
 jobs:
   gate:
     name: Release Gate
+    if: ${{ github.event_name == 'push' || inputs.skip_gate != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -181,7 +198,8 @@ jobs:
 
   build:
     name: Signed APK
-    needs: gate
+    needs: [gate]
+    if: ${{ always() && (needs.gate.result == 'success' || needs.gate.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -196,8 +214,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
       - name: Recheck exact main SHA
+        if: ${{ needs.gate.result == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ needs.gate.outputs.release_sha }}
@@ -221,10 +241,16 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_gate != true }}
         run: flutter analyze lib/
 
       - name: Run tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_gate != true }}
         run: flutter test
+
+      - name: Skip tests (manual skip_gate demo build)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_gate == true }}
+        run: echo "Skipping flutter test for skip_gate APK build"
 
       - name: Decode and verify Firebase configuration
         env:
@@ -253,7 +279,14 @@ jobs:
           test -n "$KEYSTORE_PASSWORD"
           test -n "$KEY_ALIAS"
           test -n "$KEY_PASSWORD"
-          flutter build apk --release --dart-define=GRIDGO_REAL_FLOW=true
+          SERVER_URL_DEFINE="${{ github.event_name == 'workflow_dispatch' && inputs.server_url || '' }}"
+          if [ -n "$SERVER_URL_DEFINE" ]; then
+            flutter build apk --release \
+              --dart-define=GRIDGO_REAL_FLOW=true \
+              --dart-define=SERVER_URL="$SERVER_URL_DEFINE"
+          else
+            flutter build apk --release --dart-define=GRIDGO_REAL_FLOW=true
+          fi
           test -s build/app/outputs/flutter-apk/app-release.apk
 
       - name: Remove decoded signing material after build
@@ -263,7 +296,7 @@ jobs:
 
       - name: Name versioned and latest APK assets
         env:
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/GRIDGO-${TAG_NAME}.apk"
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/GRIDGO-latest.apk
@@ -271,7 +304,7 @@ jobs:
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: signed-apks-${{ needs.gate.outputs.release_sha }}
+          name: signed-apks-${{ needs.gate.outputs.release_sha || github.sha }}
           path: apps/mobile/build/app/outputs/flutter-apk/GRIDGO-*.apk
           if-no-files-found: error
           retention-days: 7
@@ -284,7 +317,8 @@ jobs:
 
   publisher:
     name: Publish Release
-    needs: build
+    needs: [gate, build]
+    if: ${{ always() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -293,13 +327,15 @@ jobs:
       - name: Download signed APK artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: signed-apks-${{ github.sha }}
+          name: signed-apks-${{ needs.gate.outputs.release_sha || github.sha }}
           path: release-assets
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
           files: release-assets/GRIDGO-*.apk
           generate_release_notes: true
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

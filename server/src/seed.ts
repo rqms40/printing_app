@@ -251,6 +251,8 @@ async function seed() {
       order_item_spec_values, product_spec_options, product_spec_definitions,
       product_categories, service_addons,
       notifications, payment_transactions, credit_transactions, credit_settings,
+      supplier_assignments, supplier_capabilities, supplier_verifications,
+      supplier_profiles,
       delivery_assignments, order_status_history,
       order_items, orders, batch_orders,
       addresses, rider_profiles, file_metadata,
@@ -380,6 +382,70 @@ async function seed() {
     [juanId, 'motorcycle', 'ABC 1234', 'N01-23-456789', true],
   );
   console.log('✅ Rider profile created for Juan');
+
+  // ─── Supplier Profile (demo print shop, Super Admin–verified) ───────
+  const [supplierUser] = await typedQuery<IdRow>(
+    ds,
+    "SELECT id FROM users WHERE email = 'supplier@gridgo.ph'",
+  );
+  const supplierUserId: number = supplierUser.id;
+  const [superAdmin] = await typedQuery<IdRow>(
+    ds,
+    "SELECT id FROM users WHERE email = 'superadmin@gridgo.ph'",
+  );
+  const superAdminId: number = superAdmin.id;
+
+  const [supplierProfile] = await typedQuery<IdRow>(
+    ds,
+    `INSERT INTO supplier_profiles (
+       user_id, business_name, description, contact_phone, contact_email,
+       address, service_zones, service_focus_ranks, is_active,
+       rating_average, rating_count, attributes
+     ) VALUES (
+       $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, true, 0, 0, '{}'::jsonb
+     ) RETURNING id`,
+    [
+      supplierUserId,
+      'Davao Print Co',
+      'Demo supplier for GRIDGO marketplace pilot.',
+      '+639193234567',
+      'supplier@gridgo.ph',
+      'Quimpo Blvd, Ecoland, Davao City',
+      '["Davao City","Toril","Calinan"]',
+      '["document_printing","tarpaulins","signages","apparel"]',
+    ],
+  );
+  const supplierProfileId: number = supplierProfile.id;
+
+  await ds.query(
+    `INSERT INTO supplier_verifications (
+       supplier_id, status, payout_details_ref, reviewed_by, reviewed_at, notes
+     ) VALUES ($1, 'verified', NULL, $2, NOW(), $3)`,
+    [
+      supplierProfileId,
+      superAdminId,
+      'Seed pilot supplier — verified for demo',
+    ],
+  );
+
+  for (const family of [
+    'flyers',
+    'brochures',
+    'business-cards',
+    'tarpaulins-outdoor-banners',
+    'custom-apparel',
+    'business-store-signages',
+  ]) {
+    await ds.query(
+      `INSERT INTO supplier_capabilities (
+         supplier_id, product_family, materials, max_capacity, lead_time_days
+       ) VALUES ($1, $2, $3::jsonb, $4, $5)`,
+      [supplierProfileId, family, '["standard","premium"]', 50, 3],
+    );
+  }
+  console.log(
+    '✅ Supplier profile + verified verification + capabilities for supplier@gridgo.ph',
+  );
 
   // ─── Notifications ──────────────────────────────────────────────────
   // Seed accounts start with zero orders, so only order-agnostic content.
