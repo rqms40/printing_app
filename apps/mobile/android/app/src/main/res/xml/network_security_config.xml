@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Release APK talks HTTP to the public GRIDGO API until TLS is in front. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">209.159.149.164</domain>
+    </domain-config>
+</network-security-config>
