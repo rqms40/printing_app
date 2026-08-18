@@ -321,11 +321,21 @@ class _OptionCard extends StatelessWidget {
                       borderRadius: AppRadius.borderMd,
                     ),
                     alignment: Alignment.center,
-                    child: HugeIcon(
-                      icon: icon,
-                      size: 22,
-                      color: isPrimary ? fg : colors.accent,
-                    ),
+                    child: icon is String
+                        ? ClipRRect(
+                            borderRadius: AppRadius.borderMd,
+                            child: Image.asset(
+                              icon as String,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : HugeIcon(
+                            icon: icon,
+                            size: 22,
+                            color: isPrimary ? fg : colors.accent,
+                          ),
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(

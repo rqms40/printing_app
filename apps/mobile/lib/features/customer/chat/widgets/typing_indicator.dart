@@ -46,8 +46,8 @@ class _TypingIndicatorState extends State<TypingIndicator>
           ChatAvatar(
             icon: chatIconForSender(SenderRole.bot),
             colors: colors,
-            size: 28,
-            iconSize: 15,
+            size: 48,
+            iconSize: 24,
           ),
           const SizedBox(width: AppSpacing.sm),
           Container(

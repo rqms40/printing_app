@@ -6,13 +6,13 @@ import 'package:printing_app/features/customer/chat/models/chat_message.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
 
 dynamic chatIconForConversation(ConversationType type) => switch (type) {
-  ConversationType.ai => HugeIcons.strokeRoundedAiBrain01,
+  ConversationType.ai => 'assets/animations/GRIDGO_BOT_WAVING.gif',
   ConversationType.admin => HugeIcons.strokeRoundedCustomerSupport,
   ConversationType.rider => HugeIcons.strokeRoundedDeliveryBox01,
 };
 
 dynamic chatIconForSender(SenderRole role) => switch (role) {
-  SenderRole.bot => HugeIcons.strokeRoundedAiBrain01,
+  SenderRole.bot => 'assets/animations/GRIDGO_BOT-THINKING.gif',
   SenderRole.admin => HugeIcons.strokeRoundedCustomerSupport,
   SenderRole.rider => HugeIcons.strokeRoundedDeliveryBox01,
   SenderRole.customer => HugeIcons.strokeRoundedUser,
@@ -54,11 +54,21 @@ class ChatAvatar extends StatelessWidget {
         borderRadius: AppRadius.borderMd,
       ),
       alignment: Alignment.center,
-      child: HugeIcon(
-        icon: icon,
-        size: iconSize,
-        color: iconColor ?? colors.accent,
-      ),
+      child: icon is String
+          ? ClipRRect(
+              borderRadius: AppRadius.borderMd,
+              child: Image.asset(
+                icon as String,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+              ),
+            )
+          : HugeIcon(
+              icon: icon,
+              size: iconSize,
+              color: iconColor ?? colors.accent,
+            ),
     );
 
     if (presence == null) return avatar;

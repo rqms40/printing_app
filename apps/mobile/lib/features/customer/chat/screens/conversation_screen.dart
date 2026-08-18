@@ -313,20 +313,28 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: colors.accent.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+            if (chatIconForConversation(widget.conversationType) is String)
+              Image.asset(
+                chatIconForConversation(widget.conversationType) as String,
+                width: 300,
+                height: 300,
+                fit: BoxFit.contain,
+              )
+            else
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: colors.accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: HugeIcon(
+                  icon: chatIconForConversation(widget.conversationType),
+                  size: 32,
+                  color: colors.accent,
+                ),
               ),
-              alignment: Alignment.center,
-              child: HugeIcon(
-                icon: chatIconForConversation(widget.conversationType),
-                size: 32,
-                color: colors.accent,
-              ),
-            ),
             const SizedBox(height: AppSpacing.lg),
             Text(
               _emptyTitle,
