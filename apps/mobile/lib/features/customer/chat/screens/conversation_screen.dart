@@ -335,7 +335,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   color: colors.accent,
                 ),
               ),
-            const SizedBox(height: AppSpacing.lg),
+            if (chatIconForConversation(widget.conversationType) is! String)
+              const SizedBox(height: AppSpacing.lg),
             Text(
               _emptyTitle,
               textAlign: TextAlign.center,

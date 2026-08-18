@@ -285,7 +285,7 @@ class MessageBubble extends ConsumerWidget {
                     ChatAvatar(
                       icon: chatIconForSender(message.senderRole),
                       colors: colors,
-                      size: 68,
+                      size: 88,
                       iconSize: 24,
                     ),
                     const SizedBox(width: AppSpacing.sm),

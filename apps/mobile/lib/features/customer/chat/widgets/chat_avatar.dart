@@ -50,7 +50,9 @@ class ChatAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: backgroundColor ?? colors.surfaceVariant,
+        color: icon is String 
+            ? Colors.transparent 
+            : (backgroundColor ?? colors.surfaceVariant),
         borderRadius: AppRadius.borderMd,
       ),
       alignment: Alignment.center,
