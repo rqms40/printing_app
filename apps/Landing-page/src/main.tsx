@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { SupportPage } from './SupportPage'
+import DownloadPage from './DownloadPage'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -11,6 +12,7 @@ createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/support" element={<SupportPage />} />
+        <Route path="/download" element={<DownloadPage />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

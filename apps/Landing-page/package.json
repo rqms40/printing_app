@@ -10,7 +10,8 @@
     "test:community-cta": "node scripts/check-community-cta.mjs",
     "test:video": "node scripts/check-video-section.mjs",
     "test:support-copy": "node scripts/check-support-section.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:download": "node scripts/check-download-page.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

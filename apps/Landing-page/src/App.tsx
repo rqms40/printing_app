@@ -62,9 +62,9 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
 
         {/* Right Nav */}
         <div className="flex items-center gap-3 z-50">
-          <a href="#download" className="hidden md:flex items-center px-6 py-2 bg-[var(--color-primary)] text-black font-bold text-sm rounded-full hover:brightness-110 transition shadow-[0_0_15px_rgba(255,222,88,0.3)]">
+          <Link to="/download" className="hidden md:flex items-center px-6 py-2 bg-[var(--color-primary)] text-black font-bold text-sm rounded-full hover:brightness-110 transition shadow-[0_0_15px_rgba(255,222,88,0.3)]">
             Download
-          </a>
+          </Link>
 
           {/* Dark Mode Toggle */}
           <button
@@ -97,7 +97,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
             <a href="#ecosystem" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Ecosystem</a>
             <a href="#support" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Support</a>
             <a href="#about" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">About Us</a>
-            <a href="#download" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Download</a>
+            <Link to="/download" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Download</Link>
             {/* <div className="flex gap-4 mt-8">
               <button className="px-8 py-3 bg-white dark:bg-black/60 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-full transition-colors font-bold" onClick={() => setIsOpen(false)}>Log In</button>
               <button className="px-8 py-3 bg-[var(--color-primary)] text-black rounded-full hover:bg-yellow-400 transition-colors font-bold" onClick={() => setIsOpen(false)}>Sign Up</button>
@@ -668,7 +668,7 @@ function FooterSection() {
               <a href="#support" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">SUPPORT</a>
               <a href="#process" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">HOW IT WORKS</a>
               <a href="#features" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">FEATURES</a>
-              <a href="#download" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">DOWNLOAD APP</a>
+              <Link to="/download" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">DOWNLOAD APP</Link>
             </div>
           </div>
 

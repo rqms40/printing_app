@@ -1,6 +1,8 @@
 const defaultMobileWebPort = '8088';
 const defaultGithubRepo = 'rqms40/printing_app';
 const defaultApkAssetName = 'GRIDGO-latest.apk';
+export const currentReleaseVersion = 'v1.12.4';
+export const currentReleaseApkAssetName = 'GRIDGO-v1.12.4.apk';
 const defaultCommunityUrl = 'https://m.me/GRIDGOPrintPH';
 
 type LocationLike = Pick<
@@ -25,6 +27,21 @@ export function getLatestApkDownloadUrl(
   assetName = defaultApkAssetName,
 ) {
   return `https://github.com/${repo}/releases/latest/download/${assetName}`;
+}
+
+export function getVersionedApkDownloadUrl(
+  version = currentReleaseVersion,
+  repo = defaultGithubRepo,
+  assetName = currentReleaseApkAssetName,
+) {
+  return `https://github.com/${repo}/releases/download/${version}/${assetName}`;
+}
+
+export function getReleasePageUrl(
+  version = currentReleaseVersion,
+  repo = defaultGithubRepo,
+) {
+  return `https://github.com/${repo}/releases/tag/${version}`;
 }
 
 export function isMobileUserAgent(userAgent: string) {
