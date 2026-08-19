@@ -32,3 +32,8 @@ assert(page.includes('GRIDGO Android Beta'), 'Download page should clearly label
 assert(page.includes('GRIDGO-v1.12.4.apk'), 'Download page should offer the pinned v1.12.4 APK.');
 assert(page.includes('GRIDGO-latest.apk'), 'Download page should offer the current latest APK.');
 assert(page.includes('Android only'), 'Download page should state platform availability accurately.');
+assert(!page.includes('GitHub'), 'Download page should not display GitHub branding.');
+assert(!page.includes('github.com'), 'Download page should not link visitors to GitHub.');
+assert(!links.includes('github.com'), 'Landing download helpers should use first-party download paths.');
+assert(links.includes("return `/downloads/${assetName}`;"), 'Latest APK should resolve through /downloads on the landing domain.');
+assert(links.includes("return `/downloads/${assetName}`;"), 'Versioned APK should resolve through /downloads on the landing domain.');

@@ -1,5 +1,4 @@
 const defaultMobileWebPort = '8088';
-const defaultGithubRepo = 'rqms40/printing_app';
 const defaultApkAssetName = 'GRIDGO-latest.apk';
 export const currentReleaseVersion = 'v1.12.4';
 export const currentReleaseApkAssetName = 'GRIDGO-v1.12.4.apk';
@@ -22,26 +21,14 @@ export function getMobileWebUrl(
   return url.toString();
 }
 
-export function getLatestApkDownloadUrl(
-  repo = defaultGithubRepo,
-  assetName = defaultApkAssetName,
-) {
-  return `https://github.com/${repo}/releases/latest/download/${assetName}`;
+export function getLatestApkDownloadUrl(assetName = defaultApkAssetName) {
+  return `/downloads/${assetName}`;
 }
 
 export function getVersionedApkDownloadUrl(
-  version = currentReleaseVersion,
-  repo = defaultGithubRepo,
   assetName = currentReleaseApkAssetName,
 ) {
-  return `https://github.com/${repo}/releases/download/${version}/${assetName}`;
-}
-
-export function getReleasePageUrl(
-  version = currentReleaseVersion,
-  repo = defaultGithubRepo,
-) {
-  return `https://github.com/${repo}/releases/tag/${version}`;
+  return `/downloads/${assetName}`;
 }
 
 export function isMobileUserAgent(userAgent: string) {
@@ -66,7 +53,6 @@ export function shouldRedirectToMobileWeb(
 export function landingLinks(location: LocationLike) {
   const mobileWebPort =
     import.meta.env.VITE_MOBILE_WEB_PORT || defaultMobileWebPort;
-  const githubRepo = import.meta.env.VITE_GITHUB_REPO || defaultGithubRepo;
   const apkAssetName =
     import.meta.env.VITE_APK_ASSET_NAME || defaultApkAssetName;
   const communityUrl =
@@ -74,7 +60,7 @@ export function landingLinks(location: LocationLike) {
 
   return {
     mobileWebUrl: getMobileWebUrl(location, mobileWebPort),
-    apkDownloadUrl: getLatestApkDownloadUrl(githubRepo, apkAssetName),
+    apkDownloadUrl: getLatestApkDownloadUrl(apkAssetName),
     communityUrl,
     mobileWebPort,
   };
