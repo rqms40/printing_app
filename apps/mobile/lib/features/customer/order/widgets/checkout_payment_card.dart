@@ -9,7 +9,6 @@ import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_payment_settings_provider.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/sheets/payment_method_sheet.dart';
-import 'package:printing_app/features/customer/order/widgets/checkout_qr_payment_section.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_section_card.dart';
 import 'package:printing_app/features/customer/order/widgets/payment_method_glyph.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -167,10 +166,14 @@ class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
                   ),
                 ),
               ],
-              if (method == PaymentMethod.qrPhInstapay) ...[
-                const SizedBox(height: AppSpacing.md),
-                const CheckoutQrPaymentSection(),
-              ],
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'You pay with this method after the supplier sends the final price.',
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                  fontSize: 11,
+                ),
+              ),
             ],
           ),
         ),

@@ -65,13 +65,18 @@ class _SupplierJobDetailScreenState
   void _seedPriceIfNeeded(SupplierJobDetail detail) {
     if (_seededPrice) return;
     _seededPrice = true;
-    if (detail.finalPriceMinor != null) {
+    if (detail.quotedPriceMinor != null) {
+      _priceController.text =
+          (detail.quotedPriceMinor! / 100.0).toStringAsFixed(2);
+    } else if (detail.finalPriceMinor != null) {
       _priceController.text =
           (detail.finalPriceMinor! / 100.0).toStringAsFixed(2);
     } else if (detail.totalPrice > 0) {
       _priceController.text = detail.totalPrice.toStringAsFixed(2);
     }
-    if (detail.promisedDate != null) {
+    if (detail.quotedPromisedDate != null) {
+      _promisedDate = detail.quotedPromisedDate;
+    } else if (detail.promisedDate != null) {
       _promisedDate = detail.promisedDate;
     }
   }
@@ -94,16 +99,71 @@ class _SupplierJobDetailScreenState
   Future<void> _pickPromisedDate() async {
     final now = DateTime.now();
     final initial = _promisedDate ?? now.add(const Duration(days: 2));
-    final picked = await showDatePicker(
+    final pickedDate = await showDatePicker(
       context: context,
       initialDate: initial.isBefore(now) ? now : initial,
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
     );
-    if (picked == null) return;
+    if (pickedDate == null) return;
+
+    if (!mounted) return;
+
+    final initialTime = _promisedDate != null
+        ? TimeOfDay.fromDateTime(_promisedDate!)
+        : const TimeOfDay(hour: 17, minute: 0);
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+    );
+    if (pickedTime == null) return;
+
     setState(() {
-      _promisedDate = DateTime(picked.year, picked.month, picked.day, 17);
+      _promisedDate = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
     });
+  }
+
+  Future<void> _onQuote() async {
+    final pesos = double.tryParse(_priceController.text.trim());
+    if (pesos == null || pesos <= 0) {
+      _showSnack('Enter a valid final price in pesos', isError: true);
+      return;
+    }
+    if (_promisedDate == null) {
+      _showSnack('Pick a promised completion date', isError: true);
+      return;
+    }
+    final detail = ref.read(supplierJobDetailProvider(widget.jobId)).detail;
+    final deadline = detail?.acceptanceDeadline;
+    if (deadline != null && deadline.isBefore(DateTime.now())) {
+      _showSnack('Acceptance window has expired', isError: true);
+      return;
+    }
+
+    final ok = await ref
+        .read(supplierJobDetailProvider(widget.jobId).notifier)
+        .quote(
+          finalPriceMinor: pesosToMinor(pesos),
+          promisedDate: _promisedDate!,
+        );
+    final state = ref.read(supplierJobDetailProvider(widget.jobId));
+    if (ok) {
+      _showSnack(
+        state.actionMessage ??
+            'Final price sent. Waiting for the customer to confirm.',
+      );
+      // ignore: discarded_futures
+      ref.read(supplierJobsProvider.notifier).refresh(silent: true);
+    } else {
+      _showSnack(state.errorMessage ?? 'Could not send the price', isError: true);
+    }
   }
 
   Future<void> _onAccept() async {
@@ -280,8 +340,7 @@ class _SupplierJobDetailScreenState
     }
   }
 
-  bool _acceptWindowOpen(SupplierJobDetail detail) {
-    if (!detail.canAccept) return false;
+  bool _decisionWindowOpen(SupplierJobDetail detail) {
     final deadline = detail.acceptanceDeadline;
     if (deadline == null) return true;
     return deadline.isAfter(DateTime.now());
@@ -289,13 +348,15 @@ class _SupplierJobDetailScreenState
 
   String? _deadlineLabel(SupplierJobDetail detail) {
     final deadline = detail.acceptanceDeadline;
-    if (deadline == null || !detail.canAccept) return null;
+    if (deadline == null || (!detail.canQuote && !detail.canAccept)) {
+      return null;
+    }
     final remaining = deadline.difference(DateTime.now());
     if (remaining.isNegative) return 'Acceptance window expired';
     final hours = remaining.inHours;
     final mins = remaining.inMinutes.remainder(60);
-    if (hours > 0) return 'Accept within ${hours}h ${mins}m';
-    return 'Accept within ${mins}m';
+    if (hours > 0) return 'Respond within ${hours}h ${mins}m';
+    return 'Respond within ${mins}m';
   }
 
   @override
@@ -419,7 +480,9 @@ class _SupplierJobDetailScreenState
                           onOpen: () => _openArtwork(detail.artworkSignedUrl),
                         ),
                       ],
-                      if (detail.canAccept || detail.canDecline) ...[
+                      if (detail.canQuote ||
+                          detail.canAccept ||
+                          detail.canDecline) ...[
                         const SizedBox(height: AppSpacing.lg),
                         _AcceptDeclineSection(
                           detail: detail,
@@ -428,8 +491,9 @@ class _SupplierJobDetailScreenState
                           declineReasonController: _declineReasonController,
                           promisedDate: _promisedDate,
                           isSubmitting: state.isSubmitting,
-                          acceptWindowOpen: _acceptWindowOpen(detail),
+                          decisionWindowOpen: _decisionWindowOpen(detail),
                           onPickDate: _pickPromisedDate,
+                          onQuote: _onQuote,
                           onAccept: _onAccept,
                           onDecline: _onDecline,
                         ),
@@ -614,7 +678,7 @@ class _HeaderCard extends StatelessWidget {
           if (detail.promisedDate != null) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Promised: ${formatDate(detail.promisedDate!)}',
+              'Promised: ${formatDateTime(detail.promisedDate!)}',
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,
               ),
@@ -790,8 +854,9 @@ class _AcceptDeclineSection extends StatelessWidget {
     required this.declineReasonController,
     required this.promisedDate,
     required this.isSubmitting,
-    required this.acceptWindowOpen,
+    required this.decisionWindowOpen,
     required this.onPickDate,
+    required this.onQuote,
     required this.onAccept,
     required this.onDecline,
   });
@@ -802,32 +867,34 @@ class _AcceptDeclineSection extends StatelessWidget {
   final TextEditingController declineReasonController;
   final DateTime? promisedDate;
   final bool isSubmitting;
-  final bool acceptWindowOpen;
+  final bool decisionWindowOpen;
   final VoidCallback onPickDate;
+  final VoidCallback onQuote;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
   @override
   Widget build(BuildContext context) {
+    final canEditQuote = detail.canQuote && decisionWindowOpen;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Accept or decline',
+            'Quote, accept, or decline',
             style: AppTypography.bodyBold.copyWith(
               color: colors.onBackground,
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Commit a final price and promised date to accept. '
-            'Production stays locked until payment is authorized.',
+            'Send your final price first. You can accept only after the '
+            'customer places the order again.',
             style: AppTypography.caption.copyWith(
               color: colors.onSurfaceDim,
             ),
           ),
-          if (detail.canAccept) ...[
+          if (detail.canQuote || detail.canAccept) ...[
             const SizedBox(height: AppSpacing.md),
             AppTextField(
               label: 'Final price (₱)',
@@ -836,22 +903,22 @@ class _AcceptDeclineSection extends StatelessWidget {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              enabled: acceptWindowOpen && !isSubmitting,
+              enabled: canEditQuote && !isSubmitting,
             ),
             const SizedBox(height: AppSpacing.md),
             InkWell(
-              onTap: acceptWindowOpen && !isSubmitting ? onPickDate : null,
+              onTap: canEditQuote && !isSubmitting ? onPickDate : null,
               borderRadius: AppRadius.borderMd,
               child: InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Promised date',
                   border: const UnderlineInputBorder(),
-                  enabled: acceptWindowOpen && !isSubmitting,
+                  enabled: canEditQuote && !isSubmitting,
                 ),
                 child: Text(
                   promisedDate == null
-                      ? 'Select date'
-                      : formatDate(promisedDate!),
+                      ? 'Select date and time'
+                      : formatDateTime(promisedDate!),
                   style: AppTypography.body.copyWith(
                     color: promisedDate == null
                         ? colors.onSurfaceDim
@@ -860,15 +927,39 @@ class _AcceptDeclineSection extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
-            AppButton(
-              label: acceptWindowOpen ? 'Accept job' : 'Window expired',
-              isFullWidth: true,
-              isLoading: isSubmitting,
-              isDisabled: !acceptWindowOpen,
-              icon: HugeIcons.strokeRoundedCheckmarkCircle02,
-              onTap: acceptWindowOpen && !isSubmitting ? onAccept : null,
-            ),
+            if (detail.awaitingCustomerConfirm) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Waiting for the customer to place the order again.',
+                style: AppTypography.caption.copyWith(
+                  color: colors.warning,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            if (detail.canQuote) ...[
+              const SizedBox(height: AppSpacing.md),
+              AppButton(
+                label: decisionWindowOpen
+                    ? 'Send final price'
+                    : 'Window expired',
+                isFullWidth: true,
+                isLoading: isSubmitting,
+                isDisabled: !canEditQuote,
+                onTap: canEditQuote && !isSubmitting ? onQuote : null,
+              ),
+            ],
+            if (detail.canAccept) ...[
+              const SizedBox(height: AppSpacing.md),
+              AppButton(
+                label: decisionWindowOpen ? 'Accept job' : 'Window expired',
+                isFullWidth: true,
+                isLoading: isSubmitting,
+                isDisabled: !decisionWindowOpen,
+                icon: HugeIcons.strokeRoundedCheckmarkCircle02,
+                onTap: decisionWindowOpen && !isSubmitting ? onAccept : null,
+              ),
+            ],
           ],
           if (detail.canDecline) ...[
             const SizedBox(height: AppSpacing.lg),
@@ -938,7 +1029,7 @@ class _ProductionSection extends StatelessWidget {
           Text(
             allDone
                 ? 'All milestones are complete and locked.'
-                : 'Completed steps stay grayed out and cannot be set again.',
+                : 'Complete steps in order. Future steps are locked until the current one is done.',
             style: AppTypography.caption.copyWith(
               color: colors.onSurfaceDim,
             ),
@@ -946,6 +1037,7 @@ class _ProductionSection extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           ...ProductionMilestone.values.map((m) {
             final reached = reachedMilestones.contains(m.apiValue);
+            final isSelectable = selectable.contains(m);
             final isSelected = !reached && selected == m;
             final dimColor = colors.onSurfaceDim.withValues(alpha: 0.55);
             final cardBg = reached
@@ -962,9 +1054,9 @@ class _ProductionSection extends StatelessWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Opacity(
-                opacity: reached ? 0.55 : 1,
+                opacity: (reached || !isSelectable) && !isSelected ? 0.55 : 1,
                 child: InkWell(
-                  onTap: (isSubmitting || reached)
+                  onTap: (isSubmitting || reached || !isSelectable)
                       ? null
                       : () => onMilestoneChanged(m),
                   borderRadius: AppRadius.borderMd,
@@ -988,7 +1080,7 @@ class _ProductionSection extends StatelessWidget {
                               ? colors.success.withValues(alpha: 0.7)
                               : isSelected
                                   ? colors.accent
-                                  : colors.onSurfaceDim,
+                                  : colors.onSurfaceDim.withValues(alpha: isSelectable ? 1 : 0.5),
                         ),
                         const SizedBox(width: AppSpacing.sm),
                         Expanded(

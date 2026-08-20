@@ -338,6 +338,84 @@ describe('LocationGateway', () => {
     expect(client.join).not.toHaveBeenCalled();
   });
 
+  it('lets ops subscribe to a marketplace assignment before pickup', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 31,
+      role: UserRole.OPS_ADMIN,
+    });
+    usersService.findSocketIdentity.mockResolvedValue({
+      id: 31,
+      role: UserRole.OPS_ADMIN,
+      isActive: true,
+    });
+    const join = jest.fn().mockResolvedValue(undefined);
+    const client = {
+      handshake: { auth: { token: 'ops-token' } },
+      data: { userId: 31, role: UserRole.OPS_ADMIN },
+      join,
+      disconnect: jest.fn(),
+    };
+    assignmentRepo.findOne.mockResolvedValue({
+      id: 9,
+      riderId: 5,
+      isCurrent: true,
+      status: DeliveryStatus.ASSIGNED,
+      order: { userId: 10 },
+      rider: { userId: 50 },
+    });
+    dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
+      stop: { assignmentId: 9 },
+      planVersion: 3,
+    });
+
+    await expect(
+      (gateway as any).handleSubscribe('9', client),
+    ).resolves.toEqual({
+      event: 'subscribed',
+      data: { assignmentId: '9', planVersion: 3 },
+    });
+    expect(join).toHaveBeenCalledWith('delivery_9');
+  });
+
+  it('lets superadmin subscribe even when the current stop is a different assignment', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 1,
+      role: UserRole.SUPER_ADMIN,
+    });
+    usersService.findSocketIdentity.mockResolvedValue({
+      id: 1,
+      role: UserRole.SUPER_ADMIN,
+      isActive: true,
+    });
+    const join = jest.fn().mockResolvedValue(undefined);
+    const client = {
+      handshake: { auth: { token: 'superadmin-token' } },
+      data: { userId: 1, role: UserRole.SUPER_ADMIN },
+      join,
+      disconnect: jest.fn(),
+    };
+    assignmentRepo.findOne.mockResolvedValue({
+      id: 9,
+      riderId: 5,
+      isCurrent: true,
+      status: DeliveryStatus.ASSIGNED,
+      order: { userId: 10 },
+      rider: { userId: 50 },
+    });
+    dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
+      stop: { assignmentId: 99 },
+      planVersion: 1,
+    });
+
+    await expect(
+      (gateway as any).handleSubscribe('9', client),
+    ).resolves.toEqual({
+      event: 'subscribed',
+      data: { assignmentId: '9', planVersion: 1 },
+    });
+    expect(join).toHaveBeenCalledWith('delivery_9');
+  });
+
   it('does not expose a client location publishing handler', () => {
     expect((gateway as any).handleLocationUpdate).toBeUndefined();
   });

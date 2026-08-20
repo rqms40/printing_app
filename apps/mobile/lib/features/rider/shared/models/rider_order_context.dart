@@ -5,11 +5,32 @@ import 'package:printing_app/shared/models/route_geometry.dart';
 
 enum RiderDispatchStopStatus { pending, completed, skipped }
 
+enum RiderDispatchStopKind { pickup, dropoff }
+
+class RiderSupplierPickup {
+  const RiderSupplierPickup({
+    required this.supplierId,
+    required this.businessName,
+    this.address,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String supplierId;
+  final String businessName;
+  final String? address;
+  final double latitude;
+  final double longitude;
+
+  LatLng get latLng => LatLng(latitude, longitude);
+}
+
 class RiderDispatchPlanStop {
   const RiderDispatchPlanStop({
     required this.assignmentId,
     required this.sequence,
     required this.status,
+    this.kind = RiderDispatchStopKind.dropoff,
     required this.destinationLatitude,
     required this.destinationLongitude,
     required this.legDurationSeconds,
@@ -21,6 +42,7 @@ class RiderDispatchPlanStop {
   final String assignmentId;
   final int sequence;
   final RiderDispatchStopStatus status;
+  final RiderDispatchStopKind kind;
   final double destinationLatitude;
   final double destinationLongitude;
   final int legDurationSeconds;
@@ -149,6 +171,8 @@ class RiderAssignmentView {
     this.planVersion,
     this.planState = 'unplanned',
     this.planStop,
+    this.planStops = const [],
+    this.supplierPickup,
     this.routingDataStale = false,
   });
 
@@ -158,18 +182,68 @@ class RiderAssignmentView {
   final int? planVersion;
   final String planState;
   final RiderDispatchPlanStop? planStop;
+  final List<RiderDispatchPlanStop> planStops;
+  final RiderSupplierPickup? supplierPickup;
   final bool routingDataStale;
 
   int? get planSequence => planStop?.sequence;
-  bool get isPlanned => planStop != null;
+  bool get isPlanned => planStop != null || planStops.isNotEmpty;
   bool get isCurrentPlanStop =>
       planStop?.status == RiderDispatchStopStatus.pending && routePosition == 1;
+
+  List<RiderDispatchPlanStop> get legs {
+    if (planStops.isNotEmpty) return planStops;
+    if (planStop != null) return [planStop!];
+    return const [];
+  }
+
+  bool get isPickupActive {
+    if (status == DeliveryStatus.pickedUp ||
+        status == DeliveryStatus.onTheWay ||
+        status == DeliveryStatus.arrived) {
+      return false;
+    }
+    if (planStop != null) {
+      return planStop!.kind == RiderDispatchStopKind.pickup;
+    }
+    return supplierPickup != null &&
+        (status == DeliveryStatus.assigned ||
+            status == DeliveryStatus.accepted);
+  }
+
+  String get activeStopTitle {
+    if (isPickupActive) {
+      return supplierPickup?.businessName ?? 'Supplier';
+    }
+    return order.customerName ?? 'Customer';
+  }
+
+  String get activeStopSubtitle {
+    if (isPickupActive) {
+      final address = supplierPickup?.address?.trim();
+      if (address != null && address.isNotEmpty) return 'Pickup · $address';
+      return 'Pickup';
+    }
+    return order.destination?.shortLabel ?? 'Delivery address';
+  }
 
   /// Pin used on rider maps — same coordinates as the order destination shown
   /// in delivery info. Prefer the live order snapshot over a stale plan stop
   /// so the pin always matches the address text.
   LatLng? get pinDestination =>
-      order.destination?.latLng ?? planStop?.destination;
+      order.destination?.latLng ??
+      legs
+          .where((stop) => stop.kind == RiderDispatchStopKind.dropoff)
+          .firstOrNull
+          ?.destination ??
+      planStop?.destination;
+
+  LatLng? get supplierPin =>
+      supplierPickup?.latLng ??
+      legs
+          .where((stop) => stop.kind == RiderDispatchStopKind.pickup)
+          .firstOrNull
+          ?.destination;
 
   String get id => assignment.id;
   DeliveryStatus get status => assignment.status;
@@ -186,11 +260,15 @@ class RiderAssignmentView {
       status == DeliveryStatus.declined ||
       status == DeliveryStatus.failed;
 
-  /// Active-trip GPS window: confirmed pickup through pre-delivery handoff.
-  bool get shouldTrackLocation =>
-      status == DeliveryStatus.pickedUp ||
-      status == DeliveryStatus.onTheWay ||
-      status == DeliveryStatus.arrived;
+  /// Marketplace jobs share GPS from assignment (ride to supplier) through
+  /// handoff. Beta / shop-origin jobs stay pickup-through-arrived.
+  bool get shouldTrackLocation {
+    return status == DeliveryStatus.assigned ||
+        status == DeliveryStatus.accepted ||
+        status == DeliveryStatus.pickedUp ||
+        status == DeliveryStatus.onTheWay ||
+        status == DeliveryStatus.arrived;
+  }
 
   bool get canMarkFailed =>
       status == DeliveryStatus.pickedUp ||

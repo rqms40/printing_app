@@ -259,7 +259,12 @@ describe('MatchingService', () => {
       expect(result.assignment.acceptanceDeadline).toBeInstanceOf(Date);
       expect(txOrdersRepo.update).toHaveBeenCalledWith(
         { id: 42, orderStatus: OrderStatus.APPROVED_FOR_MATCHING },
-        { orderStatus: OrderStatus.SUPPLIER_ASSIGNED },
+        {
+          orderStatus: OrderStatus.SUPPLIER_ASSIGNED,
+          preferredSupplierId: 11,
+          deliveryFeeMinor: '0',
+          deliveryFee: 0,
+        },
       );
       expect(txHistoryRepo.insert).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
+import 'package:printing_app/features/customer/order/providers/matching_preview_provider.dart';
 import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
 import 'package:printing_app/features/customer/order/models/destination_group.dart';
 import 'package:printing_app/shared/models/address.dart';
@@ -228,11 +229,15 @@ double _deliveryFeeForTier(DeliverySpeedTier tier) {
 
 final checkoutFeesProvider = Provider<CheckoutFees>((ref) {
   final state = ref.watch(checkoutProvider);
+  final matched = ref.watch(matchingPreviewProvider);
   final extraDrops = state.drops.length > 1 ? state.drops.length - 1 : 0;
   final isPickup = state.mode == DeliveryMode.pickup;
+  final quotedDelivery = matched?.deliveryFeePesos;
   return CheckoutFees(
     subtotal: state.subtotal,
-    deliveryFee: isPickup ? 0 : _deliveryFeeForTier(state.speedTier),
+    deliveryFee: isPickup
+        ? 0
+        : (quotedDelivery ?? _deliveryFeeForTier(state.speedTier)),
     priorityFee:
         !isPickup && state.speedTier == DeliverySpeedTier.priority
         ? _kPriorityFee

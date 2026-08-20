@@ -399,8 +399,46 @@ describe("api normalizers", () => {
       phone_number: "+639171234567",
       vehicle_type: "motorcycle",
       plate_number: "ABC 1234",
+      last_latitude: null,
+      last_longitude: null,
+      last_location_update: undefined,
       delivery_assignment_id: "99",
       delivery_status: "accepted",
+      pickup_otp: undefined,
+      delivery_otp: undefined,
+    });
+  });
+
+  it("preserves assigned rider last GPS for live tracking", () => {
+    const order = normalizeOrder({
+      id: 8,
+      order_id: "ORD-10008",
+      user_id: 1,
+      category: "paper",
+      total_price: 2,
+      delivery_fee: 0,
+      payment_method: "gcash",
+      payment_status: "pending",
+      order_status: "rider_assigned",
+      delivery_option: "delivery",
+      assigned_rider_contact: {
+        user_id: 70,
+        rider_profile_id: 7,
+        display_name: "Maya Santos",
+        last_latitude: 7.0876,
+        last_longitude: 125.6146,
+        last_location_update: "2026-08-20T10:00:00.000Z",
+        delivery_assignment_id: 99,
+        delivery_status: "assigned",
+      },
+      created_at: "2026-05-02T19:00:36.788Z",
+      updated_at: "2026-05-02T19:00:36.788Z",
+    });
+
+    expect(order.assigned_rider_contact).toMatchObject({
+      last_latitude: 7.0876,
+      last_longitude: 125.6146,
+      last_location_update: "2026-08-20T10:00:00.000Z",
     });
   });
 

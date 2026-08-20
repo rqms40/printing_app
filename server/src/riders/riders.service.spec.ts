@@ -4,6 +4,7 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   NotFoundException,
   BadRequestException,
+  ConflictException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { hashDeliveryOtp, RidersService } from './riders.service';
@@ -32,6 +33,11 @@ import { OrdersGateway } from '../orders/orders.gateway';
 import { AuditService } from '../audit/audit.service';
 import { QualityService } from '../quality/quality.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../matching/entities/supplier-assignment.entity';
+import { DeliveryDestination } from '../orders/entities/delivery-destination.entity';
 
 describe('RidersService', () => {
   let service: RidersService;
@@ -42,6 +48,8 @@ describe('RidersService', () => {
   let historyRepo: jest.Mocked<Partial<Repository<OrderStatusHistory>>>;
   let userRepo: jest.Mocked<Partial<Repository<User>>>;
   let conversationRepo: jest.Mocked<Partial<Repository<Conversation>>>;
+  let supplierAssignmentRepo: jest.Mocked<Partial<Repository<SupplierAssignment>>>;
+  let destinationRepo: jest.Mocked<Partial<Repository<DeliveryDestination>>>;
   let dataSource: Partial<DataSource>;
   let locationGateway: Partial<LocationGateway>;
   let ordersGateway: {
@@ -65,6 +73,7 @@ describe('RidersService', () => {
     assertCurrentStop: jest.Mock;
     advanceStop: jest.Mock;
     skipStopIfPlanned: jest.Mock;
+    refreshMarketplaceOriginIfStale: jest.Mock;
   };
   let auditService: { recordOrderStatusTransition: jest.Mock };
   let notificationsService: { createForAllAdmins: jest.Mock };
@@ -180,6 +189,13 @@ describe('RidersService', () => {
       find: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
     };
+    supplierAssignmentRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),
+    };
+    destinationRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
     const transaction = jest.fn(
       async (
         runInTransaction: (manager: EntityManager) => Promise<unknown>,
@@ -193,6 +209,9 @@ describe('RidersService', () => {
             if (entity?.name === 'OrderStatusHistory') return historyRepo;
             if (entity?.name === 'User') return userRepo;
             if (entity?.name === 'Conversation') return conversationRepo;
+            if (entity?.name === 'SupplierAssignment')
+              return supplierAssignmentRepo;
+            if (entity?.name === 'DeliveryDestination') return destinationRepo;
             throw new Error(`Unexpected repository ${entity?.name}`);
           },
         } as unknown as EntityManager),
@@ -200,6 +219,10 @@ describe('RidersService', () => {
     dataSource = {
       getRepository: jest.fn((entity: { name?: string }) => {
         if (entity?.name === 'Order') return orderRepo as Repository<Order>;
+        if (entity?.name === 'SupplierAssignment')
+          return supplierAssignmentRepo as Repository<SupplierAssignment>;
+        if (entity?.name === 'SupplierProfile')
+          return { update: jest.fn() };
         throw new Error(`Unexpected repository ${entity?.name}`);
       }) as DataSource['getRepository'],
       transaction: transaction as unknown as DataSource['transaction'],
@@ -232,6 +255,7 @@ describe('RidersService', () => {
       assertCurrentStop: jest.fn().mockResolvedValue(undefined),
       advanceStop: jest.fn().mockResolvedValue(undefined),
       skipStopIfPlanned: jest.fn().mockResolvedValue(undefined),
+      refreshMarketplaceOriginIfStale: jest.fn().mockResolvedValue(null),
     };
     auditService = {
       recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
@@ -415,6 +439,120 @@ describe('RidersService', () => {
         riderProfile: rider,
         order: { orderStatus: OrderStatus.RIDER_ASSIGNED },
       });
+      expect(dispatchPlanService.createPlan).not.toHaveBeenCalled();
+    });
+
+    it('rejects marketplace assign when the supplier has no shop pin', async () => {
+      const readyOrder = {
+        id: 1,
+        orderId: 'ORD-1',
+        batchOrderId: null,
+        destinationId: 9,
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      } as Order;
+      const rider = {
+        ...mockProfile,
+        user: { id: 21, role: UserRole.RIDER, isActive: true } as User,
+      } as RiderProfile;
+      orderRepo.findOneOrFail.mockResolvedValue(readyOrder);
+      assignmentRepo.findOne.mockResolvedValue(null);
+      profileRepo.findOne.mockResolvedValue(rider);
+      supplierAssignmentRepo.findOne!.mockResolvedValue({
+        orderId: 1,
+        supplierId: 88,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        supplier: { id: 88, latitude: null, longitude: null },
+      } as SupplierAssignment);
+
+      await expect(service.assignOrderToRider(1, rider.id, 7)).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'supplier_location_required',
+        }),
+      });
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects marketplace assign when the rider already has an active job', async () => {
+      const readyOrder = {
+        id: 1,
+        orderId: 'ORD-1',
+        batchOrderId: null,
+        destinationId: 9,
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      } as Order;
+      const rider = {
+        ...mockProfile,
+        user: { id: 21, role: UserRole.RIDER, isActive: true } as User,
+      } as RiderProfile;
+      orderRepo.findOneOrFail.mockResolvedValue(readyOrder);
+      assignmentRepo.findOne.mockResolvedValue(null);
+      profileRepo.findOne.mockResolvedValue(rider);
+      supplierAssignmentRepo.findOne!.mockResolvedValue({
+        orderId: 1,
+        supplierId: 88,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        supplier: { id: 88, latitude: 7.0505, longitude: 125.5889 },
+      } as SupplierAssignment);
+      destinationRepo.findOne!.mockResolvedValue({
+        id: 9,
+        latitude: 7.074,
+        longitude: 125.6079,
+      } as DeliveryDestination);
+      assignmentRepo.count!.mockResolvedValue(1);
+
+      await expect(service.assignOrderToRider(1, rider.id, 7)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('auto-creates a two-stop plan after marketplace rider assignment', async () => {
+      const readyOrder = {
+        id: 1,
+        orderId: 'ORD-1',
+        batchOrderId: null,
+        destinationId: 9,
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      } as Order;
+      const rider = {
+        ...mockProfile,
+        user: { id: 21, role: UserRole.RIDER, isActive: true } as User,
+      } as RiderProfile;
+      const savedAssignment = {
+        id: 301,
+        orderId: readyOrder.id,
+        riderId: rider.id,
+        status: DeliveryStatus.ASSIGNED,
+        isCurrent: true,
+      } as DeliveryAssignment;
+      orderRepo.findOneOrFail.mockResolvedValue(readyOrder);
+      orderRepo.update.mockResolvedValue({ affected: 1 } as never);
+      assignmentRepo.findOne.mockResolvedValue(null);
+      profileRepo.findOne.mockResolvedValue(rider);
+      assignmentRepo.save.mockResolvedValue(savedAssignment);
+      assignmentRepo.count!.mockResolvedValue(0);
+      supplierAssignmentRepo.findOne!.mockResolvedValue({
+        orderId: 1,
+        supplierId: 88,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        supplier: { id: 88, latitude: 7.0505, longitude: 125.5889 },
+      } as SupplierAssignment);
+      destinationRepo.findOne!.mockResolvedValue({
+        id: 9,
+        latitude: 7.074,
+        longitude: 125.6079,
+      } as DeliveryDestination);
+      ordersService.publishStatusUpdate.mockResolvedValue({
+        ...readyOrder,
+        orderStatus: OrderStatus.RIDER_ASSIGNED,
+      } as Order);
+      dispatchPlanService.createPlan.mockResolvedValue({ id: 501 });
+
+      await service.assignOrderToRider(1, rider.id, 7);
+
+      expect(dispatchPlanService.createPlan).toHaveBeenCalledWith(rider.id, [
+        savedAssignment.id,
+      ]);
     });
 
     it('records super_admin actor role on assign when provided from JWT', async () => {
@@ -2341,7 +2479,13 @@ describe('RidersService', () => {
       profileRepo.save.mockImplementation(
         async (profile) => profile as RiderProfile,
       );
-      assignmentRepo.count = jest.fn().mockResolvedValue(1);
+      assignmentRepo.find = jest.fn().mockResolvedValue([
+        {
+          ...mockAssignment,
+          isCurrent: true,
+          status: DeliveryStatus.ON_THE_WAY,
+        },
+      ]);
       dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
         stop: {
           assignmentId: 100,
@@ -2374,7 +2518,7 @@ describe('RidersService', () => {
 
     it('rejects location pings when no active trip (picked_up / out_for_delivery)', async () => {
       profileRepo.findOne.mockResolvedValue({ ...mockProfile });
-      assignmentRepo.count = jest.fn().mockResolvedValue(0);
+      assignmentRepo.find = jest.fn().mockResolvedValue([]);
 
       await expect(
         service.updateLocation(1, {
@@ -2393,7 +2537,13 @@ describe('RidersService', () => {
       profileRepo.save.mockImplementation(
         async (profile) => profile as RiderProfile,
       );
-      assignmentRepo.count = jest.fn().mockResolvedValue(1);
+      assignmentRepo.find = jest.fn().mockResolvedValue([
+        {
+          ...mockAssignment,
+          isCurrent: true,
+          status: DeliveryStatus.PICKED_UP,
+        },
+      ]);
       dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
         stop: {
           assignmentId: 100,
@@ -2419,6 +2569,47 @@ describe('RidersService', () => {
           assignmentId: '100',
           planVersion: 2,
           latitude: 7.07,
+          longitude: 125.61,
+        }),
+      );
+    });
+
+    it('accepts marketplace GPS pings while riding to the supplier', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...mockProfile });
+      profileRepo.save.mockImplementation(
+        async (profile) => profile as RiderProfile,
+      );
+      assignmentRepo.find = jest.fn().mockResolvedValue([
+        {
+          ...mockAssignment,
+          isCurrent: true,
+          status: DeliveryStatus.ASSIGNED,
+          orderId: 1,
+        },
+      ]);
+      supplierAssignmentRepo.findOne!.mockResolvedValue({
+        orderId: 1,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+      } as SupplierAssignment);
+      dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
+        stop: {
+          assignmentId: 100,
+          sequence: 1,
+          status: DispatchStopStatus.PENDING,
+        },
+        planVersion: 1,
+      });
+
+      await service.updateLocation(1, {
+        latitude: 7.08,
+        longitude: 125.61,
+      });
+
+      expect(locationGateway.broadcastLocation).toHaveBeenCalledWith(
+        '100',
+        expect.objectContaining({
+          assignmentId: '100',
+          latitude: 7.08,
           longitude: 125.61,
         }),
       );

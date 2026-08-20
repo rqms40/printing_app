@@ -7,6 +7,9 @@ import {
   Body,
   UseGuards,
   Request,
+  Query,
+  Inject,
+  BadRequestException,
   ParseIntPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -17,6 +20,9 @@ import { UpdateRiderProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+import { ROUTING_PROVIDER } from './routing/routing-provider';
+import type { RoutingProvider } from './routing/routing-provider';
+import { numericPoint } from './dispatch-plan.service';
 
 @ApiTags('riders')
 @ApiBearerAuth()
@@ -24,7 +30,10 @@ import type { RequestWithUser } from '../common/interfaces/request-with-user';
 @Roles('rider')
 @Controller('riders')
 export class RidersController {
-  constructor(private ridersService: RidersService) {}
+  constructor(
+    private ridersService: RidersService,
+    @Inject(ROUTING_PROVIDER) private routingProvider: RoutingProvider,
+  ) {}
 
   @Get('profile')
   getProfile(@Request() req: RequestWithUser) {
@@ -100,5 +109,24 @@ export class RidersController {
   @Get('earnings')
   getEarnings(@Request() req: RequestWithUser) {
     return this.ridersService.getEarnings(req.user.sub);
+  }
+
+  @Get('route')
+  async getRoute(
+    @Query('fromLat') fromLat: string,
+    @Query('fromLng') fromLng: string,
+    @Query('toLat') toLat: string,
+    @Query('toLng') toLng: string,
+  ) {
+    const from = numericPoint(fromLat, fromLng);
+    const to = numericPoint(toLat, toLng);
+    if (!from || !to) {
+      throw new BadRequestException('Invalid coordinates');
+    }
+    const legs = await this.routingProvider.getRoute([from, to]);
+    if (legs.length === 0) {
+      throw new BadRequestException('No route found');
+    }
+    return legs[0];
   }
 }

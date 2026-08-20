@@ -399,10 +399,11 @@ async function seed() {
     ds,
     `INSERT INTO supplier_profiles (
        user_id, business_name, description, contact_phone, contact_email,
-       address, service_zones, service_focus_ranks, is_active,
-       rating_average, rating_count, attributes
+       address, latitude, longitude, service_zones, service_focus_ranks,
+       is_active, rating_average, rating_count, attributes
      ) VALUES (
-       $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, true, 0, 0, '{}'::jsonb
+       $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb,
+       true, 0, 0, '{}'::jsonb
      ) RETURNING id`,
     [
       supplierUserId,
@@ -411,6 +412,8 @@ async function seed() {
       '+639193234567',
       'supplier@gridgo.ph',
       'Quimpo Blvd, Ecoland, Davao City',
+      7.0505,
+      125.5889,
       '["Davao City","Toril","Calinan"]',
       '["document_printing","tarpaulins","signages","apparel"]',
     ],

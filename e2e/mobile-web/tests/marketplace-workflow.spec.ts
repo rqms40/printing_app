@@ -113,7 +113,8 @@ const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
     actor: "ops_admin",
     surface: "admin-web",
     action: "Dispatch order to an available verified rider.",
-    expected: "rider_assigned; delivery assignment is visible to the rider.",
+    expected:
+      "rider_assigned; rider map shows the supplier pickup pin as the first stop, then the customer delivery.",
   },
   {
     id: 10,
@@ -121,7 +122,7 @@ const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
     surface: "mobile-rider",
     action: "Confirm pickup (OTP/proof gates) and start the active trip.",
     expected:
-      "picked_up / out_for_delivery; live tracking window opens after pickup only.",
+      "picked_up / out_for_delivery; rider map switches the active route to the customer; live tracking window opens after pickup only.",
   },
   {
     id: 11,

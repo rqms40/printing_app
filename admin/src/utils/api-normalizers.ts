@@ -20,6 +20,7 @@ import type {
   DispatchPlanStatus,
   DispatchPlanStop,
   DispatchStopStatus,
+  DispatchStopKind,
   LineStringGeometry,
 } from "@/types/dispatch-plan";
 import type {
@@ -236,6 +237,13 @@ function toNumberValue(record: ApiRecord, fallback: number, ...keys: string[]) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function toOptionalNumber(record: ApiRecord, ...keys: string[]) {
+  const value = read(record, ...keys);
+  if (value == null || value === "") return null;
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function toBooleanValue(
   record: ApiRecord,
   fallback: boolean,
@@ -424,6 +432,9 @@ function normalizeDispatchPlanStop(value: unknown): DispatchPlanStop {
     ),
     sequence: requiredInteger(record, "stop sequence", "sequence"),
     status: status as DispatchStopStatus,
+    kind: (toOptionalString(record, "kind") === "pickup"
+      ? "pickup"
+      : "dropoff") as DispatchStopKind,
     destination_latitude: destinationLatitude,
     destination_longitude: destinationLongitude,
     leg_duration_seconds: duration,
@@ -491,7 +502,10 @@ export function normalizeDispatchPlan(input: unknown): DispatchPlan | null {
   if (new Set(stops.map((stop) => stop.sequence)).size !== stops.length) {
     throw new Error("Duplicate dispatch stop sequence");
   }
-  if (new Set(stops.map((stop) => stop.assignment_id)).size !== stops.length) {
+  if (
+    new Set(stops.map((stop) => `${stop.assignment_id}:${stop.kind}`)).size !==
+    stops.length
+  ) {
     throw new Error("Duplicate dispatch assignment id");
   }
   const planId = requiredInteger(record, "plan id", "id");
@@ -783,6 +797,13 @@ function normalizeAssignedRiderContact(
     phone_number: toOptionalString(record, "phone_number", "phoneNumber"),
     vehicle_type: toOptionalString(record, "vehicle_type", "vehicleType"),
     plate_number: toOptionalString(record, "plate_number", "plateNumber"),
+    last_latitude: toOptionalNumber(record, "last_latitude", "lastLatitude"),
+    last_longitude: toOptionalNumber(record, "last_longitude", "lastLongitude"),
+    last_location_update: toOptionalString(
+      record,
+      "last_location_update",
+      "lastLocationUpdate",
+    ),
     delivery_assignment_id: toOptionalString(
       record,
       "delivery_assignment_id",
@@ -1167,10 +1188,25 @@ export function normalizeOrder(input: unknown): Order & {
             : toNumberValue(c, 0, "assignment_id", "assignmentId"),
         logo_url: toOptionalString(c, "logo_url", "logoUrl") ?? null,
         address: toOptionalString(c, "address") ?? null,
+        latitude: toOptionalNumber(c, "latitude"),
+        longitude: toOptionalNumber(c, "longitude"),
         broad_address:
           toOptionalString(c, "broad_address", "broadAddress") ?? null,
         self_qc_evidence_urls: evidenceUrls,
         self_qc_evidence_file_ids: evidenceIds,
+        quoted_price_minor:
+          read(c, "quoted_price_minor", "quotedPriceMinor") == null
+            ? null
+            : String(read(c, "quoted_price_minor", "quotedPriceMinor")),
+        quoted_promised_date:
+          toOptionalString(c, "quoted_promised_date", "quotedPromisedDate") ??
+          null,
+        customer_confirmed_quote_at:
+          toOptionalString(
+            c,
+            "customer_confirmed_quote_at",
+            "customerConfirmedQuoteAt",
+          ) ?? null,
       };
     })(),
     assigned_rider_contact: normalizeAssignedRiderContact(

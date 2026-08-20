@@ -78,9 +78,13 @@ class DeliveriesState {
 
   RiderAssignmentView? get activeDelivery {
     try {
-      return inProgressAssignments.first;
+      return views.firstWhere((view) => view.shouldTrackLocation);
     } catch (_) {
-      return null;
+      try {
+        return inProgressAssignments.first;
+      } catch (_) {
+        return null;
+      }
     }
   }
 

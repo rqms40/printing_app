@@ -278,7 +278,7 @@ extension OrderStatusX on OrderStatus {
       case OrderStatus.approvedForMatching:
         return 'Your order is approved and will be matched to a supplier.';
       case OrderStatus.supplierAssigned:
-        return 'A print supplier has been assigned to your order.';
+        return 'A supplier was assigned. Catalog prices are estimates — pay the final price when they send it.';
       case OrderStatus.supplierAccepted:
         return 'The supplier accepted the job. Ops will authorize payment next.';
       case OrderStatus.awaitingPayment:

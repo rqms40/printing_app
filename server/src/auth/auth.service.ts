@@ -15,6 +15,7 @@ import * as bcrypt from 'bcrypt';
 import {
   AgeRange,
   ClientAccountType,
+  MatchingPreference,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -33,6 +34,7 @@ type RegisterProfileInput = {
   organization?: string;
   clientAccountType?: ClientAccountType;
   printingPreferences?: PrintingPreference[];
+  matchingPreference?: MatchingPreference;
   serviceFocusRanks?: string[];
 };
 

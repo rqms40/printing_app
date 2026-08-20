@@ -51,6 +51,7 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
       profileCategory: user?.profileCategory,
       profileField: user?.profileField,
       printingPreferences: user?.printingPreferences,
+      matchingPreference: user?.matchingPreference,
     );
   }
 
@@ -79,9 +80,18 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
           course: _courseController.text.trim(),
           organization: _organizationController.text.trim(),
           printingPreferences: _profiling.printingPreferences,
+          matchingPreference: _profiling.matchingPreference,
         );
 
-    if (!success || !mounted) return;
+    if (!mounted) return;
+    if (!success) {
+      final message =
+          ref.read(authProvider).errorMessage ?? 'Failed to update profile';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      return;
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Profile updated successfully')),

@@ -227,6 +227,22 @@ class SupplierJobDetailNotifier extends StateNotifier<SupplierJobDetailState> {
     }
   }
 
+  Future<bool> quote({
+    required int finalPriceMinor,
+    required DateTime promisedDate,
+  }) async {
+    return _runAction(() async {
+      await _api.post(
+        '/supplier/jobs/$jobId/quote',
+        data: {
+          'finalPriceMinor': finalPriceMinor,
+          'promisedDate': promisedDate.toUtc().toIso8601String(),
+        },
+      );
+      return 'Final price sent. Waiting for the customer to place the order again.';
+    });
+  }
+
   Future<bool> accept({
     required int finalPriceMinor,
     required DateTime promisedDate,

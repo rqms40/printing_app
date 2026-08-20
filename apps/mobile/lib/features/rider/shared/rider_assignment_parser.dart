@@ -242,6 +242,18 @@ RiderAssignmentView parseAssignmentView(
     _asMap(json['dispatchPlanStop'] ?? json['dispatch_plan_stop']),
     fallbackAssignmentId: assignment.id,
   );
+  final rawStops = json['dispatchPlanStops'] ?? json['dispatch_plan_stops'];
+  final planStops = <RiderDispatchPlanStop>[];
+  if (rawStops is List) {
+    for (final raw in rawStops) {
+      final parsed = _parsePlanStop(
+        _asMap(raw),
+        fallbackAssignmentId: assignment.id,
+      );
+      if (parsed != null) planStops.add(parsed);
+    }
+    planStops.sort((left, right) => left.sequence.compareTo(right.sequence));
+  }
 
   return RiderAssignmentView(
     assignment: assignment,
@@ -258,8 +270,28 @@ RiderAssignmentView parseAssignmentView(
     ),
     planState:
         _readString(json['dispatchPlanState'] ?? json['dispatch_plan_state']) ??
-        (stop == null ? 'unplanned' : 'planned'),
+        (stop == null && planStops.isEmpty ? 'unplanned' : 'planned'),
     planStop: stop,
+    planStops: List.unmodifiable(planStops),
+    supplierPickup: _parseSupplierPickup(
+      _asMap(json['supplierPickup'] ?? json['supplier_pickup']),
+    ),
+  );
+}
+
+RiderSupplierPickup? _parseSupplierPickup(Map<String, dynamic>? json) {
+  if (json == null) return null;
+  final latitude = _readDouble(json['latitude']);
+  final longitude = _readDouble(json['longitude']);
+  if (!_validCoordinate(latitude, longitude)) return null;
+  final businessName = _readString(json['businessName'] ?? json['business_name']);
+  if (businessName == null || businessName.trim().isEmpty) return null;
+  return RiderSupplierPickup(
+    supplierId: _readId(json['supplierId'] ?? json['supplier_id']),
+    businessName: businessName.trim(),
+    address: _readString(json['address']),
+    latitude: latitude!,
+    longitude: longitude!,
   );
 }
 
@@ -356,9 +388,10 @@ RiderDispatchPlan? parseRiderDispatchPlan(dynamic value) {
   }
   stops.sort((left, right) => left.sequence.compareTo(right.sequence));
   final sequences = stops.map((stop) => stop.sequence).toSet();
-  final assignmentIds = stops.map((stop) => stop.assignmentId).toSet();
-  if (sequences.length != stops.length ||
-      assignmentIds.length != stops.length) {
+  final stopKeys = stops
+      .map((stop) => '${stop.assignmentId}:${stop.kind.name}')
+      .toSet();
+  if (sequences.length != stops.length || stopKeys.length != stops.length) {
     return null;
   }
 
@@ -407,6 +440,11 @@ RiderDispatchPlanStop? _parsePlanStop(
     (candidate) => candidate.name == statusValue,
     orElse: () => RiderDispatchStopStatus.pending,
   );
+  final kindValue = _readString(json['kind']);
+  final kind = RiderDispatchStopKind.values.firstWhere(
+    (candidate) => candidate.name == kindValue,
+    orElse: () => RiderDispatchStopKind.dropoff,
+  );
   if (assignmentId.isEmpty || sequence == null) return null;
   if (!_validCoordinate(latitude, longitude)) return null;
   if (duration == null || distance == null) {
@@ -424,6 +462,7 @@ RiderDispatchPlanStop? _parsePlanStop(
     assignmentId: assignmentId,
     sequence: sequence,
     status: status,
+    kind: kind,
     destinationLatitude: latitude!,
     destinationLongitude: longitude!,
     legDurationSeconds: duration,
@@ -465,11 +504,22 @@ List<RiderAssignmentView> mergeRiderAssignmentViewsWithPlan({
   }
 
   final plannedIds = <String>{};
-  final planned = <RiderAssignmentView>[];
-  var remainingPosition = 0;
+  final stopsByAssignment = <String, List<RiderDispatchPlanStop>>{};
   for (final stop in plan.stops) {
     plannedIds.add(stop.assignmentId);
-    final isPending = stop.status == RiderDispatchStopStatus.pending;
+    (stopsByAssignment[stop.assignmentId] ??= []).add(stop);
+  }
+  final planned = <RiderAssignmentView>[];
+  var remainingPosition = 0;
+  final seen = <String>{};
+  for (final stop in plan.stops) {
+    if (!seen.add(stop.assignmentId)) continue;
+    final assignmentStops = stopsByAssignment[stop.assignmentId]!;
+    final current = assignmentStops.firstWhere(
+      (candidate) => candidate.status == RiderDispatchStopStatus.pending,
+      orElse: () => assignmentStops.first,
+    );
+    final isPending = current.status == RiderDispatchStopStatus.pending;
     if (isPending) remainingPosition++;
     final source = byId[stop.assignmentId];
     if (source == null) {
@@ -484,7 +534,9 @@ List<RiderAssignmentView> mergeRiderAssignmentViewsWithPlan({
         routePosition: isPending ? remainingPosition : null,
         planVersion: plan.version,
         planState: 'planned',
-        planStop: stop,
+        planStop: current,
+        planStops: List.unmodifiable(assignmentStops),
+        supplierPickup: source.supplierPickup,
         routingDataStale: plan.routingDataStale,
       ),
     );

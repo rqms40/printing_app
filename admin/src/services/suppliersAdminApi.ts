@@ -13,6 +13,8 @@ export type SupplierDirectoryRow = {
   contactPhone: string | null;
   contactEmail: string | null;
   address: string | null;
+  latitude: number | null;
+  longitude: number | null;
   logoUrl: string | null;
   attributes?: Record<string, string>;
   serviceZones: string[];
@@ -136,6 +138,14 @@ export function normalizeDirectoryRow(input: unknown): SupplierDirectoryRow {
     contactPhone: toStringOrNull(read(r, "contactPhone", "contact_phone")),
     contactEmail: toStringOrNull(read(r, "contactEmail", "contact_email")),
     address: toStringOrNull(read(r, "address")),
+    latitude: (() => {
+      const value = read(r, "latitude");
+      return value == null || value === "" ? null : toNumber(value);
+    })(),
+    longitude: (() => {
+      const value = read(r, "longitude");
+      return value == null || value === "" ? null : toNumber(value);
+    })(),
     logoUrl: toStringOrNull(read(r, "logoUrl", "logo_url")),
     attributes: asRecord(read(r, "attributes")) as Record<string, string>,
     serviceZones: Array.isArray(zonesRaw)

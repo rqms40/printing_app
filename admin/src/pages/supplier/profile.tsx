@@ -1,10 +1,121 @@
-import { useCallback, useEffect, useState } from "react";
-import { App, Button, Card, Col, Form, Input, Row, Select, Spin, Typography, Space, List as AntList, Modal, Upload, Avatar, Tabs } from "antd";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { App, AutoComplete, Button, Card, Col, Form, Input, Row, Select, Spin, Typography, Space, List as AntList, Modal, Upload, Avatar, Tabs } from "antd";
 import { UserOutlined, SaveOutlined, PlusOutlined, DeleteOutlined, UploadOutlined } from "@ant-design/icons";
 import { List } from "@refinedev/antd";
 import { apiClient } from "@/providers/api-client";
 import { loadMySupplierProfile, updateMySupplierProfile, addMySupplierCapability, removeMySupplierCapability, type SupplierDirectoryRow } from "@/services/suppliersAdminApi";
 import { AccountDetailsForm } from "./components/AccountDetailsForm";
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+const DAVAO_CENTER: [number, number] = [7.064, 125.6079];
+
+function readShopCoord(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function shopPosition(
+  latitude?: number | null,
+  longitude?: number | null,
+): [number, number] {
+  const lat = readShopCoord(latitude);
+  const lng = readShopCoord(longitude);
+  if (
+    lat == null ||
+    lng == null ||
+    lat < -90 ||
+    lat > 90 ||
+    lng < -180 ||
+    lng > 180 ||
+    (lat === 0 && lng === 0)
+  ) {
+    return DAVAO_CENTER;
+  }
+  return [lat, lng];
+}
+
+function ShopMapRecenter({ lat, lng }: { lat: number; lng: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView([lat, lng], Math.max(map.getZoom(), 14));
+    const timer = window.setTimeout(() => map.invalidateSize(), 50);
+    return () => window.clearTimeout(timer);
+  }, [map, lat, lng]);
+  return null;
+}
+
+function ShopMapClick({
+  onPick,
+}: {
+  onPick: (lat: number, lng: number) => void;
+}) {
+  useMapEvents({
+    click(event) {
+      onPick(event.latlng.lat, event.latlng.lng);
+    },
+  });
+  return null;
+}
+
+function ShopPinPicker({
+  latitude,
+  longitude,
+  onChange,
+}: {
+  latitude?: number | null;
+  longitude?: number | null;
+  onChange: (lat: number, lng: number) => void;
+}) {
+  const position = shopPosition(latitude, longitude);
+
+  return (
+    <div
+      style={{
+        height: 240,
+        width: "100%",
+        borderRadius: 12,
+        overflow: "hidden",
+        border: "1px solid #2E2E2E",
+        position: "relative",
+      }}
+    >
+      <MapContainer
+        center={position}
+        zoom={14}
+        style={{ height: 240, width: "100%", background: "#111" }}
+        scrollWheelZoom
+      >
+        <TileLayer
+          attribution='&copy; OpenStreetMap contributors &copy; CARTO'
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        />
+        <ShopMapRecenter lat={position[0]} lng={position[1]} />
+        <ShopMapClick onPick={onChange} />
+        <Marker
+          position={position}
+          eventHandlers={{
+            dragend: (event) => {
+              const next = event.target.getLatLng();
+              onChange(next.lat, next.lng);
+            },
+          }}
+          draggable
+        />
+      </MapContainer>
+    </div>
+  );
+}
 
 const { Title, Paragraph } = Typography;
 
@@ -21,6 +132,18 @@ export function SupplierProfilePage() {
   const [addingCap, setAddingCap] = useState(false);
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const shopLat = Form.useWatch("latitude", form) as number | null | undefined;
+  const shopLng = Form.useWatch("longitude", form) as number | null | undefined;
+  const shopAddress = Form.useWatch("address", form) as string | undefined;
+  const lastLoadedAddress = useRef<string | null>(null);
+  const [placeOptions, setPlaceOptions] = useState<
+    Array<{
+      value: string;
+      label: string;
+      latitude: number;
+      longitude: number;
+    }>
+  >([]);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -34,10 +157,20 @@ export function SupplierProfilePage() {
           contactPhone: data.contactPhone,
           contactEmail: data.contactEmail,
           address: data.address,
+          latitude: data.latitude,
+          longitude: data.longitude,
           serviceZones: data.serviceZones,
           // Convert record attributes to array for Form.List
           attributesList: Object.entries(data.attributes || {}).map(([key, value]) => ({ keyName: key, value })),
         });
+        const hasPin =
+          readShopCoord(data.latitude) != null &&
+          readShopCoord(data.longitude) != null &&
+          !(Number(data.latitude) === 0 && Number(data.longitude) === 0);
+        // Skip auto-geocode only when a real pin is already saved.
+        lastLoadedAddress.current = hasPin
+          ? (data.address ?? "").trim()
+          : null;
       }
     } catch {
       void message.error("Could not load profile. Please try again.");
@@ -49,6 +182,51 @@ export function SupplierProfilePage() {
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
+
+  useEffect(() => {
+    const query = (shopAddress ?? "").trim();
+    if (query.length < 3) {
+      setPlaceOptions([]);
+      return;
+    }
+    if (lastLoadedAddress.current === query) return;
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await apiClient.get("/suppliers/geocode", {
+          params: { q: query },
+        });
+        const raw = Array.isArray(res.data?.suggestions)
+          ? res.data.suggestions
+          : res.data
+            ? [res.data]
+            : [];
+        const options = raw
+          .map((hit: { displayName?: string; latitude?: number; longitude?: number }) => {
+            const latitude = Number(hit.latitude);
+            const longitude = Number(hit.longitude);
+            const value = String(hit.displayName ?? "").trim();
+            if (
+              !value ||
+              !Number.isFinite(latitude) ||
+              !Number.isFinite(longitude)
+            ) {
+              return null;
+            }
+            return { value, label: value, latitude, longitude };
+          })
+          .filter(Boolean) as Array<{
+          value: string;
+          label: string;
+          latitude: number;
+          longitude: number;
+        }>;
+        setPlaceOptions(options);
+      } catch {
+        setPlaceOptions([]);
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [shopAddress]);
 
   const onFinish = async (values: any) => {
     setSaving(true);
@@ -231,8 +409,51 @@ export function SupplierProfilePage() {
                     name="address"
                     label="Physical Address"
                     rules={[{ required: true, message: "Please enter your address" }]}
+                    extra="Type a street or place, then click a suggested location to drop the shop pin."
                   >
-                    <Input placeholder="e.g. 123 Quimpo Blvd, Davao City" />
+                    <AutoComplete
+                      options={placeOptions}
+                      onSelect={(value, option) => {
+                        const selected = option as {
+                          value?: string;
+                          latitude?: number;
+                          longitude?: number;
+                        };
+                        const latitude = Number(selected.latitude);
+                        const longitude = Number(selected.longitude);
+                        lastLoadedAddress.current = String(value);
+                        form.setFieldsValue({
+                          address: value,
+                          ...(Number.isFinite(latitude) && Number.isFinite(longitude)
+                            ? { latitude, longitude }
+                            : {}),
+                        });
+                        setPlaceOptions([]);
+                      }}
+                    >
+                      <Input placeholder="e.g. Quimpo Blvd, Ecoland, Davao City" />
+                    </AutoComplete>
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24}>
+                  <Form.Item
+                    label="Shop pin"
+                    extra="Click a suggested address to pin it. Drag the marker to fine-tune."
+                  >
+                    <Form.Item name="latitude" hidden>
+                      <Input />
+                    </Form.Item>
+                    <Form.Item name="longitude" hidden>
+                      <Input />
+                    </Form.Item>
+                    <ShopPinPicker
+                      latitude={shopLat}
+                      longitude={shopLng}
+                      onChange={(lat, lng) => {
+                        form.setFieldsValue({ latitude: lat, longitude: lng });
+                      }}
+                    />
                   </Form.Item>
                 </Col>
 

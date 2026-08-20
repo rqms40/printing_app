@@ -25,6 +25,17 @@ class CheckoutSummaryCard extends ConsumerWidget {
           if (fees.priorityFee > 0) _row('Priority', fees.priorityFee, colors),
           if (fees.extraDropFee > 0) _row('Extra drop', fees.extraDropFee, colors),
           _row('Service fee', fees.serviceFee, colors),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Initial estimate — the assigned supplier may change the print price.',
+              style: AppTypography.caption.copyWith(
+                color: colors.onSurfaceDim,
+                fontSize: 11,
+              ),
+            ),
+          ),
         ],
       ),
     );

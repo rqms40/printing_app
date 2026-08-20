@@ -18,6 +18,7 @@ import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
 import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
+import { ConfirmSupplierQuoteDto } from './dto/confirm-supplier-quote.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { OrderStatus } from './entities/order.entity';
@@ -105,6 +106,18 @@ export class OrdersController {
    * Pilot Credits: reserve→spend from the order owner; COD: eligibility for collection.
    * Freezes commercial snapshot and enters payment_authorized.
    */
+  /** Client pays and confirms the supplier's final price so the supplier can accept. */
+  @Post(':id/confirm-supplier-quote')
+  @UseGuards(RolesGuard)
+  @Roles('client')
+  confirmSupplierQuote(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ConfirmSupplierQuoteDto,
+  ) {
+    return this.ordersService.confirmSupplierQuote(id, req.user.sub, dto ?? {});
+  }
+
   @Post(':id/authorize-payment')
   @UseGuards(RolesGuard)
   @Roles('ops_admin', 'super_admin')

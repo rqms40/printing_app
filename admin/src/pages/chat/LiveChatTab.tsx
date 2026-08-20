@@ -94,23 +94,25 @@ export function LiveChatTab() {
           height: "100%",
         }}
       >
-        {/* Filter tabs */}
-        <Tabs
-          activeKey={filter}
-          onChange={(key) => setFilter(key as FilterKey)}
-          size="small"
-          style={{ padding: "6px 20px 0", flexShrink: 0 }}
-          tabBarStyle={{ marginBottom: 0, borderBottom: `1px solid ${token.colorBorder}` }}
-          items={FILTER_TABS.map((t) => ({ key: t.key, label: t.label }))}
-        />
-
-        {/* Conversation list */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          <ConversationList
-            conversations={filtered}
-            activeId={activeConversation?.id ?? null}
-            onSelect={setActiveConversation}
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+          {/* Filter tabs */}
+          <Tabs
+            activeKey={filter}
+            onChange={(key) => setFilter(key as FilterKey)}
+            size="small"
+            style={{ padding: "6px 20px 0", flexShrink: 0 }}
+            tabBarStyle={{ marginBottom: 0, borderBottom: `1px solid ${token.colorBorder}` }}
+            items={FILTER_TABS.map((t) => ({ key: t.key, label: t.label }))}
           />
+
+          {/* Conversation list */}
+          <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+            <ConversationList
+              conversations={filtered}
+              activeId={activeConversation?.id ?? null}
+              onSelect={setActiveConversation}
+            />
+          </div>
         </div>
       </Sider>
       <Content

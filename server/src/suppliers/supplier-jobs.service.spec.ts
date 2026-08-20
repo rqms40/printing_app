@@ -106,6 +106,9 @@ describe('SupplierJobsService', () => {
       decision: SupplierAssignmentDecision.PENDING,
       decisionReason: null,
       finalPriceMinor: null,
+      quotedPriceMinor: null,
+      quotedPromisedDate: null,
+      customerConfirmedQuoteAt: null,
       promisedDate: null,
       decidedAt: null,
       selfQcEvidenceFileIds: [],
@@ -222,13 +225,70 @@ describe('SupplierJobsService', () => {
     service = moduleRef.get(SupplierJobsService);
   });
 
+  describe('quoteJob', () => {
+    const futureDate = new Date(
+      Date.now() + 3 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    it('stores a quote without accepting the job', async () => {
+      const assignment = baseAssignment();
+      const order = baseOrder();
+      txAssignmentRepo.findOne.mockResolvedValue(assignment);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+      txAssignmentRepo.save.mockImplementation(async (row) => ({ ...row }));
+
+      const result = await service.quoteJob(
+        7,
+        { finalPriceMinor: 150000, promisedDate: futureDate },
+        actor,
+      );
+
+      expect(result.toStatus).toBe(OrderStatus.SUPPLIER_ASSIGNED);
+      expect(txAssignmentRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quotedPriceMinor: '150000',
+          customerConfirmedQuoteAt: null,
+          decision: SupplierAssignmentDecision.PENDING,
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 3,
+          type: 'supplier_quoted',
+        }),
+      );
+    });
+
+    it('rejects when acceptance SLA expired', async () => {
+      txAssignmentRepo.findOne.mockResolvedValue(
+        baseAssignment({
+          acceptanceDeadline: new Date(Date.now() - 60_000),
+        }),
+      );
+
+      await expect(
+        service.quoteJob(
+          7,
+          { finalPriceMinor: 150000, promisedDate: futureDate },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'acceptance_sla_expired' }),
+      });
+    });
+  });
+
   describe('acceptJob', () => {
     const futureDate = new Date(
       Date.now() + 3 * 24 * 60 * 60 * 1000,
     ).toISOString();
 
     it('accepts pending assignment: ACCEPTED + supplier_accepted + freezes price/promised', async () => {
-      const assignment = baseAssignment();
+      const assignment = baseAssignment({
+        quotedPriceMinor: '150000',
+        quotedPromisedDate: new Date(futureDate),
+        customerConfirmedQuoteAt: new Date(),
+      });
       const order = baseOrder();
       txAssignmentRepo.findOne.mockResolvedValue(assignment);
       txOrdersRepo.findOne.mockResolvedValue(order);
@@ -285,6 +345,44 @@ describe('SupplierJobsService', () => {
           type: 'supplier_accepted',
         }),
       );
+    });
+
+    it('rejects accept before the supplier quotes', async () => {
+      txAssignmentRepo.findOne.mockResolvedValue(baseAssignment());
+      txOrdersRepo.findOne.mockResolvedValue(baseOrder());
+
+      await expect(
+        service.acceptJob(
+          7,
+          { finalPriceMinor: 150000, promisedDate: futureDate },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'supplier_quote_required' }),
+      });
+    });
+
+    it('rejects accept before the customer confirms the quote', async () => {
+      txAssignmentRepo.findOne.mockResolvedValue(
+        baseAssignment({
+          quotedPriceMinor: '150000',
+          quotedPromisedDate: new Date(futureDate),
+          customerConfirmedQuoteAt: null,
+        }),
+      );
+      txOrdersRepo.findOne.mockResolvedValue(baseOrder());
+
+      await expect(
+        service.acceptJob(
+          7,
+          { finalPriceMinor: 150000, promisedDate: futureDate },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'customer_quote_not_confirmed',
+        }),
+      });
     });
 
     it('rejects when assignment belongs to another supplier', async () => {
@@ -862,7 +960,35 @@ describe('SupplierJobsService', () => {
       expect(detail.artwork.signedUrl).toBe('https://minio.example/signed');
       expect(detail.artwork.fileMetadataId).toBe(99);
       expect(detail.allowedActions).toEqual(
-        expect.arrayContaining(['accept', 'decline']),
+        expect.arrayContaining(['quote', 'decline']),
+      );
+      expect(detail.allowedActions).not.toContain('accept');
+      expect(filesService.getPresignedUrlForKey).toHaveBeenCalledWith(
+        'uploads/paper/flyer.pdf',
+        3600,
+        'localhost',
+      );
+    });
+
+    it('allows accept after quoted price and customer confirmation', async () => {
+      const order = baseOrder();
+      assignmentRepo.findOne!.mockResolvedValue(
+        baseAssignment({
+          order,
+          quotedPriceMinor: '150000',
+          quotedPromisedDate: new Date(),
+          customerConfirmedQuoteAt: new Date(),
+        }),
+      );
+      filesService.findById.mockResolvedValue({
+        id: 99,
+        objectKey: 'uploads/paper/flyer.pdf',
+      } as FileMetadata);
+
+      const detail = await service.getJob(7, actor, 'localhost');
+
+      expect(detail.allowedActions).toEqual(
+        expect.arrayContaining(['quote', 'decline', 'accept']),
       );
       expect(filesService.getPresignedUrlForKey).toHaveBeenCalledWith(
         'uploads/paper/flyer.pdf',

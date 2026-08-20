@@ -284,6 +284,20 @@ class OrderDetailScreen extends ConsumerWidget {
                 .slideY(begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.md),
 
+            // --- Assigned Rider (Moved to top when assigned) ---
+            if (order.assignedRider != null) ...[
+              RiderInfoCard(
+                rider: order.assignedRider,
+                onChat: order.assignedRiderId == null
+                    ? null
+                    : () => _openOrderChat(context, ref, order),
+              )
+                  .animate()
+                  .fadeIn(duration: 350.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
+              const SizedBox(height: AppSpacing.md),
+            ],
+
             // --- Supplier quality-check evidence (own card for visibility) ---
             if (_showSelfQcEvidence(order)) ...[
               AppCard(
@@ -445,13 +459,15 @@ class OrderDetailScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
 
             // --- Assigned Rider ---
-            RiderInfoCard(
-              rider: order.assignedRider,
-              onChat: order.assignedRiderId == null
-                  ? null
-                  : () => _openOrderChat(context, ref, order),
-            ),
-            const SizedBox(height: AppSpacing.md),
+            if (order.assignedRider == null) ...[
+              RiderInfoCard(
+                rider: order.assignedRider,
+                onChat: order.assignedRiderId == null
+                    ? null
+                    : () => _openOrderChat(context, ref, order),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
 
             // --- Action Buttons ---
             if (isOnTheWay)
@@ -953,7 +969,7 @@ class OrderDetailScreen extends ConsumerWidget {
 }
 
 /// Expandable shop card: logo, name, broad address (e.g. San Pedro, Davao City).
-class _SupplierShopDropdown extends StatelessWidget {
+class _SupplierShopDropdown extends ConsumerWidget {
   const _SupplierShopDropdown({
     required this.supplier,
     required this.orderStatus,
@@ -963,18 +979,20 @@ class _SupplierShopDropdown extends StatelessWidget {
   final OrderStatus orderStatus;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-    final initial = supplier.businessName.isNotEmpty
-        ? supplier.businessName[0].toUpperCase()
-        : 'S';
-    final location = (supplier.broadAddress?.trim().isNotEmpty == true)
-        ? supplier.broadAddress!.trim()
-        : (supplier.address?.trim().isNotEmpty == true
-              ? supplier.address!.trim()
-              : null);
+
+    final preference = ref.watch(authProvider).user?.matchingPreference ?? 'quality';
+    String matchTitle = 'Matched for Quality';
+    if (preference.toLowerCase() == 'price') {
+      matchTitle = 'Matched for Best Value';
+    } else if (preference.toLowerCase() == 'speed') {
+      matchTitle = 'Matched for Fastest Turnaround';
+    }
+
+    final initial = matchTitle[0].toUpperCase();
     final title = switch (orderStatus) {
       OrderStatus.supplierAssigned => 'Supplier assigned',
       OrderStatus.supplierAccepted => 'Supplier accepted',
@@ -993,16 +1011,10 @@ class _SupplierShopDropdown extends StatelessWidget {
           color: colors.surfaceVariant,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
             vertical: AppSpacing.xs,
-          ),
-          childrenPadding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            0,
-            AppSpacing.md,
-            AppSpacing.md,
           ),
           leading: _ShopAvatar(
             logoUrl: supplier.logoUrl,
@@ -1011,73 +1023,15 @@ class _SupplierShopDropdown extends StatelessWidget {
             size: 40,
           ),
           title: Text(
-            supplier.businessName,
+            matchTitle,
             style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
           ),
           subtitle: Text(
-            [title, ?location].join(' · '),
+            title,
             style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _ShopAvatar(
-                  logoUrl: supplier.logoUrl,
-                  initial: initial,
-                  colors: colors,
-                  size: 64,
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        supplier.businessName,
-                        style: AppTypography.bodyBold.copyWith(
-                          color: colors.onBackground,
-                        ),
-                      ),
-                      if (location != null) ...[
-                        const SizedBox(height: AppSpacing.xs),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            HugeIcon(
-                              icon: HugeIcons.strokeRoundedLocation01,
-                              size: 16,
-                              color: colors.onSurfaceDim,
-                            ),
-                            const SizedBox(width: AppSpacing.xs),
-                            Expanded(
-                              child: Text(
-                                location,
-                                style: AppTypography.body.copyWith(
-                                  color: colors.onSurface,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (supplier.decision != null) ...[
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          'Assignment: ${supplier.decision}',
-                          style: AppTypography.caption.copyWith(
-                            color: colors.onSurfaceDim,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
         ),
       ),
     );

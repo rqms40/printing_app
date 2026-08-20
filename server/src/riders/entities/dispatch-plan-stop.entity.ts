@@ -19,11 +19,16 @@ export enum DispatchStopStatus {
   SKIPPED = 'skipped',
 }
 
+export enum DispatchStopKind {
+  PICKUP = 'pickup',
+  DROPOFF = 'dropoff',
+}
+
 @Entity('dispatch_plan_stops')
 @Index('uq_dispatch_plan_stops_sequence', ['planId', 'sequence'], {
   unique: true,
 })
-@Index('uq_dispatch_plan_stops_assignment', ['planId', 'assignmentId'], {
+@Index('uq_dispatch_plan_stops_assignment_kind', ['planId', 'assignmentId', 'kind'], {
   unique: true,
 })
 @Index('idx_dispatch_plan_stops_assignment', ['assignmentId'])
@@ -64,6 +69,14 @@ export class DispatchPlanStop {
 
   @Column({ type: 'int' })
   sequence: number;
+
+  @Column({
+    type: 'enum',
+    enum: DispatchStopKind,
+    enumName: 'dispatch_stop_kind_enum',
+    default: DispatchStopKind.DROPOFF,
+  })
+  kind: DispatchStopKind;
 
   @Column({
     type: 'enum',

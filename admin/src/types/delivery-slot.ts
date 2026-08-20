@@ -23,6 +23,7 @@ export interface DeliverySettings {
   serviceCenterLng: number;
   serviceRadiusKm: number;
   priorityFeeAmount: number;
+  deliveryFeePerKm: number;
   extraDestinationSurcharge: number;
 }
 

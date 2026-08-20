@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   Row, Col, Card, Typography, Switch, Button, Drawer, Form, Input,
-  InputNumber, Select, Space, Tag, Divider, Spin, App, Popconfirm
+  InputNumber, Select, Space, Tag, Divider, Spin, App, Popconfirm, Tooltip
 } from 'antd';
 import {
   EditOutlined, PlusOutlined, FileTextOutlined,
@@ -66,6 +66,16 @@ export function ProductList() {
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
   const isOrderableWatch = Form.useWatch('is_orderable', form);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const childrenMap = useMemo(() => buildChildrenMap(categories), [categories]);
   const roots = childrenMap.get(null) ?? [];
@@ -204,8 +214,10 @@ export function ProductList() {
 
   const renderCard = (cat: ServiceCategory, depth = 0) => {
     const kids = childrenMap.get(cat.id) ?? [];
+    const isExpanded = expandedNodes.has(cat.id);
+
     return (
-      <div key={cat.id} style={{ marginLeft: depth * 16, marginBottom: 12 }}>
+      <div key={cat.id} style={{ marginLeft: depth > 0 ? 32 : 0, marginBottom: 12 }}>
         <Card
           style={{ ...S.card, opacity: cat.is_active ? 1 : 0.6 }}
           styles={{ body: { padding: 20 } }}
@@ -265,44 +277,68 @@ export function ProductList() {
 
           <Divider style={{ borderColor: '#2E2E2E', margin: '12px 0' }} />
 
-          <Space size={8} style={{ width: '100%', display: 'flex', flexWrap: 'wrap' }}>
-            <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(cat)}
-              style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
-              Edit
-            </Button>
-            {cat.catalog_level < 3 && (
-              <Button size="small" icon={<PlusOutlined />} onClick={() => openCreate(cat)}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <Space size={8} style={{ display: 'flex', flexWrap: 'wrap' }}>
+              <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(cat)}
                 style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
-                Add child
+                Edit
               </Button>
-            )}
-            {cat.is_orderable && (
-              <>
-                <Button size="small" icon={<SettingOutlined />}
-                  onClick={() => navigate(`/products/${cat.id}/options`)}
+              {cat.catalog_level < 3 && (
+                <Button size="small" icon={<PlusOutlined />} onClick={() => openCreate(cat)}
                   style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
-                  Spec Options
+                  Add child
                 </Button>
-                <Button size="small" icon={<ArrowRightOutlined />}
-                  onClick={() => navigate(`/products-addons?category_id=${cat.id}`)}
-                  style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
-                  Addons
+              )}
+              {cat.is_orderable && (
+                <>
+                  <Button size="small" icon={<SettingOutlined />}
+                    onClick={() => navigate(`/products/${cat.id}/options`)}
+                    style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
+                    Spec Options
+                  </Button>
+                  <Button size="small" icon={<ArrowRightOutlined />}
+                    onClick={() => navigate(`/products-addons?category_id=${cat.id}`)}
+                    style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
+                    Addons
+                  </Button>
+                </>
+              )}
+              <Popconfirm
+                title="Delete Category"
+                description="Delete this node and any nested children?"
+                onConfirm={() => handleDeleteCategory(cat)}
+                okText="Yes"
+                cancelText="No"
+                placement="topRight"
+              >
+                <Button size="small" danger icon={<DeleteOutlined />} style={{ background: '#1A1A1A', borderColor: '#ff4d4f' }} />
+              </Popconfirm>
+            </Space>
+            
+            {kids.length > 0 && (
+              <Tooltip 
+                title={
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
+                    {kids.map(k => (
+                      <span key={k.id}>• {k.name}</span>
+                    ))}
+                  </div>
+                }
+                placement="topRight"
+              >
+                <Button 
+                  size="small" 
+                  type="text" 
+                  onClick={() => toggleExpand(cat.id)}
+                  style={{ color: '#FFDE58', fontWeight: 500 }}
+                >
+                  {isExpanded ? 'Hide Subcategories' : `Show Subcategories (${kids.length})`}
                 </Button>
-              </>
+              </Tooltip>
             )}
-            <Popconfirm
-              title="Delete Category"
-              description="Delete this node and any nested children?"
-              onConfirm={() => handleDeleteCategory(cat)}
-              okText="Yes"
-              cancelText="No"
-              placement="topRight"
-            >
-              <Button size="small" danger icon={<DeleteOutlined />} style={{ background: '#1A1A1A', borderColor: '#ff4d4f' }} />
-            </Popconfirm>
-          </Space>
+          </div>
         </Card>
-        {kids.map((child) => renderCard(child, depth + 1))}
+        {isExpanded && kids.map((child) => renderCard(child, depth + 1))}
       </div>
     );
   };

@@ -54,6 +54,9 @@ export interface AssignedRiderContact {
   phone_number?: string | null;
   vehicle_type?: string | null;
   plate_number?: string | null;
+  last_latitude?: number | null;
+  last_longitude?: number | null;
+  last_location_update?: string | null;
   delivery_assignment_id?: number | string | null;
   delivery_status?: string | null;
   /** Plain pickup OTP for ops to share with the rider (until verified). */
@@ -70,9 +73,14 @@ export interface AssignedSupplierContact {
   assignment_id?: number | null;
   logo_url?: string | null;
   address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   broad_address?: string | null;
   self_qc_evidence_urls?: string[];
   self_qc_evidence_file_ids?: number[];
+  quoted_price_minor?: string | number | null;
+  quoted_promised_date?: string | null;
+  customer_confirmed_quote_at?: string | null;
 }
 
 export interface DeliveryProof {

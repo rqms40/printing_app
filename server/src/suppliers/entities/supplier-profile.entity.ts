@@ -53,6 +53,13 @@ export class SupplierProfile {
   @Column({ type: 'text', nullable: true })
   address: string | null;
 
+  /** Shop pin used as the rider pickup stop. Both null or both set. */
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  latitude: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  longitude: number | null;
+
   /** Profile picture / logo file metadata id. */
   @Column({ name: 'logo_file_id', type: 'int', nullable: true })
   logoFileId: number | null;

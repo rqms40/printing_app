@@ -5,6 +5,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Interactive map for picking a delivery address by dragging the map
 /// under a fixed center pin.
@@ -30,6 +31,7 @@ class MapPinPicker extends StatefulWidget {
 class _MapPinPickerState extends State<MapPinPicker> {
   final MapController _mapController = MapController();
   late LatLng _center;
+  bool _mapReady = false;
 
   @override
   void initState() {
@@ -38,6 +40,22 @@ class _MapPinPickerState extends State<MapPinPicker> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onChanged?.call(_center);
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant MapPinPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialCenter.latitude == widget.initialCenter.latitude &&
+        oldWidget.initialCenter.longitude == widget.initialCenter.longitude) {
+      return;
+    }
+    setState(() => _center = widget.initialCenter);
+    _moveTo(widget.initialCenter);
+  }
+
+  void _moveTo(LatLng point) {
+    if (!_mapReady) return;
+    _mapController.move(point, 15);
   }
 
   void _updateCenter(LatLng center) {
@@ -70,20 +88,23 @@ class _MapPinPickerState extends State<MapPinPicker> {
                 options: MapOptions(
                   initialCenter: widget.initialCenter,
                   initialZoom: 15.0,
+                  onMapReady: () {
+                    _mapReady = true;
+                    _moveTo(_center);
+                  },
                   onPositionChanged: (camera, hasGesture) {
-                    _updateCenter(camera.center);
+                    if (hasGesture) _updateCenter(camera.center);
                   },
                   onTap: (_, point) {
-                    _mapController.move(point, 15.0);
+                    _moveTo(point);
                     _updateCenter(point);
                   },
                 ),
                 children: [
                   if (widget.mapTilesEnabled)
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.gridgoprint.app',
+                    MapHelpers.tileLayer(
+                      Theme.of(context).brightness,
+                      cachingProvider: const DisabledMapCachingProvider(),
                     )
                   else
                     ColoredBox(color: colors.surfaceVariant),

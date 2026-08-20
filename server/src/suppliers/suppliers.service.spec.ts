@@ -357,6 +357,45 @@ describe('SuppliersService', () => {
       capabilities: [],
     };
 
+    it('stores a shop pin and can clear it', async () => {
+      profileRepo.findOne
+        .mockResolvedValueOnce({ ...verifiedProfile })
+        .mockResolvedValueOnce({ ...verifiedProfile })
+        .mockResolvedValueOnce({
+          ...verifiedProfile,
+          latitude: 7.0505,
+          longitude: 125.5889,
+        })
+        .mockResolvedValueOnce({ ...verifiedProfile, latitude: 7.0505, longitude: 125.5889 })
+        .mockResolvedValueOnce({ ...verifiedProfile, latitude: 7.0505, longitude: 125.5889 })
+        .mockResolvedValueOnce({
+          ...verifiedProfile,
+          latitude: null,
+          longitude: null,
+        });
+      profileRepo.save.mockImplementation(async (p) => p);
+
+      const pinned = await service.updateOwnProfile(10, {
+        latitude: 7.0505,
+        longitude: 125.5889,
+      });
+      expect(profileRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          latitude: 7.0505,
+          longitude: 125.5889,
+        }),
+      );
+      expect(pinned.latitude).toBe(7.0505);
+      expect(pinned.longitude).toBe(125.5889);
+
+      const cleared = await service.updateOwnProfile(10, {
+        latitude: null,
+        longitude: null,
+      });
+      expect(cleared.latitude).toBeNull();
+      expect(cleared.longitude).toBeNull();
+    });
+
     it('updates description, attributes, and contact fields', async () => {
       profileRepo.findOne
         .mockResolvedValueOnce({ ...verifiedProfile }) // assertVerified

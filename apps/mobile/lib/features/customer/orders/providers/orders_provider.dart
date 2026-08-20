@@ -1147,13 +1147,6 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     final sessionGeneration = _sessionGeneration;
     final addressId = _deliveryAddressIdValue(deliveryAddressId);
 
-    if (paymentMethod.requiresPaymentReceipt &&
-        (qrReceiptFileId == null || qrReceiptFileId <= 0)) {
-      throw StateError(
-        'QR Ph (Instapay) requires a digital payment receipt upload',
-      );
-    }
-
     final mappedItems = items.indexed.map((entry) {
       final idx = entry.$1;
       final item = entry.$2;
@@ -1362,6 +1355,21 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       data: {
         'fileMetadataId': fileMetadataId,
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    await _fetchOrders();
+  }
+
+  /// Client: pay and confirm the supplier's final price so they can accept.
+  Future<void> confirmSupplierQuote(
+    String orderId, {
+    int? qrReceiptFileId,
+  }) async {
+    await ApiClient.instance.post(
+      '/orders/$orderId/confirm-supplier-quote',
+      data: {
+        if (qrReceiptFileId != null && qrReceiptFileId > 0)
+          'qrReceiptFileId': qrReceiptFileId,
       },
     );
     await _fetchOrders();

@@ -131,6 +131,41 @@ const profileFields = [
   ),
 ];
 
+class MatchingPreferenceOption {
+  const MatchingPreferenceOption({
+    required this.value,
+    required this.label,
+    required this.description,
+    required this.icon,
+  });
+
+  final String value;
+  final String label;
+  final String description;
+  final IconData icon;
+}
+
+const matchingPreferenceOptions = [
+  MatchingPreferenceOption(
+    value: 'quality',
+    label: 'Quality',
+    description: 'Match the highest-rated verified shop for this product.',
+    icon: Icons.verified_rounded,
+  ),
+  MatchingPreferenceOption(
+    value: 'price',
+    label: 'Price',
+    description: 'Match the closest shop to keep delivery cost down.',
+    icon: Icons.payments_rounded,
+  ),
+  MatchingPreferenceOption(
+    value: 'speed',
+    label: 'Speed',
+    description: 'Match the shop with the shortest lead time, then nearest.',
+    icon: Icons.bolt_rounded,
+  ),
+];
+
 const printingPreferenceOptions = [
   PrintingPreferenceOption(
     value: 'plotting_blueprints',
@@ -181,16 +216,19 @@ class ProfilingFormValue {
     this.profileCategory,
     this.profileField,
     this.printingPreferences = const [],
+    this.matchingPreference,
   });
 
   final String? profileCategory;
   final String? profileField;
   final List<String> printingPreferences;
+  final String? matchingPreference;
 
   ProfilingFormValue copyWith({
     Object? profileCategory = _unset,
     Object? profileField = _unset,
     List<String>? printingPreferences,
+    Object? matchingPreference = _unset,
   }) {
     return ProfilingFormValue(
       profileCategory: profileCategory == _unset
@@ -200,6 +238,9 @@ class ProfilingFormValue {
           ? this.profileField
           : profileField as String?,
       printingPreferences: printingPreferences ?? this.printingPreferences,
+      matchingPreference: matchingPreference == _unset
+          ? this.matchingPreference
+          : matchingPreference as String?,
     );
   }
 }
@@ -234,6 +275,7 @@ ProfilingFormValue seededProfilingValue({
   String? profileCategory,
   String? profileField,
   List<String>? printingPreferences,
+  String? matchingPreference,
 }) {
   final seededPreferences =
       (printingPreferences == null || printingPreferences.isEmpty)
@@ -244,6 +286,7 @@ ProfilingFormValue seededProfilingValue({
     profileCategory: profileCategory,
     profileField: profileField,
     printingPreferences: seededPreferences,
+    matchingPreference: matchingPreference ?? 'quality',
   );
 }
 

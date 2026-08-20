@@ -9,6 +9,7 @@ import {
 import {
   AgeRange,
   ClientAccountType,
+  MatchingPreference,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -96,6 +97,16 @@ export class User {
     nullable: true,
   })
   printingPreferences: PrintingPreference[] | null;
+
+  /** Quality / price / speed — used to auto-match a supplier. Null = quality. */
+  @Column({
+    name: 'matching_preference',
+    type: 'enum',
+    enum: MatchingPreference,
+    enumName: 'matching_preference_enum',
+    nullable: true,
+  })
+  matchingPreference: MatchingPreference | null;
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.CLIENT })
   role: UserRole;

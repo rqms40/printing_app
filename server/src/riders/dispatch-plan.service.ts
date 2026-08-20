@@ -27,6 +27,7 @@ import {
 } from './entities/dispatch-plan.entity';
 import {
   DispatchPlanStop,
+  DispatchStopKind,
   DispatchStopStatus,
 } from './entities/dispatch-plan-stop.entity';
 import { RiderProfile } from './entities/rider-profile.entity';
@@ -81,7 +82,13 @@ function routingUnavailable(): ServiceUnavailableException {
   });
 }
 
-function numericPoint(latitude: unknown, longitude: unknown): GeoPoint | null {
+export function isDropoffStopKind(
+  kind?: DispatchStopKind | string | null,
+): boolean {
+  return kind !== DispatchStopKind.PICKUP;
+}
+
+export function numericPoint(latitude: unknown, longitude: unknown): GeoPoint | null {
   if (
     latitude == null ||
     longitude == null ||
@@ -146,6 +153,15 @@ export class DispatchPlanService {
     );
     const prepared = await this.preparePlan(planningAssignments);
     return this.persistPreparedPlan(riderId, prepared, null);
+  }
+
+  async refreshMarketplaceOriginIfStale(
+    _riderId: number,
+    _gps: GeoPoint,
+    _previousGps: GeoPoint | null,
+    _previousAt: Date | null,
+  ): Promise<DispatchPlan | null> {
+    return null;
   }
 
   async reoptimizePlan(

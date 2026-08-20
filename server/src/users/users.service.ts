@@ -11,6 +11,7 @@ import {
   AgeRange,
   ClientAccountType,
   isProfileComplete,
+  MatchingPreference,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -29,6 +30,7 @@ type UserProfilingInput = {
   organization?: string;
   clientAccountType?: ClientAccountType;
   printingPreferences?: PrintingPreference[];
+  matchingPreference?: MatchingPreference | null;
 };
 
 export type SocketIdentity = Pick<User, 'id' | 'role' | 'isActive'>;
@@ -252,6 +254,10 @@ export class UsersService {
       normalized.printingPreferences = Array.from(
         new Set(data.printingPreferences),
       );
+    }
+
+    if (data.matchingPreference !== undefined) {
+      normalized.matchingPreference = data.matchingPreference ?? null;
     }
 
     return normalized;

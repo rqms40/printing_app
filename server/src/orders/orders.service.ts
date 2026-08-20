@@ -30,9 +30,11 @@ import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import {
   freezeAuthorizationSnapshotOnOrder,
+  normalizeMinor,
   pesosToMinor,
   type FreezeAuthorizationInput,
 } from './order-authorization-snapshot';
+import { ConfirmSupplierQuoteDto } from './dto/confirm-supplier-quote.dto';
 import {
   DeliveryAssignment,
   DeliveryStatus,
@@ -81,7 +83,10 @@ import {
   DispatchPlan,
   DispatchPlanStatus,
 } from '../riders/entities/dispatch-plan.entity';
-import { DispatchStopStatus } from '../riders/entities/dispatch-plan-stop.entity';
+import {
+  DispatchStopKind,
+  DispatchStopStatus,
+} from '../riders/entities/dispatch-plan-stop.entity';
 import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
 import {
   assertOrderStatusTransition,
@@ -90,6 +95,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { IssuesService } from '../issues/issues.service';
+import { MatchingService } from '../matching/matching.service';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -325,6 +331,7 @@ export class OrdersService {
     @Optional() private readonly geoZonesService?: GeoZonesService,
     @Optional() private readonly payoutsService?: PayoutsService,
     @Optional() private readonly issuesService?: IssuesService,
+    @Optional() private readonly matchingService?: MatchingService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -334,6 +341,110 @@ export class OrdersService {
       order: { createdAt: 'DESC' },
     });
     return this.attachDeliveryAssignmentIds(orders);
+  }
+
+  async confirmSupplierQuote(
+    orderId: number,
+    userId: number,
+    dto: ConfirmSupplierQuoteDto = {},
+  ): Promise<Order> {
+    const now = new Date();
+    let creditMutation: CreditMutationResult | null = null;
+    await this.dataSource.transaction(async (manager) => {
+      const ordersRepo = manager.getRepository(Order);
+      const assignmentRepo = manager.getRepository(SupplierAssignment);
+      const order = await ordersRepo.findOne({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!order) throw new NotFoundException('Order not found');
+      if (order.userId !== userId) {
+        throw new ForbiddenException('You can only confirm your own orders');
+      }
+      if (order.orderStatus !== OrderStatus.SUPPLIER_ASSIGNED) {
+        throw new BadRequestException({
+          code: 'order_not_supplier_assigned',
+          message: 'This order is not waiting on a supplier quote',
+        });
+      }
+      const assignment = await assignmentRepo
+        .createQueryBuilder('a')
+        .setLock('pessimistic_write')
+        .where('a.orderId = :orderId', { orderId: order.id })
+        .andWhere('a.decision = :decision', {
+          decision: SupplierAssignmentDecision.PENDING,
+        })
+        .orderBy('a.id', 'DESC')
+        .getOne();
+      if (!assignment?.quotedPriceMinor || !assignment.quotedPromisedDate) {
+        throw new BadRequestException({
+          code: 'supplier_quote_required',
+          message: 'The supplier has not set a final price yet',
+        });
+      }
+      if (assignment.customerConfirmedQuoteAt) {
+        return;
+      }
+      const deliveryFeeMinor =
+        order.deliveryFeeMinor != null && order.deliveryFeeMinor !== ''
+          ? normalizeMinor(order.deliveryFeeMinor, 'deliveryFeeMinor')
+          : pesosToMinor(order.deliveryFee ?? 0);
+      const finalTotalMinor = String(
+        Number(assignment.quotedPriceMinor) + Number(deliveryFeeMinor),
+      );
+      order.finalTotalMinor = finalTotalMinor;
+      order.deliveryFeeMinor = deliveryFeeMinor;
+      creditMutation = await this.collectCustomerPaymentForQuote(
+        order,
+        userId,
+        dto ?? {},
+        manager,
+      );
+      assignment.customerConfirmedQuoteAt = now;
+      await assignmentRepo.save(assignment);
+      await ordersRepo.save(order);
+      await this.auditService.append(
+        {
+          actorId: userId,
+          actorRole: 'client',
+          action: 'customer_confirmed_supplier_quote',
+          entityType: 'supplier_assignment',
+          entityId: String(assignment.id),
+          orderId: order.id,
+          reason: 'Customer paid and confirmed the supplier final price',
+          metadata: {
+            quotedPriceMinor: assignment.quotedPriceMinor,
+            finalTotalMinor,
+            paymentMethod: order.paymentMethod,
+            paymentStatus: order.paymentStatus,
+          },
+        },
+        manager,
+      );
+      const withSupplier = await assignmentRepo.findOne({
+        where: { id: assignment.id },
+        relations: { supplier: true },
+      });
+      const supplierUserId = withSupplier?.supplier?.userId;
+      if (supplierUserId && this.notificationsService) {
+        try {
+          await this.notificationsService.create({
+            userId: supplierUserId,
+            title: 'Customer paid the final price',
+            message: `Order ${order.orderId} is paid and ready to accept.`,
+            type: 'customer_confirmed_quote',
+            orderRef: order.orderId,
+            metadata: { assignmentId: assignment.id },
+          });
+        } catch {
+          /* non-fatal */
+        }
+      }
+    });
+    this.creditsService.publishCreditMutation?.(creditMutation);
+    const refreshed = await this.findById(orderId);
+    if (!refreshed) throw new NotFoundException('Order not found');
+    return refreshed;
   }
 
   async findById(id: number): Promise<Order | null> {
@@ -448,10 +559,19 @@ export class OrdersService {
           ? planByRiderId.get(assignment.riderId)
           : undefined;
         const remainingStops = (plan?.stops ?? [])
-          .filter((stop) => stop.status === DispatchStopStatus.PENDING)
+          .filter(
+            (stop) =>
+              stop.status === DispatchStopStatus.PENDING &&
+              stop.kind !== DispatchStopKind.PICKUP,
+          )
           .sort((left, right) => left.sequence - right.sequence);
         const plannedStop = assignment
           ? plan?.stops?.find(
+              (candidate) =>
+                candidate.assignmentId === assignment.id &&
+                candidate.kind !== DispatchStopKind.PICKUP,
+            ) ??
+            plan?.stops?.find(
               (candidate) => candidate.assignmentId === assignment.id,
             )
           : undefined;
@@ -534,9 +654,14 @@ export class OrdersService {
     assignmentId: number;
     logoUrl: string | null;
     address: string | null;
+    latitude: number | null;
+    longitude: number | null;
     broadAddress: string | null;
     selfQcEvidenceUrls: string[];
     selfQcEvidenceFileIds: number[];
+    quotedPriceMinor: string | null;
+    quotedPromisedDate: Date | null;
+    customerConfirmedQuoteAt: Date | null;
   } | null> {
     return this.buildAssignedSupplierContact(assignment);
   }
@@ -551,9 +676,14 @@ export class OrdersService {
     assignmentId: number;
     logoUrl: string | null;
     address: string | null;
+    latitude: number | null;
+    longitude: number | null;
     broadAddress: string | null;
     selfQcEvidenceUrls: string[];
     selfQcEvidenceFileIds: number[];
+    quotedPriceMinor: string | null;
+    quotedPromisedDate: Date | null;
+    customerConfirmedQuoteAt: Date | null;
   } | null> {
     if (!assignment) return null;
     const supplier = assignment.supplier;
@@ -585,9 +715,16 @@ export class OrdersService {
       assignmentId: assignment.id,
       logoUrl,
       address,
+      latitude:
+        supplier?.latitude != null ? Number(supplier.latitude) : null,
+      longitude:
+        supplier?.longitude != null ? Number(supplier.longitude) : null,
       broadAddress,
       selfQcEvidenceUrls,
       selfQcEvidenceFileIds: evidenceIds,
+      quotedPriceMinor: assignment.quotedPriceMinor ?? null,
+      quotedPromisedDate: assignment.quotedPromisedDate ?? null,
+      customerConfirmedQuoteAt: assignment.customerConfirmedQuoteAt ?? null,
     };
   }
 
@@ -828,16 +965,8 @@ export class OrdersService {
     orderData.totalPrice = quote.subtotal;
     orderData.category = quoteItem.categorySlug;
 
-    const creditPayment = OrdersService.isCreditPaymentMethod(
-      orderData.paymentMethod,
-    );
-    const amountCredits = creditPayment
-      ? calculateChargeTotal({
-          totalPrice: orderData.totalPrice,
-          deliveryFee: orderData.deliveryFee,
-        })
-      : 0;
-    orderData.paymentStatus = creditPayment ? 'paid' : 'pending';
+    // Catalog totals are estimates. The customer pays after the supplier quotes.
+    orderData.paymentStatus = 'pending';
     Object.assign(
       orderData,
       applyMarketplacePaymentDefaults(orderData as Partial<Order>),
@@ -884,17 +1013,6 @@ export class OrdersService {
       });
       const persistedOrder = await transactionOrdersRepo.save(order);
 
-      if (
-        isCodPaymentMethod(String(persistedOrder.paymentMethod ?? '')) &&
-        persistedOrder.codEligible
-      ) {
-        await this.paymentsService.ensurePendingCodCollection({
-          orderId: persistedOrder.id,
-          amountMinor: String(persistedOrder.finalTotalMinor ?? '0'),
-          eligible: true,
-          eligibilityReason: null,
-        });
-      }
       const savedItem = await transactionItemsRepo.save(
         transactionItemsRepo.create({
           orderId: persistedOrder.id,
@@ -922,19 +1040,7 @@ export class OrdersService {
         );
       }
 
-      let creditMutation: CreditMutationResult | null = null;
-      if (creditPayment && amountCredits > 0) {
-        if (!orderData.userId) {
-          throw new Error('User ID is required to process credit payment');
-        }
-        creditMutation = await this.creditsService.subtractCredits(
-          orderData.userId,
-          amountCredits,
-          `ORDER-DEBIT:${orderRef}`,
-          manager,
-        );
-      }
-      return { savedOrder: persistedOrder, creditMutation };
+      return { savedOrder: persistedOrder, creditMutation: null };
     });
 
     this.creditsService.publishCreditMutation?.(creation.creditMutation);
@@ -1159,6 +1265,24 @@ export class OrdersService {
     ) {
       deliveryFee = zoneDeliveryFeePesos + SERVICE_FEE;
     }
+
+    let preferredSupplierId: number | null = null;
+    const quoteDest = resolvedDestinations[0];
+    if (this.matchingService && normalizedItems[0]?.category) {
+      try {
+        const preview = await this.matchingService.previewForClient(userId, {
+          category: normalizedItems[0].category,
+          latitude: quoteDest?.latitude ?? undefined,
+          longitude: quoteDest?.longitude ?? undefined,
+        });
+        preferredSupplierId = preview.supplier.supplierId;
+        if (dto.deliveryOption === 'delivery') {
+          deliveryFee = preview.deliveryFeePesos + SERVICE_FEE;
+        }
+      } catch {
+        /* keep zone/flat fee; ops matching remains available */
+      }
+    }
     const totalPrice = calculateChargeTotal({
       subtotal,
       deliveryFee,
@@ -1242,20 +1366,14 @@ export class OrdersService {
         codEligibleForBatch = codResult?.eligible === true;
       }
 
-      // QR Ph (Instapay): digital receipt required at place-order.
+      // QR receipt is collected when the customer pays the supplier quote.
       let qrReceiptFileId: number | null = null;
-      if (isQrPhInstapayPaymentMethod(dto.paymentMethod)) {
-        if (
-          dto.qrReceiptFileId == null ||
-          !Number.isInteger(dto.qrReceiptFileId) ||
-          dto.qrReceiptFileId <= 0
-        ) {
-          throw new BadRequestException({
-            code: 'qr_receipt_required',
-            message:
-              'QR Ph (Instapay) requires a digital payment receipt before placing the order',
-          });
-        }
+      if (
+        isQrPhInstapayPaymentMethod(dto.paymentMethod) &&
+        dto.qrReceiptFileId != null &&
+        Number.isInteger(dto.qrReceiptFileId) &&
+        dto.qrReceiptFileId > 0
+      ) {
         await this.paymentsService.assertOwnedPaymentReceiptFile(
           dto.qrReceiptFileId,
           userId,
@@ -1264,10 +1382,7 @@ export class OrdersService {
       }
 
       const { batchRef, orderRef } = await this.nextBatchReferences(manager);
-      const creditPayment = OrdersService.isCreditPaymentMethod(
-        dto.paymentMethod,
-      );
-      const paymentStatus = creditPayment ? 'paid' : 'pending';
+      const paymentStatus = 'pending';
       const batch = batchOrdersRepo.create({
         batchRef,
         userId,
@@ -1391,19 +1506,11 @@ export class OrdersService {
               : null,
           batchOrderId: savedBatch.id,
           destinationId: firstDestId,
+          preferredSupplierId,
           codEligible: codEligibleForBatch,
         }),
       );
       const savedOrder = await txOrdersRepo.save(aggregateOrder);
-
-      if (codEligibleForBatch && isCodPaymentMethod(dto.paymentMethod)) {
-        await this.paymentsService.ensurePendingCodCollection({
-          orderId: savedOrder.id,
-          amountMinor: String(savedOrder.finalTotalMinor ?? '0'),
-          eligible: true,
-          eligibilityReason: null,
-        });
-      }
 
       if (qrReceiptFileId != null) {
         await this.paymentsService.createPendingQrReceipt(
@@ -1448,19 +1555,6 @@ export class OrdersService {
         }
       }
 
-      let creditMutation: CreditMutationResult | null = null;
-      if (
-        OrdersService.isCreditPaymentMethod(dto.paymentMethod) &&
-        totalPrice > 0
-      ) {
-        creditMutation = await this.creditsService.subtractCredits(
-          userId,
-          totalPrice,
-          `ORDER-DEBIT:${orderRef}`,
-          manager,
-        );
-      }
-
       const orderWithItems = await txOrdersRepo.findOneOrFail({
         where: { id: savedOrder.id },
         relations: OrdersService.ORDER_RELATIONS,
@@ -1470,7 +1564,7 @@ export class OrdersService {
         batchRef: savedBatch.batchRef,
         orders: [orderWithItems],
         assignedSlot,
-        creditMutation,
+        creditMutation: null,
       };
     });
 
@@ -1817,6 +1911,82 @@ export class OrdersService {
     }
   }
 
+  /** Charge the customer for the supplier quote (credits / COD / QR receipt). */
+  private async collectCustomerPaymentForQuote(
+    order: Order,
+    userId: number,
+    dto: ConfirmSupplierQuoteDto,
+    manager: EntityManager,
+  ): Promise<CreditMutationResult | null> {
+    const paymentMethod = String(order.paymentMethod ?? '');
+    const isCredit = OrdersService.isCreditPaymentMethod(paymentMethod);
+    const isCod = isCodPaymentMethod(paymentMethod);
+    const isQr = isQrPhInstapayPaymentMethod(paymentMethod);
+
+    if (isCredit) {
+      const mutation = await this.settlePilotCreditsForAuthorization(
+        order,
+        userId,
+        manager,
+      );
+      order.paymentStatus = 'paid';
+      return mutation;
+    }
+
+    if (isQr) {
+      const fileId = dto.qrReceiptFileId;
+      if (fileId == null || !Number.isInteger(fileId) || fileId <= 0) {
+        throw new BadRequestException({
+          code: 'qr_receipt_required',
+          message:
+            'QR Ph (Instapay) requires a digital payment receipt before paying the final price',
+        });
+      }
+      await this.paymentsService.assertOwnedPaymentReceiptFile(fileId, userId);
+      await this.paymentsService.createPendingQrReceipt(
+        {
+          orderId: order.id,
+          batchOrderId: order.batchOrderId ?? null,
+          userId,
+          fileId,
+        },
+        manager,
+      );
+      return null;
+    }
+
+    if (isCod) {
+      const codResult =
+        await this.paymentsService.assertCodEligibleForCheckout({
+          userId: order.userId,
+          paymentMethod,
+          finalTotalMinor: order.finalTotalMinor,
+          excludeOrderId: order.id,
+        });
+      order.codEligible = codResult?.eligible === true;
+      await this.paymentsService.ensurePendingCodCollection({
+        orderId: order.id,
+        amountMinor: String(order.finalTotalMinor ?? '0'),
+        eligible: order.codEligible,
+        eligibilityReason: codResult?.message ?? null,
+      });
+      return null;
+    }
+
+    return null;
+  }
+
+  private quoteChargeCredits(order: Order): number {
+    if (order.finalTotalMinor != null && order.finalTotalMinor !== '') {
+      const n = Number(order.finalTotalMinor);
+      if (Number.isFinite(n) && n > 0) return n / 100;
+    }
+    return calculateChargeTotal({
+      totalPrice: order.totalPrice,
+      deliveryFee: order.deliveryFee,
+    });
+  }
+
   /**
    * Pilot Credits path: reserve then spend with stable per-order idempotency keys.
    * Skips ledger when payment was already marked paid (legacy create-time debit).
@@ -1826,10 +1996,7 @@ export class OrdersService {
     actorUserId: number,
     manager: EntityManager,
   ): Promise<CreditMutationResult | null> {
-    const amountCredits = calculateChargeTotal({
-      totalPrice: order.totalPrice,
-      deliveryFee: order.deliveryFee,
-    });
+    const amountCredits = this.quoteChargeCredits(order);
 
     if (amountCredits <= 0) {
       return null;
@@ -2553,12 +2720,11 @@ export class OrdersService {
       const creditPayment = OrdersService.isCreditPaymentMethod(
         order.paymentMethod,
       );
+      const alreadyPaid =
+        String(order.paymentStatus ?? '').toLowerCase() === 'paid';
       let creditMutation: CreditMutationResult | null = null;
-      if (creditPayment) {
-        const refundAmount = calculateChargeTotal({
-          totalPrice: order.totalPrice,
-          deliveryFee: order.deliveryFee,
-        });
+      if (creditPayment && alreadyPaid) {
+        const refundAmount = this.quoteChargeCredits(order);
         if (refundAmount > 0) {
           creditMutation = await this.creditsService.refundCredits(
             order.userId,
@@ -2573,7 +2739,7 @@ export class OrdersService {
         { id, orderStatus: order.orderStatus },
         {
           orderStatus: OrderStatus.CANCELLED,
-          ...(creditPayment ? { paymentStatus: 'refunded' } : {}),
+          ...(creditPayment && alreadyPaid ? { paymentStatus: 'refunded' } : {}),
         },
       );
       if (updateResult?.affected != null && updateResult.affected !== 1) {
@@ -2674,8 +2840,11 @@ export class OrdersService {
       const creditPayment = OrdersService.isCreditPaymentMethod(
         batch.paymentMethod,
       );
+      const alreadyPaid = orders.some(
+        (order) => String(order.paymentStatus ?? '').toLowerCase() === 'paid',
+      );
       let creditMutation: CreditMutationResult | null = null;
-      if (creditPayment) {
+      if (creditPayment && alreadyPaid) {
         const refundAmount = calculateChargeTotal(batch);
         if (refundAmount > 0) {
           creditMutation = await this.creditsService.refundCredits(
@@ -2701,7 +2870,9 @@ export class OrdersService {
         },
         {
           orderStatus: OrderStatus.CANCELLED,
-          ...(creditPayment ? { paymentStatus: 'refunded' } : {}),
+          ...(creditPayment && alreadyPaid
+            ? { paymentStatus: 'refunded' }
+            : {}),
         },
       );
       if (

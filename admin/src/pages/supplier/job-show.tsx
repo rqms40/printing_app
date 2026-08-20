@@ -42,6 +42,7 @@ import {
   formatMinorAsCurrency,
   markSupplierReadyForPickup,
   pesosToMinor,
+  quoteSupplierJob,
   submitSupplierSelfQc,
   updateSupplierProductionStatus,
   type ProductionMilestone,
@@ -67,22 +68,22 @@ const MILESTONES: Array<{
   label: string;
   description: string;
 }> = [
-  {
-    value: 'materials_setup',
-    label: 'Materials / setup',
-    description: 'Prep materials and machine setup (starts production if needed).',
-  },
-  {
-    value: 'in_production',
-    label: 'In production',
-    description: 'Actively printing / finishing.',
-  },
-  {
-    value: 'production_complete',
-    label: 'Production complete',
-    description: 'Print finished — ready for proof of fulfillment.',
-  },
-];
+    {
+      value: 'materials_setup',
+      label: 'Materials / setup',
+      description: 'Prep materials and machine setup (starts production if needed).',
+    },
+    {
+      value: 'in_production',
+      label: 'In production',
+      description: 'Actively printing / finishing.',
+    },
+    {
+      value: 'production_complete',
+      label: 'Production complete',
+      description: 'Print finished — ready for proof of fulfillment.',
+    },
+  ];
 
 function hasAction(
   detail: SupplierJobDetail | null,
@@ -181,11 +182,17 @@ export function SupplierJobShowPage() {
     try {
       const data = await fetchSupplierJob(jobId);
       setDetail(data);
-      // Seed price from order total if not yet committed
-      if (data.assignment.finalPriceMinor == null && data.order.totalPrice) {
-        setPricePesos(Number(data.order.totalPrice));
+      if (data.assignment.quotedPriceMinor != null) {
+        setPricePesos(Number(data.assignment.quotedPriceMinor) / 100);
       } else if (data.assignment.finalPriceMinor != null) {
         setPricePesos(Number(data.assignment.finalPriceMinor) / 100);
+      } else if (data.order.totalPrice) {
+        setPricePesos(Number(data.order.totalPrice));
+      }
+      if (data.assignment.quotedPromisedDate) {
+        setPromisedDate(dayjs(data.assignment.quotedPromisedDate));
+      } else if (data.assignment.promisedDate) {
+        setPromisedDate(dayjs(data.assignment.promisedDate));
       }
     } catch (err) {
       message.error(extractApiError(err));
@@ -205,6 +212,7 @@ export function SupplierJobShowPage() {
     return <Navigate to="/" replace />;
   }
 
+  const canQuote = hasAction(detail, 'quote');
   const canAccept = hasAction(detail, 'accept');
   const canDecline = hasAction(detail, 'decline');
   const canProduction = hasAction(detail, 'production-status');
@@ -244,18 +252,25 @@ export function SupplierJobShowPage() {
   // Live clock so Accept UI disables the moment the SLA window ends.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!canAccept || !detail?.assignment.acceptanceDeadline) return;
+    if ((!canQuote && !canAccept) || !detail?.assignment.acceptanceDeadline) {
+      return;
+    }
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [canAccept, detail?.assignment.acceptanceDeadline]);
+  }, [canQuote, canAccept, detail?.assignment.acceptanceDeadline]);
 
   const acceptDeadlineMs = detail
     ? new Date(detail.assignment.acceptanceDeadline).getTime()
     : NaN;
   const acceptDeadlinePassed =
     Number.isFinite(acceptDeadlineMs) && acceptDeadlineMs <= now;
+  const quoteWindowOpen = canQuote && !acceptDeadlinePassed;
   /** Server allows accept AND the client-side SLA window is still open. */
   const acceptWindowOpen = canAccept && !acceptDeadlinePassed;
+  const awaitingCustomerConfirm =
+    !!detail?.assignment.quotedPriceMinor &&
+    !detail.assignment.customerConfirmedQuoteAt &&
+    !canAccept;
 
   const pipeline = useMemo(() => {
     const status = detail?.order.orderStatus ?? '';
@@ -298,6 +313,54 @@ export function SupplierJobShowPage() {
       return { ...s, color };
     });
   }, [detail?.order.orderStatus]);
+
+  const handleQuote = () => {
+    if (acceptDeadlinePassed) {
+      message.warning('Acceptance window has expired');
+      return;
+    }
+    if (pricePesos == null || pricePesos <= 0) {
+      message.warning('Enter a final price in pesos');
+      return;
+    }
+    if (!promisedDate) {
+      message.warning('Select a promised ready date');
+      return;
+    }
+    const finalPriceMinor = pesosToMinor(pricePesos);
+    modal.confirm({
+      title: 'Send this final price to the customer?',
+      content: (
+        <div>
+          <p>
+            Final price: <strong>₱{pricePesos.toFixed(2)}</strong>
+          </p>
+          <p>
+            Promised date:{' '}
+            <strong>{promisedDate.format('YYYY-MM-DD HH:mm')}</strong>
+          </p>
+          <p>The customer must place the order again before you can accept.</p>
+        </div>
+      ),
+      okText: 'Send final price',
+      onOk: async () => {
+        setSubmitting(true);
+        try {
+          await quoteSupplierJob(jobId, {
+            finalPriceMinor,
+            promisedDate: promisedDate.toISOString(),
+          });
+          message.success('Final price sent. Waiting for the customer to confirm.');
+          await load();
+        } catch (err) {
+          message.error(extractApiError(err));
+          throw err;
+        } finally {
+          setSubmitting(false);
+        }
+      },
+    });
+  };
 
   const handleAccept = () => {
     if (acceptDeadlinePassed) {
@@ -533,7 +596,7 @@ export function SupplierJobShowPage() {
         </Space>
       }
     >
-      {canAccept && (
+      {(canQuote || canAccept) && (
         <AcceptCountdownBanner deadline={assignment.acceptanceDeadline} />
       )}
 
@@ -566,8 +629,16 @@ export function SupplierJobShowPage() {
               <Descriptions.Item label="Guide total">
                 {formatMinorAsCurrency(
                   order.finalTotalMinor ??
-                    Math.round(Number(order.totalPrice) * 100),
+                  Math.round(Number(order.totalPrice) * 100),
                 )}
+              </Descriptions.Item>
+              <Descriptions.Item label="Quoted price">
+                {formatMinorAsCurrency(assignment.quotedPriceMinor)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Customer confirmed">
+                {assignment.customerConfirmedQuoteAt
+                  ? formatDateTime(assignment.customerConfirmedQuoteAt)
+                  : 'Waiting'}
               </Descriptions.Item>
               <Descriptions.Item label="Committed price">
                 {formatMinorAsCurrency(assignment.finalPriceMinor)}
@@ -708,14 +779,14 @@ export function SupplierJobShowPage() {
         </Col>
 
         <Col xs={24} lg={10}>
-          {(acceptWindowOpen || canDecline) && (
+          {(quoteWindowOpen || acceptWindowOpen || canDecline) && (
             <Card
-              title="Accept or decline"
+              title="Quote, accept, or decline"
               size="small"
               style={{ marginBottom: 16 }}
             >
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                {acceptWindowOpen && (
+                {(quoteWindowOpen || acceptWindowOpen) && (
                   <>
                     <div>
                       <Title level={5} style={{ marginTop: 0 }}>
@@ -731,7 +802,7 @@ export function SupplierJobShowPage() {
                         addonBefore="₱"
                       />
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        Sent as minor units (centavos) to the API.
+                        Catalog prices are estimates. Send your final price first.
                       </Text>
                     </div>
                     <div>
@@ -746,20 +817,42 @@ export function SupplierJobShowPage() {
                         }
                       />
                     </div>
-                    <Button
-                      type="primary"
-                      block
-                      size="large"
-                      icon={<CheckCircleOutlined />}
-                      loading={submitting}
-                      disabled={acceptDeadlinePassed}
-                      onClick={handleAccept}
-                    >
-                      Accept job
-                    </Button>
+                    {awaitingCustomerConfirm && (
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message="Waiting for the customer"
+                        description="You sent a final price. Accept unlocks after the customer places the order again."
+                      />
+                    )}
+                    {quoteWindowOpen && (
+                      <Button
+                        type={acceptWindowOpen ? 'default' : 'primary'}
+                        block
+                        size="large"
+                        loading={submitting}
+                        disabled={acceptDeadlinePassed}
+                        onClick={handleQuote}
+                      >
+                        Send final price
+                      </Button>
+                    )}
+                    {acceptWindowOpen && (
+                      <Button
+                        type="primary"
+                        block
+                        size="large"
+                        icon={<CheckCircleOutlined />}
+                        loading={submitting}
+                        disabled={acceptDeadlinePassed}
+                        onClick={handleAccept}
+                      >
+                        Accept job
+                      </Button>
+                    )}
                   </>
                 )}
-                {canAccept && acceptDeadlinePassed && (
+                {(canQuote || canAccept) && acceptDeadlinePassed && (
                   <Alert
                     type="error"
                     showIcon
@@ -988,7 +1081,8 @@ export function SupplierJobShowPage() {
             </Card>
           )}
 
-          {!canAccept &&
+          {!canQuote &&
+            !canAccept &&
             !canDecline &&
             !canProduction &&
             !canSelfQc &&
@@ -1002,7 +1096,7 @@ export function SupplierJobShowPage() {
                       ? 'Waiting for ops payment authorization'
                       : order.orderStatus === 'ready_for_dispatch'
                         ? 'Job is ready for dispatch — no further supplier actions'
-                        : `No actions available while status is ${statusLabel(order.orderStatus as OrderStatus)}`
+                        : `Wait until payment is authorized by the admin. No actions available while status is ${statusLabel(order.orderStatus as OrderStatus)}`
                   }
                 />
               </Card>

@@ -72,9 +72,8 @@ class RiderHomeScreen extends ConsumerWidget {
         ? state.plannedRoute
         : routeStops;
     final completedCount = mapStops
-        .where(
-          (view) => view.planStop?.status == RiderDispatchStopStatus.completed,
-        )
+        .expand((view) => view.legs)
+        .where((leg) => leg.status == RiderDispatchStopStatus.completed)
         .length;
     final currentStopIndex = active?.planSequence ?? 0;
 

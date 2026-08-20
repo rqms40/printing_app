@@ -56,6 +56,7 @@ extension ProductionMilestoneX on ProductionMilestone {
 
 /// Action keys returned by GET job detail `allowedActions`.
 abstract final class SupplierJobAction {
+  static const quote = 'quote';
   static const accept = 'accept';
   static const decline = 'decline';
   static const productionStatus = 'production-status';
@@ -309,6 +310,9 @@ class SupplierJobDetail {
     required this.items,
     this.decisionReason,
     this.finalPriceMinor,
+    this.quotedPriceMinor,
+    this.quotedPromisedDate,
+    this.customerConfirmedQuoteAt,
     this.promisedDate,
     this.finalTotalMinor,
     this.deliveryFeeMinor,
@@ -330,6 +334,9 @@ class SupplierJobDetail {
   final String? decisionReason;
   final DateTime? acceptanceDeadline;
   final int? finalPriceMinor;
+  final int? quotedPriceMinor;
+  final DateTime? quotedPromisedDate;
+  final DateTime? customerConfirmedQuoteAt;
   final DateTime? promisedDate;
   final int rankPosition;
   final DateTime? decidedAt;
@@ -368,14 +375,23 @@ class SupplierJobDetail {
     return false;
   }
 
-  /// Remaining milestones the supplier can still set.
-  List<ProductionMilestone> get availableMilestones => ProductionMilestone
-      .values
-      .where((m) => !hasReachedMilestone(m))
-      .toList();
+  /// Remaining milestones the supplier can still set (constrained to sequential progress).
+  List<ProductionMilestone> get availableMilestones {
+    for (final m in ProductionMilestone.values) {
+      if (!hasReachedMilestone(m)) {
+        return [m];
+      }
+    }
+    return [];
+  }
 
+  bool get canQuote => hasAction(SupplierJobAction.quote);
   bool get canAccept => hasAction(SupplierJobAction.accept);
   bool get canDecline => hasAction(SupplierJobAction.decline);
+  bool get awaitingCustomerConfirm =>
+      quotedPriceMinor != null &&
+      customerConfirmedQuoteAt == null &&
+      !canAccept;
   bool get canProduction => hasAction(SupplierJobAction.productionStatus);
   bool get canSelfQc => hasAction(SupplierJobAction.selfQc);
   bool get canReadyForPickup => hasAction(SupplierJobAction.readyForPickup);
@@ -442,6 +458,11 @@ class SupplierJobDetail {
       decisionReason: assignment['decisionReason']?.toString(),
       acceptanceDeadline: _parseDate(assignment['acceptanceDeadline']),
       finalPriceMinor: parseMinorUnits(assignment['finalPriceMinor']),
+      quotedPriceMinor: parseMinorUnits(assignment['quotedPriceMinor']),
+      quotedPromisedDate: _parseDate(assignment['quotedPromisedDate']),
+      customerConfirmedQuoteAt: _parseDate(
+        assignment['customerConfirmedQuoteAt'],
+      ),
       promisedDate: _parseDate(assignment['promisedDate']),
       rankPosition: _asInt(assignment['rankPosition']),
       decidedAt: _parseDate(assignment['decidedAt']),

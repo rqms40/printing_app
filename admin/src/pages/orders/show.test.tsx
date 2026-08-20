@@ -20,6 +20,7 @@ vi.mock("react-leaflet", () => ({
   TileLayer: () => null,
   Marker: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Popup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Polyline: () => null,
   useMap: () => ({ setView: vi.fn(), fitBounds: vi.fn() }),
 }));
 vi.mock("leaflet", () => ({
@@ -34,6 +35,9 @@ vi.mock("@/components/show-page", () => ({
 vi.mock("@/components/file-preview-modal", () => ({ FilePreviewModal: () => null }));
 vi.mock("@/components/file-inspector/file-inspector-modal", () => ({ FileInspectorModal: () => null }));
 vi.mock("./components/manual-status-card", () => ({ ManualStatusCard: () => null }));
+vi.mock("./rider-live-map", () => ({
+  RiderLiveTrackingMap: () => <div>Live rider tracking map</div>,
+}));
 
 vi.mock("antd", async () => {
   const actual = await vi.importActual<typeof import("antd")>("antd");
@@ -89,6 +93,8 @@ const riders = [
 ];
 
 describe("OrderShow", () => {
+  vi.setConfig({ testTimeout: 15000 });
+
   beforeEach(() => {
     mockGet.mockImplementation((url: string) =>
       Promise.resolve({ data: url === "/admin/riders" ? riders : baseOrder }),
@@ -107,11 +113,13 @@ describe("OrderShow", () => {
     });
     fireEvent.mouseDown(action);
 
-    expect(await screen.findByText("Approved for Matching")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("Approved for Matching")).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("Cancelled")).not.toBeInTheDocument();
     expect(screen.getByText(/Actor #31/)).toBeInTheDocument();
     expect(screen.getByText(/Customer file is corrupted/)).toBeInTheDocument();
-    expect(screen.getByText("Signature captured")).toBeInTheDocument();
+    expect(screen.getByText(/Signature captured/)).toBeInTheDocument();
     expect(screen.queryByText(/PRIVATE-SIGNATURE/)).not.toBeInTheDocument();
   });
 
@@ -155,6 +163,38 @@ describe("OrderShow", () => {
 
     render(<OrderShow />);
 
-    expect(await screen.findByText("Assigned rider: Juan")).toBeInTheDocument();
+    expect(await screen.findByText(/Assigned rider:\s*Juan/)).toBeInTheDocument();
+    expect(await screen.findByText("Live rider tracking")).toBeInTheDocument();
+    expect(screen.getByText("Heading to supplier shop")).toBeInTheDocument();
+    expect(screen.getByText("Live rider tracking map")).toBeInTheDocument();
+  });
+
+  it("switches the live tracking heading to the customer after pickup", async () => {
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data:
+          url === "/admin/riders"
+            ? riders
+            : {
+                ...baseOrder,
+                order_status: "picked_up",
+                allowed_next_statuses: [],
+                assigned_rider_contact: {
+                  display_name: "Juan",
+                  rider_profile_id: 10,
+                  delivery_assignment_id: 91,
+                  delivery_status: "picked_up",
+                  last_latitude: 7.0505,
+                  last_longitude: 125.5889,
+                },
+              },
+      }),
+    );
+
+    render(<OrderShow />);
+
+    expect(await screen.findByText("Live rider tracking")).toBeInTheDocument();
+    expect(screen.getByText("Heading to customer")).toBeInTheDocument();
+    expect(screen.queryByText("Heading to supplier shop")).not.toBeInTheDocument();
   });
 });

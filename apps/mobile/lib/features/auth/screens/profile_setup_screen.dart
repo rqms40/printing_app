@@ -59,6 +59,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       printingPreferences: widget.draft?.printingPreferences.isNotEmpty == true
           ? widget.draft?.printingPreferences
           : user?.printingPreferences,
+      matchingPreference: user?.matchingPreference,
     );
   }
 
@@ -126,6 +127,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             course: _courseController.text.trim(),
             organization: _organizationController.text.trim(),
             printingPreferences: _profiling.printingPreferences,
+            matchingPreference: _profiling.matchingPreference,
           );
       return;
     }
@@ -143,6 +145,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
           course: _courseController.text.trim(),
           organization: _organizationController.text.trim(),
           printingPreferences: _profiling.printingPreferences,
+          matchingPreference: _profiling.matchingPreference,
         );
   }
 

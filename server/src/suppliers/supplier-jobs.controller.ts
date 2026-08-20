@@ -85,6 +85,19 @@ export class SupplierJobsController {
     );
   }
 
+  /** Set final price for the customer to confirm. Job stays pending. */
+  @Post(':id/quote')
+  quote(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AcceptSupplierJobDto,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.supplierJobsService.quoteJob(id, dto, {
+      userId: req.user.sub,
+      role: req.user.role as TransitionActor,
+    });
+  }
+
   /** Accept with final price + promised date → supplier_accepted. */
   @Post(':id/accept')
   accept(

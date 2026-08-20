@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_route_map_panel.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_route_map_tile.dart';
+import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/rider_assignment_parser.dart';
 
 void main() {
@@ -128,8 +129,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(const Key('route-leg-0')), findsOneWidget);
-    expect(find.byKey(const Key('route-leg-1')), findsOneWidget);
+    expect(find.byKey(const Key('route-leg-101-dropoff-1')), findsOneWidget);
+    expect(find.byKey(const Key('route-leg-102-dropoff-2')), findsOneWidget);
     expect(find.text('Persisted route · Plan v1'), findsOneWidget);
     expect(find.textContaining('Optimizing'), findsNothing);
     expect(find.byIcon(Icons.local_taxi_rounded), findsNothing);
@@ -168,8 +169,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(const Key('route-leg-0')), findsOneWidget);
-    expect(find.byKey(const Key('route-leg-1')), findsOneWidget);
+    expect(find.byKey(const Key('route-leg-101-dropoff-1')), findsOneWidget);
+    expect(find.byKey(const Key('route-leg-102-dropoff-2')), findsOneWidget);
     // A healthy persisted plan renders quietly — no dispatch-plan jargon.
     expect(find.textContaining('Persisted route'), findsNothing);
     expect(find.textContaining('Optimizing'), findsNothing);
@@ -179,6 +180,126 @@ void main() {
     expect(find.byKey(const Key('route-open-pill')), findsOneWidget);
     expect(find.text('2 stops left · ~4 min · 1.2 km'), findsOneWidget);
     _expectRequiredAttribution(tester);
+  });
+
+  test('parses supplier pickup and two-stop plan on one assignment', () {
+    final view = parseAssignmentView({
+      ..._assignment(101, status: 'assigned'),
+      'supplierPickup': {
+        'supplierId': 88,
+        'businessName': 'Davao Print Co',
+        'address': 'Quimpo Blvd, Ecoland, Davao City',
+        'latitude': 7.0505,
+        'longitude': 125.5889,
+      },
+      'dispatchPlanStop': {
+        'assignmentId': 101,
+        'sequence': 1,
+        'status': 'pending',
+        'kind': 'pickup',
+        'destinationLatitude': 7.0505,
+        'destinationLongitude': 125.5889,
+        'legDurationSeconds': 180,
+        'legDistanceMeters': 1500,
+        'legGeometry': {
+          'type': 'LineString',
+          'coordinates': [
+            [125.6079, 7.064],
+            [125.5889, 7.0505],
+          ],
+        },
+      },
+      'dispatchPlanStops': [
+        {
+          'assignmentId': 101,
+          'sequence': 1,
+          'status': 'pending',
+          'kind': 'pickup',
+          'destinationLatitude': 7.0505,
+          'destinationLongitude': 125.5889,
+          'legDurationSeconds': 180,
+          'legDistanceMeters': 1500,
+          'legGeometry': {
+            'type': 'LineString',
+            'coordinates': [
+              [125.6079, 7.064],
+              [125.5889, 7.0505],
+            ],
+          },
+        },
+        {
+          'assignmentId': 101,
+          'sequence': 2,
+          'status': 'pending',
+          'kind': 'dropoff',
+          'destinationLatitude': 7.0731,
+          'destinationLongitude': 125.6128,
+          'legDurationSeconds': 420,
+          'legDistanceMeters': 3200,
+          'legGeometry': {
+            'type': 'LineString',
+            'coordinates': [
+              [125.5889, 7.0505],
+              [125.6128, 7.0731],
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(view.supplierPickup?.businessName, 'Davao Print Co');
+    expect(view.planStops.map((stop) => stop.kind), [
+      RiderDispatchStopKind.pickup,
+      RiderDispatchStopKind.dropoff,
+    ]);
+    expect(view.isPickupActive, isTrue);
+    expect(view.shouldTrackLocation, isTrue);
+    expect(view.activeStopTitle, 'Davao Print Co');
+  });
+
+  test('after pickup the active target is the customer and GPS stays on', () {
+    final view = parseAssignmentView({
+      ..._assignment(101, status: 'picked_up'),
+      'supplierPickup': {
+        'supplierId': 88,
+        'businessName': 'Davao Print Co',
+        'address': 'Quimpo Blvd, Ecoland, Davao City',
+        'latitude': 7.0505,
+        'longitude': 125.5889,
+      },
+      'dispatchPlanStop': {
+        'assignmentId': 101,
+        'sequence': 2,
+        'status': 'pending',
+        'kind': 'dropoff',
+        'destinationLatitude': 7.0731,
+        'destinationLongitude': 125.6128,
+        'legDurationSeconds': 420,
+        'legDistanceMeters': 3200,
+      },
+      'dispatchPlanStops': [
+        {
+          'assignmentId': 101,
+          'sequence': 1,
+          'status': 'completed',
+          'kind': 'pickup',
+          'destinationLatitude': 7.0505,
+          'destinationLongitude': 125.5889,
+        },
+        {
+          'assignmentId': 101,
+          'sequence': 2,
+          'status': 'pending',
+          'kind': 'dropoff',
+          'destinationLatitude': 7.0731,
+          'destinationLongitude': 125.6128,
+        },
+      ],
+    });
+
+    expect(view.isPickupActive, isFalse);
+    expect(view.shouldTrackLocation, isTrue);
+    expect(view.activeStopTitle, 'Customer');
   });
 
   test(
@@ -226,8 +347,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(const Key('route-leg-0')), findsOneWidget);
-    expect(find.byKey(const Key('route-leg-1')), findsNothing);
+    expect(find.byKey(const Key('route-leg-101-dropoff-1')), findsOneWidget);
+    expect(find.byKey(const Key('route-leg-102-dropoff-2')), findsNothing);
     expect(find.text('Route geometry degraded'), findsOneWidget);
   });
 
@@ -257,8 +378,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(const Key('route-leg-0')), findsOneWidget);
-    expect(find.byKey(const Key('route-leg-1')), findsNothing);
+    expect(find.byKey(const Key('route-leg-101-dropoff-1')), findsOneWidget);
+    expect(find.byKey(const Key('route-leg-102-dropoff-2')), findsNothing);
     expect(find.text('Route geometry degraded'), findsOneWidget);
   });
 }

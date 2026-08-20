@@ -8,6 +8,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomInt, timingSafeEqual } from 'crypto';
 import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
+import { DeliveryDestination } from '../orders/entities/delivery-destination.entity';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../matching/entities/supplier-assignment.entity';
+import { SupplierProfile } from '../suppliers/entities/supplier-profile.entity';
+import { geocodeAddress } from '../geo/geocode-address';
+
 import {
   RiderProfile,
   RiderVerificationStatus,
@@ -39,9 +47,15 @@ import { MAX_SIGNATURE_PROOF_BYTES } from './dto/update-delivery-status.dto';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 import {
   DispatchPlanService,
+  isDropoffStopKind,
+  numericPoint,
   type DispatchPlanProgress,
 } from './dispatch-plan.service';
-import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
+import {
+  DispatchPlanStop,
+  DispatchStopKind,
+  DispatchStopStatus,
+} from './entities/dispatch-plan-stop.entity';
 import { DispatchPlanStatus } from './entities/dispatch-plan.entity';
 import {
   DeliveryQueueUpdatedPayload,
@@ -168,6 +182,10 @@ export const ACTIVE_TRIP_TRACKING_STATUSES: readonly DeliveryStatus[] = [
   DeliveryStatus.ARRIVED,
 ];
 
+/** Marketplace jobs also ping GPS while riding to the supplier shop. */
+export const MARKETPLACE_PRE_PICKUP_TRACKING_STATUSES: readonly DeliveryStatus[] =
+  [DeliveryStatus.ASSIGNED, DeliveryStatus.ACCEPTED];
+
 const ORDER_STATUS_BY_DELIVERY_STATUS: Partial<
   Record<DeliveryStatus, OrderStatus>
 > = {
@@ -238,6 +256,40 @@ export type RiderAssignmentResult = {
   riderProfile: RiderProfile;
 };
 
+function toDispatchStopPayload(stop: DispatchPlanStop) {
+  return {
+    sequence: stop.sequence,
+    status: stop.status,
+    kind: stop.kind ?? DispatchStopKind.DROPOFF,
+    destinationLatitude: stop.destinationLatitude,
+    destinationLongitude: stop.destinationLongitude,
+    legDurationSeconds: stop.legDurationSeconds,
+    legDistanceMeters: stop.legDistanceMeters,
+    legGeometry: stop.legGeometry,
+  };
+}
+
+function toSupplierPickupPayload(
+  assignment: SupplierAssignment | undefined,
+): {
+  supplierId: number;
+  businessName: string;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+} | null {
+  const supplier = assignment?.supplier;
+  const point = numericPoint(supplier?.latitude, supplier?.longitude);
+  if (!supplier || !point) return null;
+  return {
+    supplierId: supplier.id,
+    businessName: supplier.businessName,
+    address: supplier.address ?? null,
+    latitude: point.latitude,
+    longitude: point.longitude,
+  };
+}
+
 function isCurrentAssignmentUniqueViolation(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const databaseError = error as { code?: unknown; constraint?: unknown };
@@ -298,6 +350,39 @@ export class RidersService {
     });
   }
 
+  /**
+   * Marketplace pickup needs a shop pin. If the assigned supplier has an
+   * address but no coordinates, geocode it before assignment so ops is not
+   * blocked by a missing map click.
+   */
+  private async ensureMarketplacePickupCoords(orderId: number): Promise<void> {
+    const row = await this.dataSource.getRepository(SupplierAssignment).findOne({
+      where: {
+        orderId,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+      },
+      relations: { supplier: true },
+      order: { id: 'DESC' },
+    });
+    const supplier = row?.supplier;
+    if (!supplier) return;
+    if (numericPoint(supplier.latitude, supplier.longitude)) return;
+    const address = supplier.address?.trim();
+    if (!address) return;
+    try {
+      const hit = await geocodeAddress(address);
+      if (!hit) return;
+      await this.dataSource.getRepository(SupplierProfile).update(
+        { id: supplier.id },
+        { latitude: hit.latitude, longitude: hit.longitude },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not geocode supplier ${supplier.id} shop address: ${error}`,
+      );
+    }
+  }
+
   async assignOrderToRider(
     orderId: number,
     riderId: number,
@@ -311,11 +396,13 @@ export class RidersService {
     const candidate = await this.dataSource
       .getRepository(Order)
       .findOneOrFail({ where: { id: orderId } });
+    await this.ensureMarketplacePickupCoords(orderId);
 
     let assignmentResult: {
       assignment: DeliveryAssignment;
       riderProfile: RiderProfile;
       previous: Order;
+      marketplace: boolean;
     };
     try {
       assignmentResult = await this.dataSource.transaction(async (manager) => {
@@ -367,6 +454,62 @@ export class RidersService {
           );
         }
         riderProfile.user = riderUser;
+
+        const supplierAssignment = await manager
+          .getRepository(SupplierAssignment)
+          .findOne({
+            where: {
+              orderId,
+              decision: SupplierAssignmentDecision.ACCEPTED,
+            },
+            relations: { supplier: true },
+            order: { id: 'DESC' },
+          });
+        const marketplace = supplierAssignment != null;
+        if (marketplace) {
+          const pickup = numericPoint(
+            supplierAssignment.supplier?.latitude,
+            supplierAssignment.supplier?.longitude,
+          );
+          if (!pickup) {
+            throw new BadRequestException({
+              code: 'supplier_location_required',
+              message: 'Supplier shop pin required',
+            });
+          }
+          const destination =
+            order.destinationId == null
+              ? null
+              : await manager.getRepository(DeliveryDestination).findOne({
+                  where: { id: order.destinationId },
+                });
+          if (
+            !numericPoint(destination?.latitude, destination?.longitude)
+          ) {
+            throw new BadRequestException(
+              `Assignment has no routeable destination`,
+            );
+          }
+          const busy = await assignmentRepo.count({
+            where: {
+              riderId,
+              isCurrent: true,
+              status: In([
+                DeliveryStatus.ASSIGNED,
+                DeliveryStatus.ACCEPTED,
+                DeliveryStatus.PICKED_UP,
+                DeliveryStatus.ON_THE_WAY,
+                DeliveryStatus.ARRIVED,
+              ]),
+            },
+          });
+          if (busy > 0) {
+            throw new ConflictException({
+              code: 'rider_has_active_assignment',
+              message: 'Rider already has an active job',
+            });
+          }
+        }
         // One customer-verification OTP for the whole handoff: same value is
         // stored as pickup + delivery so the rider uses one code at pickup and
         // at the door, and the customer sees that same code on their order.
@@ -422,7 +565,12 @@ export class RidersService {
           manager,
         );
 
-        return { assignment: savedAssignment, riderProfile, previous: order };
+        return {
+          assignment: savedAssignment,
+          riderProfile,
+          previous: order,
+          marketplace,
+        };
       });
     } catch (error) {
       if (isCurrentAssignmentUniqueViolation(error)) {
@@ -457,6 +605,19 @@ export class RidersService {
         };
       }
     }
+    if (assignmentResult.marketplace) {
+      try {
+        await this.dispatchPlanService.createPlan(
+          assignmentResult.riderProfile.id,
+          [assignmentResult.assignment.id],
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Marketplace auto-plan failed for assignment ${assignmentResult.assignment.id}: ${error}`,
+        );
+      }
+    }
+
     return {
       order,
       assignment: sanitizeAssignmentSecrets(assignmentResult.assignment),
@@ -581,49 +742,86 @@ export class RidersService {
     dto: UpdateLocationDto,
   ): Promise<RiderProfile> {
     const profile = await this.getProfile(userId);
-
-    // Hard window: accept GPS pings only while at least one current job is in
-    // the active-trip tracking statuses (picked_up / out_for_delivery path).
-    const activeTripCount = await this.assignmentRepo.count({
+    const liveJobs = await this.assignmentRepo.find({
       where: {
         riderId: profile.id,
         isCurrent: true,
-        status: In([...ACTIVE_TRIP_TRACKING_STATUSES]),
+        status: In([
+          ...MARKETPLACE_PRE_PICKUP_TRACKING_STATUSES,
+          ...ACTIVE_TRIP_TRACKING_STATUSES,
+        ]),
       },
     });
-    if (activeTripCount === 0) {
+    const trackableJobs: DeliveryAssignment[] = [];
+    for (const job of liveJobs) {
+      if (ACTIVE_TRIP_TRACKING_STATUSES.includes(job.status)) {
+        trackableJobs.push(job);
+        continue;
+      }
+      const supplier = await this.dataSource
+        .getRepository(SupplierAssignment)
+        .findOne({
+          where: {
+            orderId: job.orderId,
+            decision: SupplierAssignmentDecision.ACCEPTED,
+          },
+        });
+      if (supplier) trackableJobs.push(job);
+    }
+    if (trackableJobs.length === 0) {
       throw new BadRequestException({
         code: 'tracking_inactive',
         message:
-          'Location pings are accepted only during an active trip (picked_up / out_for_delivery)',
+          'Location pings are accepted only during an active trip (assigned pickup through out_for_delivery)',
       });
     }
 
+    const previousGps = numericPoint(
+      profile.lastLatitude,
+      profile.lastLongitude,
+    );
+    const previousAt = profile.lastLocationUpdate;
     profile.lastLatitude = dto.latitude;
     profile.lastLongitude = dto.longitude;
     profile.lastLocationUpdate = new Date();
     const saved = await this.profileRepo.save(profile);
 
+    const gps = numericPoint(dto.latitude, dto.longitude);
     const currentStop =
       await this.dispatchPlanService.getCurrentPendingStopForRider(profile.id);
     const currentAssignment = currentStop
-      ? await this.assignmentRepo.findOne({
+      ? trackableJobs.find((job) => job.id === currentStop.stop.assignmentId) ??
+        (await this.assignmentRepo.findOne({
           where: {
             id: currentStop.stop.assignmentId,
             riderId: profile.id,
             isCurrent: true,
-            status: In([...ACTIVE_TRIP_TRACKING_STATUSES]),
           },
-        })
-      : null;
-    if (currentStop && currentAssignment) {
+        }))
+      : trackableJobs[0] ?? null;
+    if (currentAssignment) {
       this.locationGateway.broadcastLocation(String(currentAssignment.id), {
         assignmentId: String(currentAssignment.id),
-        planVersion: currentStop.planVersion,
+        planVersion: currentStop?.planVersion ?? 0,
         latitude: dto.latitude,
         longitude: dto.longitude,
         timestamp: saved.lastLocationUpdate.toISOString(),
       });
+    }
+
+    if (gps) {
+      try {
+        await this.dispatchPlanService.refreshMarketplaceOriginIfStale(
+          profile.id,
+          gps,
+          previousGps,
+          previousAt,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Could not refresh marketplace pickup origin for rider ${profile.id}: ${error}`,
+        );
+      }
     }
 
     return saved;
@@ -636,8 +834,13 @@ export class RidersService {
       relations: ['order', 'order.destination', 'order.user'],
       order: { createdAt: 'DESC' },
     });
+    const pickupByOrderId = await this.loadSupplierPickups(
+      assignments.map((assignment) => assignment.orderId),
+    );
     return assignments.map((assignment) =>
-      sanitizeAssignmentSecrets(assignment),
+      Object.assign(sanitizeAssignmentSecrets(assignment), {
+        supplierPickup: pickupByOrderId.get(assignment.orderId) ?? null,
+      }),
     );
   }
 
@@ -663,15 +866,25 @@ export class RidersService {
     const plan = await this.dispatchPlanService.getActivePlanForRider(
       profile.id,
     );
+    const pickupByOrderId = await this.loadSupplierPickups(
+      assignments.map((assignment) => assignment.orderId),
+    );
+    const withPickup = (assignment: DeliveryAssignment, extra: object) =>
+      Object.assign(sanitizeAssignmentSecrets(assignment), {
+        supplierPickup: pickupByOrderId.get(assignment.orderId) ?? null,
+        ...extra,
+      });
+
     if (!plan) {
       return [...assignments]
         .sort((left, right) => left.id - right.id)
         .map((assignment) =>
-          Object.assign(sanitizeAssignmentSecrets(assignment), {
+          withPickup(assignment, {
             dispatchPlanState: 'unplanned',
             dispatchPlanVersion: null,
             routePosition: null,
             dispatchPlanStop: null,
+            dispatchPlanStops: [],
           }),
         );
     }
@@ -679,38 +892,48 @@ export class RidersService {
     const assignmentById = new Map(
       assignments.map((assignment) => [assignment.id, assignment]),
     );
-    const remainingStops = plan.stops
+    const stopsByAssignment = new Map<number, DispatchPlanStop[]>();
+    for (const stop of plan.stops ?? []) {
+      const list = stopsByAssignment.get(stop.assignmentId) ?? [];
+      list.push(stop);
+      stopsByAssignment.set(stop.assignmentId, list);
+    }
+    for (const list of stopsByAssignment.values()) {
+      list.sort((left, right) => left.sequence - right.sequence);
+    }
+    const remainingStops = (plan.stops ?? [])
       .filter((stop) => stop.status === DispatchStopStatus.PENDING)
       .sort((left, right) => left.sequence - right.sequence);
-    const planned = remainingStops.flatMap((stop, index) => {
+    const planned: ReturnType<typeof withPickup>[] = [];
+    const seen = new Set<number>();
+    remainingStops.forEach((stop, index) => {
+      if (seen.has(stop.assignmentId)) return;
       const assignment = assignmentById.get(stop.assignmentId);
-      if (!assignment) return [];
+      if (!assignment) return;
+      seen.add(stop.assignmentId);
       assignmentById.delete(stop.assignmentId);
-      return [
-        Object.assign(sanitizeAssignmentSecrets(assignment), {
+      const assignmentStops = stopsByAssignment.get(stop.assignmentId) ?? [
+        stop,
+      ];
+      planned.push(
+        withPickup(assignment, {
           dispatchPlanState: 'planned',
           dispatchPlanVersion: plan.version,
           routePosition: index + 1,
-          dispatchPlanStop: {
-            sequence: stop.sequence,
-            status: stop.status,
-            destinationLatitude: stop.destinationLatitude,
-            destinationLongitude: stop.destinationLongitude,
-            legDurationSeconds: stop.legDurationSeconds,
-            legDistanceMeters: stop.legDistanceMeters,
-            legGeometry: stop.legGeometry,
-          },
+          dispatchPlanStop: toDispatchStopPayload(stop),
+          dispatchPlanStops: assignmentStops.map(toDispatchStopPayload),
         }),
-      ];
+      );
     });
     const unplanned = [...assignmentById.values()]
       .sort((left, right) => left.id - right.id)
       .map((assignment) =>
-        Object.assign(sanitizeAssignmentSecrets(assignment), {
+        withPickup(assignment, {
           dispatchPlanState: 'unplanned',
           dispatchPlanVersion: null,
           routePosition: null,
           dispatchPlanStop: null,
+          dispatchPlanStops: [],
         }),
       );
     return [...planned, ...unplanned];
@@ -876,6 +1099,7 @@ export class RidersService {
           : [];
 
       if (
+        newStatus === DeliveryStatus.PICKED_UP ||
         newStatus === DeliveryStatus.ARRIVED ||
         newStatus === DeliveryStatus.DELIVERED
       ) {
@@ -1101,6 +1325,26 @@ export class RidersService {
         );
       }
 
+      if (newStatus === DeliveryStatus.PICKED_UP) {
+        const dispatchPlanProgress = await this.dispatchPlanService.advanceStop(
+          manager,
+          profile.id,
+          assignment.id,
+          DispatchStopStatus.COMPLETED,
+        );
+        return {
+          savedAssignment,
+          orderStatus: publishedOrderStatus,
+          previous,
+          surveyRequirement,
+          closedConversationIds,
+          dispatchPlanProgress,
+          orderRef: order.orderId,
+          notifyOpsFailedDelivery: false as const,
+          failureReason: null as string | null,
+        };
+      }
+
       if (newStatus === DeliveryStatus.DELIVERED) {
         const dispatchPlanProgress = await this.dispatchPlanService.advanceStop(
           manager,
@@ -1321,12 +1565,57 @@ export class RidersService {
     }
   }
 
+  private async loadSupplierPickups(
+    orderIds: number[],
+  ): Promise<
+    Map<
+      number,
+      {
+        supplierId: number;
+        businessName: string;
+        address: string | null;
+        latitude: number;
+        longitude: number;
+      }
+    >
+  > {
+    const uniqueIds = [...new Set(orderIds.filter((id) => Number.isInteger(id)))];
+    const map = new Map<
+      number,
+      {
+        supplierId: number;
+        businessName: string;
+        address: string | null;
+        latitude: number;
+        longitude: number;
+      }
+    >();
+    if (uniqueIds.length === 0) return map;
+    const rows = await this.dataSource.getRepository(SupplierAssignment).find({
+      where: {
+        orderId: In(uniqueIds),
+        decision: SupplierAssignmentDecision.ACCEPTED,
+      },
+      relations: { supplier: true },
+      order: { id: 'DESC' },
+    });
+    for (const row of rows) {
+      if (map.has(row.orderId)) continue;
+      const pickup = toSupplierPickupPayload(row);
+      if (pickup) map.set(row.orderId, pickup);
+    }
+    return map;
+  }
+
   private async publishCurrentDeliveryQueue(riderId: number): Promise<void> {
     const plan = await this.dispatchPlanService.getActivePlanForRider(riderId);
     const pendingStops = (plan?.stops ?? [])
       .filter((stop) => stop.status === DispatchStopStatus.PENDING)
       .sort((left, right) => left.sequence - right.sequence);
-    const currentStop = pendingStops[0];
+    const pendingDropoffs = pendingStops.filter((stop) =>
+      isDropoffStopKind(stop.kind),
+    );
+    const currentStop = pendingDropoffs[0];
     if (!plan || !currentStop) return;
 
     const assignment = await this.assignmentRepo.findOne({
@@ -1354,7 +1643,7 @@ export class RidersService {
       orderId: assignment.order.id,
       orderRef: assignment.order.orderId,
       queuePosition: 1,
-      queueSize: pendingStops.length,
+      queueSize: pendingDropoffs.length,
       canTrackDelivery,
       assignmentId: canTrackDelivery ? assignment.id : null,
       planVersion: plan.version,

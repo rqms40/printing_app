@@ -26,6 +26,7 @@ export class AuthController {
       organization: dto.organization,
       clientAccountType: dto.clientAccountType,
       printingPreferences: dto.printingPreferences,
+      matchingPreference: dto.matchingPreference,
       serviceFocusRanks: dto.serviceFocusRanks,
     });
   }

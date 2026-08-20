@@ -4,6 +4,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  NotFoundException,
   Param,
   ParseIntPipe,
   Patch,
@@ -22,6 +23,7 @@ import { CreateSupplierProfileDto } from './dto/create-supplier-profile.dto';
 import { UpdateSupplierProfileDto } from './dto/update-supplier-profile.dto';
 import { SetSupplierVerificationDto } from './dto/set-supplier-verification.dto';
 import { CreateSupplierCapabilityDto } from './dto/create-supplier-capability.dto';
+import { searchShopAddresses } from '../geo/geocode-address';
 
 @ApiTags('suppliers')
 @ApiBearerAuth()
@@ -97,6 +99,29 @@ export class SuppliersController {
       req.user.sub,
       capabilityId,
     );
+  }
+
+  /**
+   * Geocode a shop address for the supplier profile pin.
+   * Declared before :id so "geocode" is not parsed as an id.
+   */
+  @Get('geocode')
+  @Roles(UserRole.SUPPLIER, UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
+  async geocode(@Query('q') q?: string) {
+    const suggestions = await searchShopAddresses(
+      typeof q === 'string' ? q : '',
+      6,
+    );
+    if (suggestions.length === 0) {
+      throw new NotFoundException({
+        code: 'address_not_found',
+        message: 'Could not find that shop address on the map',
+      });
+    }
+    return {
+      ...suggestions[0],
+      suggestions,
+    };
   }
 
   /** Ops admin + super admin list all supplier profiles. */

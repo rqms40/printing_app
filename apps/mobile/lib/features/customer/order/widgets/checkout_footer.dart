@@ -43,14 +43,10 @@ class CheckoutFooter extends ConsumerWidget {
       DeliveryMode.delivery => hasDeliveryAddress,
       DeliveryMode.multidrop => hasMultidropDestinations,
     };
-    final needsQrReceipt =
-        state.paymentMethod == PaymentMethod.qrPhInstapay &&
-        state.qrReceiptFileId == null;
     final canPlace =
         state.items.isNotEmpty &&
         state.paymentMethod != null &&
-        hasRequiredDestination &&
-        !needsQrReceipt;
+        hasRequiredDestination;
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -82,7 +78,7 @@ class CheckoutFooter extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Total',
+                    'Initial estimate',
                     style: AppTypography.caption.copyWith(
                       color: colors.onSurfaceDim,
                       fontSize: 11,

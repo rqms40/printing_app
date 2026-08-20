@@ -61,6 +61,8 @@ export type SupplierDirectoryEntry = {
   contactPhone: string | null;
   contactEmail: string | null;
   address: string | null;
+  latitude: number | null;
+  longitude: number | null;
   logoUrl: string | null;
   serviceZones: string[];
   serviceFocusRanks: string[];
@@ -296,6 +298,8 @@ export class SuppliersService {
       contactPhone: profile.contactPhone ?? null,
       contactEmail: profile.contactEmail ?? null,
       address: profile.address ?? null,
+      latitude: profile.latitude != null ? Number(profile.latitude) : null,
+      longitude: profile.longitude != null ? Number(profile.longitude) : null,
       logoUrl: profile.logoUrl ?? null,
       serviceZones: profile.serviceZones ?? [],
       serviceFocusRanks: ranks,
@@ -366,6 +370,8 @@ export class SuppliersService {
       contact_phone: profile.contactPhone ?? null,
       contact_email: profile.contactEmail ?? null,
       address: profile.address ?? null,
+      latitude: profile.latitude != null ? Number(profile.latitude) : null,
+      longitude: profile.longitude != null ? Number(profile.longitude) : null,
       logo_file_id: profile.logoFileId ?? null,
       logo_url: profile.logoUrl ?? null,
       attributes: profile.attributes ?? {},
@@ -479,6 +485,35 @@ export class SuppliersService {
     if (dto.contactPhone !== undefined) profile.contactPhone = dto.contactPhone;
     if (dto.contactEmail !== undefined) profile.contactEmail = dto.contactEmail;
     if (dto.address !== undefined) profile.address = dto.address;
+    if (dto.latitude !== undefined || dto.longitude !== undefined) {
+      const nextLat =
+        dto.latitude === undefined ? profile.latitude : dto.latitude;
+      const nextLng =
+        dto.longitude === undefined ? profile.longitude : dto.longitude;
+      if (nextLat == null && nextLng == null) {
+        profile.latitude = null;
+        profile.longitude = null;
+      } else {
+        const lat = Number(nextLat);
+        const lng = Number(nextLng);
+        if (
+          !Number.isFinite(lat) ||
+          !Number.isFinite(lng) ||
+          lat < -90 ||
+          lat > 90 ||
+          lng < -180 ||
+          lng > 180 ||
+          (lat === 0 && lng === 0)
+        ) {
+          throw new BadRequestException({
+            code: 'invalid_supplier_location',
+            message: 'Supplier shop pin must be a valid latitude/longitude pair',
+          });
+        }
+        profile.latitude = lat;
+        profile.longitude = lng;
+      }
+    }
     if (dto.serviceZones !== undefined) profile.serviceZones = dto.serviceZones;
     if (dto.serviceFocusRanks !== undefined) {
       profile.serviceFocusRanks = this.sanitizeServiceFocusRanks(

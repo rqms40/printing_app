@@ -7,6 +7,9 @@ import {
   IsEmail,
   IsIn,
   IsInt,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -61,6 +64,20 @@ export class UpdateSupplierProfileDto {
   @IsString()
   @MaxLength(500)
   address?: string | null;
+
+  @ApiPropertyOptional({ example: 7.0505, nullable: true })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsNumber()
+  @IsLatitude()
+  latitude?: number | null;
+
+  @ApiPropertyOptional({ example: 125.5889, nullable: true })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsNumber()
+  @IsLongitude()
+  longitude?: number | null;
 
   @ApiPropertyOptional({
     example: ['Davao City', 'Toril'],

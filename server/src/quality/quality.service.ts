@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
@@ -37,6 +39,7 @@ import {
   type PickupQaChecklistResults,
 } from './pickup-qa-checklist';
 import type { EntityManager } from 'typeorm';
+import { MatchingService } from '../matching/matching.service';
 
 /** Queue statuses — submitted is auto-promoted into needs_qa on workspace/decision. */
 const QA_QUEUE_STATUSES: OrderStatus[] = [
@@ -234,6 +237,8 @@ function isOpsRole(role: TransitionActor): boolean {
 
 @Injectable()
 export class QualityService {
+  private readonly logger = new Logger(QualityService.name);
+
   constructor(
     @InjectRepository(QualityReview)
     private readonly reviewRepo: Repository<QualityReview>,
@@ -244,6 +249,7 @@ export class QualityService {
     private readonly dataSource: DataSource,
     private readonly auditService: AuditService,
     private readonly filesService: FilesService,
+    @Optional() private readonly matchingService?: MatchingService,
   ) {}
 
   /** Canonical Pickup QA checklist definition for clients / admin UI. */
@@ -583,7 +589,7 @@ export class QualityService {
       }
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const ordersRepo = manager.getRepository(Order);
       const reviewRepo = manager.getRepository(QualityReview);
       const historyRepo = manager.getRepository(OrderStatusHistory);
@@ -745,6 +751,8 @@ export class QualityService {
         autoPromotedFromSubmitted,
       };
     });
+
+    return result;
   }
 
   /**

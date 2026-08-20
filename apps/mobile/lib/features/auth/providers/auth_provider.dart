@@ -6,6 +6,7 @@ import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/customer/address/providers/address_provider.dart';
 import 'package:printing_app/features/customer/beta/models/beta_locked_info.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/providers/matching_preview_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
@@ -152,6 +153,7 @@ class AuthUser {
     this.organization,
     this.clientAccountType,
     this.printingPreferences = const [],
+    this.matchingPreference,
     this.tutorialSeenKeys = const [],
     this.defaultPaymentMethod,
   });
@@ -174,6 +176,7 @@ class AuthUser {
   /// Optional marketplace metadata: business | organization | teacher.
   final String? clientAccountType;
   final List<String> printingPreferences;
+  final String? matchingPreference;
   final List<String> tutorialSeenKeys;
   final PaymentMethod? defaultPaymentMethod;
 
@@ -195,6 +198,7 @@ class AuthUser {
     String? organization,
     String? clientAccountType,
     List<String>? printingPreferences,
+    String? matchingPreference,
     List<String>? tutorialSeenKeys,
     PaymentMethod? defaultPaymentMethod,
   }) {
@@ -216,6 +220,7 @@ class AuthUser {
       organization: organization ?? this.organization,
       clientAccountType: clientAccountType ?? this.clientAccountType,
       printingPreferences: printingPreferences ?? this.printingPreferences,
+      matchingPreference: matchingPreference ?? this.matchingPreference,
       tutorialSeenKeys: tutorialSeenKeys ?? this.tutorialSeenKeys,
       defaultPaymentMethod: defaultPaymentMethod ?? this.defaultPaymentMethod,
     );
@@ -435,6 +440,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? course,
     String? organization,
     List<String> printingPreferences = const [],
+    String? matchingPreference,
     List<String> serviceFocusRanks = const [],
   }) async {
     final authGeneration = _beginAuthOperation();
@@ -465,6 +471,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
             'organization': organization,
           if (printingPreferences.isNotEmpty)
             'printingPreferences': printingPreferences,
+          if (matchingPreference != null && matchingPreference.isNotEmpty)
+            'matchingPreference': matchingPreference,
         },
       );
       if (!_isAuthOperationCurrent(authGeneration)) return;
@@ -586,6 +594,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? course,
     String? organization,
     List<String>? printingPreferences,
+    String? matchingPreference,
   }) async {
     final authGeneration = _authGeneration;
     state = state.copyWith(isLoading: true);
@@ -606,6 +615,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (printingPreferences != null) {
         payload['printingPreferences'] = printingPreferences;
       }
+      if (matchingPreference != null) {
+        payload['matchingPreference'] = matchingPreference;
+      }
 
       final response = await ApiClient.instance.put(
         '/users/profile',
@@ -625,9 +637,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return true;
     } catch (e) {
       if (!_isAuthOperationCurrent(authGeneration)) return false;
+      var message = 'Failed to update profile';
+      if (e is DioException && e.response?.data is Map) {
+        final raw = (e.response!.data as Map)['message'];
+        if (raw is List && raw.isNotEmpty) {
+          message = raw.map((item) => item.toString()).join(', ');
+        } else if (raw != null && raw.toString().trim().isNotEmpty) {
+          message = raw.toString();
+        }
+      }
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Failed to update profile',
+        errorMessage: message,
       );
       return false;
     }
@@ -637,6 +658,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// identity becomes visible to the widget tree.
   void _prepareSessionScopedData() {
     _ref?.read(checkoutProvider.notifier).reset();
+    try {
+      _ref?.read(matchingPreviewProvider.notifier).clear();
+    } catch (_) {}
     _ref?.read(addressProvider.notifier).clear();
     _ref?.read(accountStateProvider.notifier).clear();
     try {
@@ -923,6 +947,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       printingPreferences: _parseStringList(
         json['printingPreferences'] ?? json['printing_preferences'],
       ),
+      matchingPreference:
+          (json['matchingPreference'] ?? json['matching_preference'])
+              as String?,
       tutorialSeenKeys: _parseStringList(json['tutorialSeenKeys']),
       defaultPaymentMethod: _parseDefaultPaymentMethod(
         json['defaultPaymentMethod'] ?? json['default_payment_method'],

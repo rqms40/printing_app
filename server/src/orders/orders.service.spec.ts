@@ -34,7 +34,10 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
-import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../matching/entities/supplier-assignment.entity';
 import { Address } from '../addresses/entities/address.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
@@ -211,6 +214,13 @@ describe('OrdersService', () => {
   let slotBookingRepo: jest.Mocked<Partial<Repository<DeliverySlotBooking>>>;
   let dispatchPlanRepo: jest.Mocked<Partial<Repository<DispatchPlan>>>;
   let historyRepo: jest.Mocked<Partial<Repository<OrderStatusHistory>>>;
+  let supplierAssignmentQb: {
+    setLock: jest.Mock;
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    orderBy: jest.Mock;
+    getOne: jest.Mock;
+  };
   let addressRepo: jest.Mocked<Partial<Repository<Address>>>;
   let dataSource: Partial<DataSource>;
   let gateway: Partial<OrdersGateway>;
@@ -337,6 +347,13 @@ describe('OrdersService', () => {
     historyRepo = {
       insert: jest.fn(),
     };
+    supplierAssignmentQb = {
+      setLock: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue(null),
+    };
     addressRepo = {
       findOne: jest.fn(),
     };
@@ -352,7 +369,12 @@ describe('OrdersService', () => {
       })),
       findOneOrFail: jest.fn().mockResolvedValue({ model3dWidthMm: null }),
     };
-    addressRepo.findOne.mockResolvedValue({ id: 9, userId: 1 } as Address);
+    addressRepo.findOne.mockResolvedValue({
+      id: 9,
+      userId: 1,
+      latitude: 7.0731,
+      longitude: 125.6128,
+    } as Address);
     gateway = {
       notifyOrderUpdate: jest.fn(),
     };
@@ -486,6 +508,21 @@ describe('OrdersService', () => {
             if (entity?.name === BetaModeSettings.name)
               return transactionBetaSettingsRepo;
             if (entity?.name === 'DeliveryDestination')
+              return {
+                create: jest.fn((d) => d),
+                save: jest.fn(async (d) => ({ id: 1, ...d })),
+              };
+            if (entity?.name === 'SupplierAssignment')
+              return {
+                createQueryBuilder: jest
+                  .fn()
+                  .mockReturnValue(supplierAssignmentQb),
+                findOne: jest.fn().mockResolvedValue({
+                  supplier: { userId: 11 },
+                }),
+                save: jest.fn(async (row: unknown) => row),
+              };
+            if (entity?.name === 'QrPaymentReceipt')
               return {
                 create: jest.fn((d) => d),
                 save: jest.fn(async (d) => ({ id: 1, ...d })),
@@ -1149,7 +1186,7 @@ describe('OrdersService', () => {
       );
     });
 
-    it('deducts GRIDGO Credits using print subtotal plus delivery fee', async () => {
+    it('does not deduct GRIDGO Credits until the supplier quote is paid', async () => {
       repo.count.mockResolvedValue(0);
       repo.create.mockReturnValue(mockOrder);
       repo.save.mockResolvedValue(mockOrder);
@@ -1161,14 +1198,72 @@ describe('OrdersService', () => {
         deliveryFee: 30,
       } as Partial<Order>);
 
-      expect(creditsService.subtractCredits).toHaveBeenCalledWith(
-        1,
-        280,
-        'ORDER-DEBIT:ORD-10001',
-        expect.anything(),
-      );
+      expect(creditsService.subtractCredits).not.toHaveBeenCalled();
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+      expect(creditsService.spendCredits).not.toHaveBeenCalled();
       expect(repo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ paymentStatus: 'paid' }),
+        expect.objectContaining({ paymentStatus: 'pending' }),
+      );
+    });
+
+    it('charges GRIDGO Credits on supplier quote confirm using the quoted total', async () => {
+      const quotedOrder = {
+        id: 42,
+        orderId: 'ORD-10042',
+        userId: 1,
+        orderStatus: OrderStatus.SUPPLIER_ASSIGNED,
+        paymentMethod: 'gridCredits',
+        paymentStatus: 'pending',
+        deliveryFee: 25,
+        deliveryFeeMinor: '2500',
+        totalPrice: 450,
+      } as Order;
+      repo.findOne.mockResolvedValue(quotedOrder);
+      supplierAssignmentQb.getOne.mockResolvedValue({
+        id: 7,
+        orderId: 42,
+        decision: SupplierAssignmentDecision.PENDING,
+        quotedPriceMinor: '150000',
+        quotedPromisedDate: new Date(),
+        customerConfirmedQuoteAt: null,
+      });
+
+      await service.confirmSupplierQuote(42, 1);
+
+      expect(creditsService.reserveCredits).toHaveBeenCalledWith(
+        1,
+        1525,
+        expect.any(String),
+        expect.objectContaining({ actorUserId: 1 }),
+      );
+      expect(creditsService.spendCredits).toHaveBeenCalled();
+      expect(quotedOrder.paymentStatus).toBe('paid');
+      expect(quotedOrder.finalTotalMinor).toBe('152500');
+    });
+
+    it('requires a QR receipt when paying a quoted Instapay order', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 42,
+        orderId: 'ORD-10042',
+        userId: 1,
+        orderStatus: OrderStatus.SUPPLIER_ASSIGNED,
+        paymentMethod: 'qr_ph_instapay',
+        paymentStatus: 'pending',
+        deliveryFeeMinor: '2500',
+      } as Order);
+      supplierAssignmentQb.getOne.mockResolvedValue({
+        id: 7,
+        orderId: 42,
+        decision: SupplierAssignmentDecision.PENDING,
+        quotedPriceMinor: '150000',
+        quotedPromisedDate: new Date(),
+        customerConfirmedQuoteAt: null,
+      });
+
+      await expect(service.confirmSupplierQuote(42, 1, {})).rejects.toMatchObject(
+        {
+          response: expect.objectContaining({ code: 'qr_receipt_required' }),
+        },
       );
     });
 
@@ -1455,7 +1550,7 @@ describe('OrdersService', () => {
           deliveryFee: 27,
           totalPrice: 447,
           paymentMethod: 'gridCredits',
-          paymentStatus: 'paid',
+          paymentStatus: 'pending',
           deliveryOption: 'delivery',
           deliveryAddressId: 9,
         }),
@@ -1505,19 +1600,15 @@ describe('OrdersService', () => {
       );
     });
 
-    it('deducts GRIDGO Credits once for subtotal plus deliveryFee', async () => {
+    it('does not deduct GRIDGO Credits at place-order for subtotal plus deliveryFee', async () => {
       await (service as any).createBatch(1, batchDto);
 
-      expect(creditsService.subtractCredits).toHaveBeenCalledTimes(1);
-      expect(creditsService.subtractCredits).toHaveBeenCalledWith(
-        1,
-        447,
-        'ORDER-DEBIT:ORD-10001',
-        expect.anything(),
-      );
+      expect(creditsService.subtractCredits).not.toHaveBeenCalled();
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+      expect(creditsService.spendCredits).not.toHaveBeenCalled();
     });
 
-    it('deducts subtotal, delivery, priority, and extra-destination fees exactly once', async () => {
+    it('does not deduct priority or extra-destination fees at place-order', async () => {
       await (service as any).createBatch(1, {
         ...batchDto,
         speedTier: DeliverySpeedTier.PRIORITY,
@@ -1527,13 +1618,9 @@ describe('OrdersService', () => {
         ],
       });
 
-      expect(creditsService.subtractCredits).toHaveBeenCalledTimes(1);
-      expect(creditsService.subtractCredits).toHaveBeenCalledWith(
-        1,
-        527,
-        'ORDER-DEBIT:ORD-10001',
-        expect.anything(),
-      );
+      expect(creditsService.subtractCredits).not.toHaveBeenCalled();
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+      expect(creditsService.spendCredits).not.toHaveBeenCalled();
     });
 
     it('rejects non-credit payment methods for beta customers while beta mode is enabled', async () => {
@@ -1611,17 +1698,17 @@ describe('OrdersService', () => {
       });
     });
 
-    it('records a successful GRIDGO Credits batch payment as paid', async () => {
+    it('records GRIDGO Credits as pending until the supplier quote is paid', async () => {
       await (service as any).createBatch(1, {
         ...batchDto,
         paymentStatus: undefined,
       });
 
       expect(batchRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ paymentStatus: 'paid' }),
+        expect.objectContaining({ paymentStatus: 'pending' }),
       );
       expect(repo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ paymentStatus: 'paid' }),
+        expect.objectContaining({ paymentStatus: 'pending' }),
       );
     });
 
@@ -2545,6 +2632,7 @@ describe('OrdersService', () => {
         totalPrice: 250,
         deliveryFee: 30,
         paymentMethod: 'gridCredits',
+        paymentStatus: 'paid',
         orderStatus: OrderStatus.SUBMITTED,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(creditOrder);
@@ -2575,6 +2663,7 @@ describe('OrdersService', () => {
         totalPrice: '40.00',
         deliveryFee: '20.00',
         paymentMethod: 'gridCredits',
+        paymentStatus: 'paid',
         orderStatus: OrderStatus.SUBMITTED,
       } as unknown as Order;
       repo.findOneOrFail.mockResolvedValue(creditOrder);
@@ -2597,6 +2686,7 @@ describe('OrdersService', () => {
         userId: 1,
         totalPrice: 250,
         paymentMethod: 'grid_credits',
+        paymentStatus: 'paid',
         orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(creditOrder);
@@ -2716,6 +2806,7 @@ describe('OrdersService', () => {
             batchOrderId: batch.id,
             batchOrder: batch,
             paymentMethod: 'gridCredits',
+            paymentStatus: 'paid',
             orderStatus: OrderStatus.SUBMITTED,
           }) as Order,
       );
@@ -3963,7 +4054,7 @@ describe('createBatch with slot + destinations', () => {
   it('marks deliveryType=external when any destination is out of radius', async () => {
     // Address 10 inside, address 11 outside
     addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-      if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address; // deliveryAddress validation
+      if (where.id === 9) return { id: 9, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address; // deliveryAddress validation
       return makeAddress(where.id, 7.07, 125.61);
     });
     settingsService.isInsideServiceArea
@@ -3997,7 +4088,7 @@ describe('createBatch with slot + destinations', () => {
 
   it('books a slot when all destinations are inside radius', async () => {
     addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-      if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+      if (where.id === 9) return { id: 9, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address;
       return makeAddress(where.id, 7.07, 125.61);
     });
     settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4036,7 +4127,7 @@ describe('createBatch with slot + destinations', () => {
 
   it('computes priorityFee + extraDestinationFee correctly', async () => {
     addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-      if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+      if (where.id === 9) return { id: 9, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address;
       return makeAddress(where.id, 7.07, 125.61);
     });
     settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4072,7 +4163,7 @@ describe('createBatch with slot + destinations', () => {
 
   it('defaults to speedTier="standard" with priorityFee=0 when speedTier not set', async () => {
     addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-      if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+      if (where.id === 9) return { id: 9, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address;
       return makeAddress(where.id, 7.07, 125.61);
     });
     settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4105,7 +4196,7 @@ describe('createBatch with slot + destinations', () => {
     it('auto-books the nearest available same-day slot and returns assignedSlot', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        if (where.id === 9) return { id: 9, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address;
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4165,7 +4256,7 @@ describe('createBatch with slot + destinations', () => {
     it('searches future PH dates when all same-day slots have ended', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T15:30:00Z'));
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        if (where.id === 9) return { id: 9, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address;
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4223,7 +4314,7 @@ describe('createBatch with slot + destinations', () => {
     it('moves to the next candidate when capacity is lost during booking', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        if (where.id === 9) return { id: 9, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address;
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4621,7 +4712,7 @@ describe('createBatch with slot + destinations', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
 
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        if (where.id === 1) return { id: 1, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address;
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4679,7 +4770,7 @@ describe('createBatch with slot + destinations', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
 
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        if (where.id === 1) return { id: 1, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address;
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
@@ -4736,7 +4827,7 @@ describe('createBatch with slot + destinations', () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T15:30:00Z'));
 
       addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        if (where.id === 1) return { id: 1, userId: 1, latitude: 7.0731, longitude: 125.6128 } as unknown as Address;
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);

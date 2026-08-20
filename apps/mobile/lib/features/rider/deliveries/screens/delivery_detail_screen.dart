@@ -311,10 +311,12 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
                     assignmentId: view.id,
                     destination: destLatLng,
                     planStop: view.planStop,
+                    planStops: view.legs,
+                    supplierPin: view.supplierPin,
                     trackLocation: false,
                     interactive: true,
                     showLiveBadge: false,
-                    showRoute: view.isInProgress,
+                    showRoute: view.legs.isNotEmpty,
                     // Keep the recenter control below the floating back row.
                     overlayTopInset: 52,
                   ),

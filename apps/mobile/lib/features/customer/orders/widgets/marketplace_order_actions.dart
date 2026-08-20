@@ -16,6 +16,7 @@ import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
+import 'package:printing_app/utils/formatters.dart';
 
 export 'package:printing_app/features/customer/orders/widgets/order_concern_helpers.dart';
 
@@ -54,6 +55,7 @@ class MarketplaceOrderActions extends ConsumerStatefulWidget {
 class _MarketplaceOrderActionsState
     extends ConsumerState<MarketplaceOrderActions> {
   bool _busy = false;
+  int? _qrReceiptFileId;
   final _rejectReasonController = TextEditingController();
   final _correctionNotesController = TextEditingController();
   final _concernNotesController = TextEditingController();
@@ -124,6 +126,41 @@ class _MarketplaceOrderActionsState
     }
     final formData = FormData.fromMap({'file': multipart});
     // Do not set Content-Type manually — Dio must attach multipart boundary.
+    final response = await ApiClient.instance.post(
+      '/files/upload',
+      data: formData,
+    );
+    final data = response.data;
+    if (data is Map) {
+      final id = data['id'] ?? data['fileMetadataId'] ?? data['file_metadata_id'];
+      if (id is num) return id.toInt();
+      if (id is String) return int.tryParse(id);
+    }
+    throw StateError('Upload response missing file id');
+  }
+
+  Future<int?> _uploadPaymentReceipt() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: kIsWeb,
+    );
+    if (result == null || result.files.isEmpty) return null;
+    final file = result.files.single;
+    final MultipartFile multipart;
+    if (kIsWeb || file.path == null) {
+      final bytes = file.bytes;
+      if (bytes == null) return null;
+      multipart = MultipartFile.fromBytes(bytes, filename: file.name);
+    } else {
+      multipart = await MultipartFile.fromFile(
+        file.path!,
+        filename: file.name,
+      );
+    }
+    final formData = FormData.fromMap({
+      'file': multipart,
+      'purpose': 'payment_receipt',
+    });
     final response = await ApiClient.instance.post(
       '/files/upload',
       data: formData,
@@ -347,28 +384,53 @@ class _MarketplaceOrderActionsState
         status == OrderStatus.awaitingPayment ||
         status == OrderStatus.supplierAccepted;
     final showReportConcern = canReportConcern(status);
+    final quoted = order.assignedSupplier?.hasQuotedPrice == true;
+    final quoteConfirmed = order.assignedSupplier?.isQuoteConfirmed == true;
+    final showQuoteWait =
+        status == OrderStatus.supplierAssigned && !quoted;
+    final showQuoteConfirm =
+        status == OrderStatus.supplierAssigned && quoted && !quoteConfirmed;
 
-    if (!showCorrection && !showProof && !showPayWait && !showReportConcern) {
+    if (!showCorrection &&
+        !showProof &&
+        !showPayWait &&
+        !showReportConcern &&
+        !showQuoteWait &&
+        !showQuoteConfirm) {
       return const SizedBox.shrink();
     }
 
+    final quotedPesos = (order.assignedSupplier?.quotedPriceMinor ?? 0) / 100.0;
+    final totalDue = quotedPesos + order.deliveryFee;
+    final needsQrReceipt = order.paymentMethod.requiresPaymentReceipt;
     final title = showCorrection
         ? 'Artwork correction needed'
         : showProof
             ? 'Proof approval needed'
-            : showReportConcern
-                ? 'Check your order'
-                : 'Waiting for payment authorization';
+            : showQuoteConfirm
+                ? 'Pay the final print price'
+                : showQuoteWait
+                    ? 'Waiting for the supplier price'
+                    : showReportConcern
+                        ? 'Check your order'
+                        : 'Waiting for payment authorization';
     final body = showCorrection
         ? 'Ops listed issues below. Upload a revised file to send the job back to QA.'
         : showProof
             ? 'Review the proof notes, then approve for matching or request changes.'
-            : showReportConcern
-                ? 'Please inspect your print. If anything is wrong (quality, damage, '
-                    'missing pieces, packaging), report a concern within 24 hours. '
-                    'GRIDGO ops will review claims in the Claims queue.'
-                : 'The supplier accepted this job. GRIDGO ops will authorize payment '
-                    'so production can start. You do not need to take action here.';
+            : showQuoteConfirm
+                ? 'The supplier quoted ${formatCurrency(quotedPesos)}'
+                    '${order.deliveryFee > 0 ? ' plus ${formatCurrency(order.deliveryFee)} delivery' : ''}. '
+                    'Pay ${formatCurrency(totalDue)} now so they can accept the job.'
+                : showQuoteWait
+                    ? 'GRIDGO assigned a supplier. Catalog prices can still change. '
+                        'You will pay here when they send the final price.'
+                    : showReportConcern
+                        ? 'Please inspect your print. If anything is wrong (quality, damage, '
+                            'missing pieces, packaging), report a concern within 24 hours. '
+                            'GRIDGO ops will review claims in the Claims queue.'
+                        : 'The supplier accepted this job. GRIDGO ops will authorize payment '
+                            'so production can start. You do not need to take action here.';
 
     final checklist = showCorrection || showProof
         ? correctionChecklistItems(order)
@@ -376,11 +438,13 @@ class _MarketplaceOrderActionsState
 
     final icon = showReportConcern
         ? HugeIcons.strokeRoundedAlert02
-        : showPayWait
-            ? HugeIcons.strokeRoundedClock01
-            : showProof
-                ? HugeIcons.strokeRoundedCheckmarkCircle02
-                : HugeIcons.strokeRoundedFileEdit;
+        : showQuoteConfirm
+            ? HugeIcons.strokeRoundedCheckmarkCircle02
+            : showQuoteWait || showPayWait
+                ? HugeIcons.strokeRoundedClock01
+                : showProof
+                    ? HugeIcons.strokeRoundedCheckmarkCircle02
+                    : HugeIcons.strokeRoundedFileEdit;
 
     return AppCard(
       child: Column(
@@ -532,6 +596,54 @@ class _MarketplaceOrderActionsState
                     );
               }, 'Resubmitted to Ops QA'),
             )
+          else if (showQuoteConfirm) ...[
+            if (needsQrReceipt) ...[
+              AppButton(
+                label: _qrReceiptFileId == null
+                    ? 'Upload payment receipt'
+                    : 'Receipt uploaded',
+                variant: AppButtonVariant.secondary,
+                isFullWidth: true,
+                icon: HugeIcons.strokeRoundedUpload03,
+                onTap: () async {
+                  if (_busy) return;
+                  setState(() => _busy = true);
+                  try {
+                    final fileId = await _uploadPaymentReceipt();
+                    if (fileId == null) return;
+                    if (!mounted) return;
+                    setState(() => _qrReceiptFileId = fileId);
+                    await _snack('Payment receipt uploaded');
+                  } catch (e) {
+                    await _snack('Action failed: $e', error: true);
+                  } finally {
+                    if (mounted) setState(() => _busy = false);
+                  }
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+            AppButton(
+              label: order.paymentMethod == PaymentMethod.cod
+                  ? 'Confirm ${formatCurrency(totalDue)} COD'
+                  : 'Pay ${formatCurrency(totalDue)}',
+              isFullWidth: true,
+              icon: HugeIcons.strokeRoundedCheckmarkCircle02,
+              onTap: () {
+                if (needsQrReceipt && _qrReceiptFileId == null) {
+                  _snack('Upload your QR payment receipt first', error: true);
+                  return;
+                }
+                _run(
+                  () => ref.read(ordersProvider.notifier).confirmSupplierQuote(
+                        order.id,
+                        qrReceiptFileId: _qrReceiptFileId,
+                      ),
+                  'Payment received. The supplier can now accept.',
+                );
+              },
+            ),
+          ]
           else if (showProof) ...[
             AppButton(
               label: 'Approve proof',

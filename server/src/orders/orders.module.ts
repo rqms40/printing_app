@@ -33,6 +33,7 @@ import { GeoZonesModule } from '../geo-zones/geo-zones.module';
 import { PayoutsModule } from '../payouts/payouts.module';
 import { IssuesModule } from '../issues/issues.module';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import { MatchingModule } from '../matching/matching.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { SupplierAssignment } from '../matching/entities/supplier-assignment.ent
     GeoZonesModule,
     PayoutsModule,
     IssuesModule,
+    MatchingModule,
   ],
   providers: [OrdersService, OrdersGateway, PaymentTimeoutScheduler],
   controllers: [OrdersController, ExternalDeliveriesController],

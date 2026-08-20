@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -8,6 +9,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { Address } from '../addresses/entities/address.entity';
+import { UsersService } from '../users/users.service';
+import {
+  ROUTING_PROVIDER,
+  type RoutingProvider,
+} from '../riders/routing/routing-provider';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import {
@@ -17,6 +24,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { SupplierProfile } from '../suppliers/entities/supplier-profile.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import {
   SupplierAssignment,
   SupplierAssignmentDecision,
@@ -26,9 +34,14 @@ import {
   DEFAULT_ACCEPTANCE_SLA_HOURS,
   MATCHING_WEIGHTS,
   OrderMatchContext,
+  quoteDistanceFeePesos,
   rankSupplierCandidates,
   RankedSupplierCandidate,
+  resolveMatchingPreference,
+  sortByMatchingPreference,
   SupplierAcceptanceStats,
+  type GeoPoint,
+  type MatchingPreference,
 } from './matching.ranking';
 import { SupplierVerificationStatus } from '../suppliers/entities/supplier-verification.entity';
 
@@ -104,6 +117,14 @@ export class MatchingService {
     private readonly auditService: AuditService,
     private readonly configService: ConfigService,
     @Optional() private readonly notificationsService?: NotificationsService,
+    @Optional()
+    @InjectRepository(Address)
+    private readonly addressRepo?: Repository<Address>,
+    @Optional() private readonly usersService?: UsersService,
+    @Optional()
+    @Inject(ROUTING_PROVIDER)
+    private readonly routingProvider?: RoutingProvider,
+    @Optional() private readonly deliverySettingsService?: DeliverySettingsService,
   ) {}
 
   acceptanceSlaHours(): number {
@@ -202,6 +223,179 @@ export class MatchingService {
       top,
       actor,
       'auto_match top candidate',
+    );
+  }
+
+  async previewForClient(
+    userId: number,
+    input: {
+      category: string;
+      destinationId?: number;
+      latitude?: number;
+      longitude?: number;
+    },
+  ): Promise<{
+    preference: MatchingPreference;
+    supplier: {
+      supplierId: number;
+      businessName: string;
+      address: string | null;
+      latitude: number;
+      longitude: number;
+      ratingAverage: number;
+      leadTimeDays: number;
+    };
+    distanceMeters: number | null;
+    deliveryFeePesos: number;
+    deliveryFeeMinor: string;
+    feeIsEstimate: boolean;
+  }> {
+    const category = String(input.category ?? '').trim();
+    if (!category) {
+      throw new BadRequestException({
+        code: 'invalid_category',
+        message: 'Category is required',
+      });
+    }
+
+    const user = this.usersService
+      ? await this.usersService.findById(userId)
+      : null;
+    const preference = resolveMatchingPreference(user?.matchingPreference);
+    const destination = await this.resolvePreviewDestination(userId, input);
+    const zoneTokens = destination?.zoneTokens ?? [];
+    const ctx: OrderMatchContext = {
+      orderId: 0,
+      category,
+      quantity: 1,
+      zoneTokens,
+    };
+    const { candidates } = await this.rankForOrder(ctx, {
+      requireShopPin: true,
+    });
+    const ranked = sortByMatchingPreference(
+      candidates,
+      preference,
+      destination?.point ?? null,
+    );
+    const top = ranked[0];
+    if (!top) {
+      throw new BadRequestException({
+        code: 'no_eligible_suppliers',
+        message: 'No verified print shop is available for this product yet',
+      });
+    }
+    const shopPoint = {
+      latitude: top.rankingInputs.shopLatitude as number,
+      longitude: top.rankingInputs.shopLongitude as number,
+    };
+    const quoted = await this.quoteShopDelivery(
+      shopPoint,
+      destination?.point ?? null,
+      false,
+    );
+    const profile = await this.supplierRepo.findOne({
+      where: { id: top.supplierId },
+    });
+
+    return {
+      preference,
+      supplier: {
+        supplierId: top.supplierId,
+        businessName: top.businessName,
+        address: profile?.address ?? null,
+        latitude: shopPoint.latitude,
+        longitude: shopPoint.longitude,
+        ratingAverage: top.rankingInputs.ratingAverage,
+        leadTimeDays: top.rankingInputs.leadTimeDays,
+      },
+      distanceMeters: quoted.distanceMeters,
+      deliveryFeePesos: quoted.deliveryFeePesos,
+      deliveryFeeMinor: String(Math.round(quoted.deliveryFeePesos * 100)),
+      feeIsEstimate: quoted.feeIsEstimate,
+    };
+  }
+
+  async quoteShopDelivery(
+    shop: GeoPoint,
+    destination: GeoPoint | null,
+    isPickup: boolean,
+  ): Promise<{
+    distanceMeters: number | null;
+    deliveryFeePesos: number;
+    feeIsEstimate: boolean;
+  }> {
+    if (isPickup) {
+      return { distanceMeters: null, deliveryFeePesos: 0, feeIsEstimate: false };
+    }
+    if (!destination) {
+      return { distanceMeters: null, deliveryFeePesos: 25, feeIsEstimate: true };
+    }
+    if (!this.routingProvider) {
+      return { distanceMeters: null, deliveryFeePesos: 25, feeIsEstimate: true };
+    }
+    try {
+      const legs = await this.routingProvider.getRoute([shop, destination]);
+      const meters = legs[0]?.distanceMeters;
+      if (!Number.isFinite(meters) || (meters as number) < 0) {
+        return {
+          distanceMeters: null,
+          deliveryFeePesos: 25,
+          feeIsEstimate: true,
+        };
+      }
+      return {
+        distanceMeters: meters as number,
+        deliveryFeePesos: quoteDistanceFeePesos(meters as number),
+        feeIsEstimate: false,
+      };
+    } catch {
+      return { distanceMeters: null, deliveryFeePesos: 25, feeIsEstimate: true };
+    }
+  }
+
+  async autoMatchPreferred(orderId: number): Promise<AssignResult | null> {
+    const order = await this.loadOrderForMatching(orderId);
+    if (order.orderStatus !== OrderStatus.APPROVED_FOR_MATCHING) {
+      return null;
+    }
+    const user = this.usersService
+      ? await this.usersService.findById(order.userId)
+      : null;
+    const preference = resolveMatchingPreference(user?.matchingPreference);
+    const destPoint = this.destinationPointFromOrder(order);
+    const ctx = this.toMatchContext(order);
+    const { candidates } = await this.rankForOrder(ctx, {
+      requireShopPin: true,
+    });
+    const ranked = sortByMatchingPreference(candidates, preference, destPoint);
+    const blocked = await this.assignmentRepo.find({
+      where: {
+        orderId,
+        decision: In([
+          SupplierAssignmentDecision.DECLINED,
+          SupplierAssignmentDecision.EXPIRED,
+        ]),
+      },
+    });
+    const blockedIds = new Set(blocked.map((row) => row.supplierId));
+    const available = ranked.filter((row) => !blockedIds.has(row.supplierId));
+    const preferredId = order.preferredSupplierId;
+    const candidate =
+      (preferredId != null
+        ? available.find((row) => row.supplierId === preferredId)
+        : undefined) ?? available[0];
+    if (!candidate) {
+      this.logger.warn(
+        `No eligible suppliers to auto-match for order ${orderId}`,
+      );
+      return null;
+    }
+    return this.createAssignment(
+      orderId,
+      candidate,
+      { userId: 0, role: 'system' },
+      'client_preference_auto_match',
     );
   }
 
@@ -381,6 +575,30 @@ export class MatchingService {
     const slaHours = this.acceptanceSlaHours();
     const deadline = new Date(Date.now() + slaHours * 60 * 60 * 1000);
 
+    let extraFeeMinor = 0n;
+    try {
+      const orderForDistance = await this.loadOrderForMatching(orderId);
+      const destPoint = this.destinationPointFromOrder(orderForDistance);
+      const shopPoint = candidate.rankingInputs.shopLatitude != null && candidate.rankingInputs.shopLongitude != null 
+        ? { latitude: candidate.rankingInputs.shopLatitude as number, longitude: candidate.rankingInputs.shopLongitude as number } 
+        : null;
+
+      if (destPoint && shopPoint && this.routingProvider && this.deliverySettingsService) {
+        const legs = await this.routingProvider.getRoute([shopPoint, destPoint]);
+        const meters = legs[0]?.distanceMeters;
+        if (meters != null && meters >= 0) {
+          const settings = await this.deliverySettingsService.getSettings();
+          const perKm = Number(settings.deliveryFeePerKm);
+          if (perKm > 0) {
+             const pesos = Math.round((meters / 1000) * perKm);
+             extraFeeMinor = BigInt(pesos * 100);
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to calculate distance fee for assignment: ${err}`);
+    }
+
     const result = await this.dataSource.transaction(async (manager) => {
       const ordersRepo = manager.getRepository(Order);
       const assignmentRepo = manager.getRepository(SupplierAssignment);
@@ -434,11 +652,19 @@ export class MatchingService {
       });
       const savedAssignment = await assignmentRepo.save(assignment);
 
+      const newDeliveryFeeMinor = ((locked.deliveryFeeMinor ? BigInt(locked.deliveryFeeMinor) : 0n) + extraFeeMinor).toString();
+      const newDeliveryFee = Number(newDeliveryFeeMinor) / 100;
+
       const fromStatus = locked.orderStatus;
       const toStatus = OrderStatus.SUPPLIER_ASSIGNED;
       const updateResult = await ordersRepo.update(
         { id: locked.id, orderStatus: OrderStatus.APPROVED_FOR_MATCHING },
-        { orderStatus: toStatus },
+        {
+          orderStatus: toStatus,
+          preferredSupplierId: candidate.supplierId,
+          deliveryFeeMinor: newDeliveryFeeMinor,
+          deliveryFee: newDeliveryFee,
+        },
       );
       if (updateResult.affected != null && updateResult.affected !== 1) {
         throw new BadRequestException('Order changed during supplier assign');
@@ -553,7 +779,7 @@ export class MatchingService {
   private async loadOrderForMatching(orderId: number): Promise<Order> {
     const order = await this.ordersRepo.findOne({
       where: { id: orderId },
-      relations: { deliveryAddress: true },
+      relations: { deliveryAddress: true, destination: true },
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;
@@ -663,6 +889,9 @@ export class MatchingService {
         leadTimeDays: cap?.leadTimeDays ?? 1,
         serviceZones: profile.serviceZones ?? [],
         ratingAverage: Number(profile.ratingAverage ?? 0),
+        shopLatitude: Number(profile.latitude) || null,
+        shopLongitude: Number(profile.longitude) || null,
+        distanceMeters: null,
         acceptanceStats: { accepted: 0, declined: 0, expired: 0 },
         zoneTokens: ctx.zoneTokens,
       },
@@ -673,6 +902,83 @@ export class MatchingService {
         leadTimeDays: cap?.leadTimeDays ?? 1,
       },
     };
+  }
+
+  private destinationPointFromOrder(order: Order): GeoPoint | null {
+    const dest = order.destination;
+    if (dest?.latitude != null && dest?.longitude != null) {
+      const lat = Number(dest.latitude);
+      const lng = Number(dest.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return { latitude: lat, longitude: lng };
+      }
+    }
+    const addr = order.deliveryAddress;
+    if (addr?.latitude != null && addr?.longitude != null) {
+      const lat = Number(addr.latitude);
+      const lng = Number(addr.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return { latitude: lat, longitude: lng };
+      }
+    }
+    return null;
+  }
+
+  private async resolvePreviewDestination(
+    userId: number,
+    input: {
+      destinationId?: number;
+      latitude?: number;
+      longitude?: number;
+    },
+  ): Promise<{ point: GeoPoint; zoneTokens: string[] } | null> {
+    if (input.destinationId != null && this.addressRepo) {
+      const address = await this.addressRepo.findOne({
+        where: { id: Number(input.destinationId), userId },
+      });
+      if (!address) {
+        throw new BadRequestException({
+          code: 'destination_not_found',
+          message: 'Delivery address was not found',
+        });
+      }
+      return {
+        point: {
+          latitude: Number(address.latitude),
+          longitude: Number(address.longitude),
+        },
+        zoneTokens: [address.city, address.barangay, address.province].filter(
+          (value): value is string => Boolean(value && String(value).trim()),
+        ),
+      };
+    }
+    const lat = Number(input.latitude);
+    const lng = Number(input.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { point: { latitude: lat, longitude: lng }, zoneTokens: [] };
+    }
+    if (this.addressRepo) {
+      const fallback = await this.addressRepo.findOne({
+        where: { userId, isDefault: true },
+        order: { id: 'DESC' },
+      });
+      if (fallback) {
+        return {
+          point: {
+            latitude: Number(fallback.latitude),
+            longitude: Number(fallback.longitude),
+          },
+          zoneTokens: [
+            fallback.city,
+            fallback.barangay,
+            fallback.province,
+          ].filter((value): value is string =>
+            Boolean(value && String(value).trim()),
+          ),
+        };
+      }
+    }
+    return null;
   }
 
   private toMatchContext(order: Order): OrderMatchContext {
@@ -695,7 +1001,10 @@ export class MatchingService {
     return [...tokens];
   }
 
-  private async rankForOrder(ctx: OrderMatchContext) {
+  private async rankForOrder(
+    ctx: OrderMatchContext,
+    options: { requireShopPin?: boolean } = {},
+  ) {
     const profiles = await this.supplierRepo.find({
       relations: { verification: true, capabilities: true },
       order: { id: 'ASC' },
@@ -705,7 +1014,9 @@ export class MatchingService {
     const openLoads = await this.loadOpenLoads(supplierIds);
     const acceptanceStats = await this.loadAcceptanceStats(supplierIds);
 
-    return rankSupplierCandidates(ctx, profiles, openLoads, acceptanceStats);
+    return rankSupplierCandidates(ctx, profiles, openLoads, acceptanceStats, {
+      requireShopPin: options.requireShopPin === true,
+    });
   }
 
   private async loadOpenLoads(

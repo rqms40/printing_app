@@ -26,8 +26,11 @@ class RiderCockpitMap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final planned = mapStops.where((view) => view.planStop != null).toList()
-      ..sort((a, b) => a.planSequence!.compareTo(b.planSequence!));
+    final planned = mapStops.where((view) => view.legs.isNotEmpty).toList()
+      ..sort(
+        (a, b) => (a.planSequence ?? 0).compareTo(b.planSequence ?? 0),
+      );
+    final legs = [for (final view in planned) ...view.legs];
 
     return Stack(
       fit: StackFit.expand,
@@ -47,11 +50,11 @@ class RiderCockpitMap extends StatelessWidget {
             // Leave the lower-right corner to the map attribution control.
             bottom: 64,
             child: RiderStopRail(
-              totalStops: planned.length,
+              totalStops: legs.isEmpty ? planned.length : legs.length,
               completedCount: completedCount,
               currentStopIndex: currentStopIndex,
               stopStatuses: [
-                for (final view in planned) view.planStop!.status,
+                for (final leg in legs) leg.status,
               ],
             ),
           ),

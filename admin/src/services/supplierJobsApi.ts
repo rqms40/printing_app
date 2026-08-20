@@ -21,6 +21,7 @@ export type ProductionMilestone =
 
 /** Actions returned by GET job detail `allowedActions`. */
 export type SupplierJobAction =
+  | 'quote'
   | 'accept'
   | 'decline'
   | 'production-status'
@@ -62,6 +63,9 @@ export interface SupplierJobDetail {
     decisionReason: string | null;
     acceptanceDeadline: string;
     finalPriceMinor: string | null;
+    quotedPriceMinor: string | null;
+    quotedPromisedDate: string | null;
+    customerConfirmedQuoteAt: string | null;
     promisedDate: string | null;
     rankPosition: number;
     decidedAt: string | null;
@@ -168,6 +172,17 @@ export async function fetchSupplierJob(
   jobId: number,
 ): Promise<SupplierJobDetail> {
   const res = await apiClient.get<SupplierJobDetail>(`/supplier/jobs/${jobId}`);
+  return res.data;
+}
+
+export async function quoteSupplierJob(
+  jobId: number,
+  payload: AcceptSupplierJobPayload,
+): Promise<SupplierJobActionResult> {
+  const res = await apiClient.post<SupplierJobActionResult>(
+    `/supplier/jobs/${jobId}/quote`,
+    payload,
+  );
   return res.data;
 }
 

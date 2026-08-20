@@ -8,7 +8,14 @@ import { AuditModule } from '../audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MatchingService } from './matching.service';
 import { MatchingController } from './matching.controller';
+import { MatchingPreviewController } from './matching-preview.controller';
 import { MatchingExpiryScheduler } from './matching-expiry.scheduler';
+import { Address } from '../addresses/entities/address.entity';
+import { UsersModule } from '../users/users.module';
+import { DeliverySlotsModule } from '../delivery-slots/delivery-slots.module';
+import { ConfigService } from '@nestjs/config';
+import { ROUTING_PROVIDER } from '../riders/routing/routing-provider';
+import { OsrmRoutingProvider } from '../riders/routing/osrm-routing.provider';
 
 /**
  * Supplier matching / assignment (Task 4.2).
@@ -22,12 +29,23 @@ import { MatchingExpiryScheduler } from './matching-expiry.scheduler';
       Order,
       OrderStatusHistory,
       SupplierProfile,
+      Address,
     ]),
     AuditModule,
     NotificationsModule,
+    UsersModule,
+    DeliverySlotsModule,
   ],
-  controllers: [MatchingController],
-  providers: [MatchingService, MatchingExpiryScheduler],
+  controllers: [MatchingController, MatchingPreviewController],
+  providers: [
+    MatchingService,
+    MatchingExpiryScheduler,
+    {
+      provide: ROUTING_PROVIDER,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => new OsrmRoutingProvider(config),
+    },
+  ],
   exports: [MatchingService, TypeOrmModule],
 })
 export class MatchingModule {}

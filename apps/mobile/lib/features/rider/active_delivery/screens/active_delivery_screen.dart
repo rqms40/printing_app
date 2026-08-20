@@ -106,7 +106,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   }
 
   Future<void> _navigateTo(RiderAssignmentView view) async {
-    final dest = view.pinDestination;
+    final dest = view.isPickupActive ? view.supplierPin : view.pinDestination;
     final lat = dest?.latitude ?? 7.1907;
     final lng = dest?.longitude ?? 125.4553;
     final url = Uri.parse(
@@ -285,8 +285,11 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                 deliveriesProvider.select((s) => s.planOrigin),
               ),
               assignmentId: view.id,
+              isPickupActive: view.isPickupActive,
               destination: pinDestination,
               planStop: view.planStop,
+              planStops: view.legs,
+              supplierPin: view.supplierPin,
               trackLocation: trackGps,
               interactive: true,
               // Keep floating map controls clear of the header row and the
@@ -399,7 +402,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               child: Column(
                 children: [
                   Expanded(
-                    child: Padding(
+                    child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(
                         AppSpacing.md,
                         AppSpacing.sm,
@@ -448,7 +451,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
                               ),
                             ),
                           ],
-                          const Spacer(),
+                          const SizedBox(height: AppSpacing.lg),
                           Row(
                             children: [
                               Expanded(

@@ -7,6 +7,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/providers/matching_preview_provider.dart';
 import 'package:printing_app/features/customer/order/sheets/address_picker_sheet.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_section_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_segmented.dart';
@@ -27,6 +28,7 @@ class CheckoutDeliveryCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(checkoutProvider);
+    final matched = ref.watch(matchingPreviewProvider);
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
@@ -59,6 +61,13 @@ class CheckoutDeliveryCard extends ConsumerWidget {
                 label: 'Multi-drop',
               ),
             ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            matched == null
+                ? 'Catalog prices are estimates. A supplier sets the final price after GRIDGO assigns the job.'
+                : 'Initial estimate from ${matched.businessName}. Final print price is set after assignment.',
+            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
           ),
           const SizedBox(height: AppSpacing.md),
           if (state.mode == DeliveryMode.delivery)

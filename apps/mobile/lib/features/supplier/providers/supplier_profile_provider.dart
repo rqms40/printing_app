@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:printing_app/features/supplier/models/supplier_profile.dart';
 import 'package:printing_app/features/supplier/providers/supplier_jobs_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
@@ -85,6 +86,28 @@ class SupplierProfileNotifier extends StateNotifier<SupplierProfileState> {
     }
   }
 
+  /// Looks up OpenStreetMap place suggestions for the shop address field.
+  Future<List<ShopLocation>> searchShopAddresses(String address) async {
+    final query = address.trim();
+    if (query.length < 3) return const [];
+    try {
+      final res = await _api.get(
+        '/suppliers/geocode',
+        queryParameters: {'q': query},
+      );
+      return parseShopGeocodeSuggestions(res.data);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Looks up a shop address for the profile map pin. Returns null if the
+  /// query is too short or no place can be resolved.
+  Future<LatLng?> geocodeShopAddress(String address) async {
+    final hits = await searchShopAddresses(address);
+    return hits.firstOrNull?.latLng;
+  }
+
   /// Updates shop details, attributes map, service zones, and/or logo file id.
   Future<bool> updateProfile({
     String? businessName,
@@ -92,6 +115,8 @@ class SupplierProfileNotifier extends StateNotifier<SupplierProfileState> {
     String? contactPhone,
     String? contactEmail,
     String? address,
+    double? latitude,
+    double? longitude,
     List<String>? serviceZones,
     List<String>? serviceFocusRanks,
     Map<String, String>? attributes,
@@ -110,6 +135,8 @@ class SupplierProfileNotifier extends StateNotifier<SupplierProfileState> {
       if (contactPhone != null) body['contactPhone'] = contactPhone;
       if (contactEmail != null) body['contactEmail'] = contactEmail;
       if (address != null) body['address'] = address;
+      if (latitude != null) body['latitude'] = latitude;
+      if (longitude != null) body['longitude'] = longitude;
       if (serviceZones != null) body['serviceZones'] = serviceZones;
       if (serviceFocusRanks != null) {
         body['serviceFocusRanks'] = serviceFocusRanks;
@@ -328,4 +355,59 @@ SupplierProfileNotifier createSupplierProfileNotifierForTest({
   bool bootstrap = false,
 }) {
   return SupplierProfileNotifier(apiClient: apiClient, bootstrap: bootstrap);
+}
+
+class ShopLocation {
+  const ShopLocation({
+    required this.displayName,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String displayName;
+  final double latitude;
+  final double longitude;
+
+  LatLng get latLng => LatLng(latitude, longitude);
+}
+
+LatLng? parseShopGeocode(dynamic data) {
+  return parseShopGeocodeSuggestions(data).firstOrNull?.latLng;
+}
+
+List<ShopLocation> parseShopGeocodeSuggestions(dynamic data) {
+  if (data is! Map) return const [];
+  final raw = data['suggestions'];
+  final rows = <dynamic>[
+    if (raw is List) ...raw,
+    if (raw is! List) data,
+  ];
+  final hits = <ShopLocation>[];
+  final seen = <String>{};
+  for (final row in rows) {
+    if (row is! Map) continue;
+    final latitude = double.tryParse('${row['latitude']}');
+    final longitude = double.tryParse('${row['longitude']}');
+    final displayName = (row['displayName'] ?? row['display_name'] ?? '')
+        .toString()
+        .trim();
+    if (displayName.isEmpty ||
+        latitude == null ||
+        longitude == null ||
+        !latitude.isFinite ||
+        !longitude.isFinite ||
+        (latitude == 0 && longitude == 0)) {
+      continue;
+    }
+    final key = '$displayName|${latitude.toStringAsFixed(5)}|${longitude.toStringAsFixed(5)}';
+    if (!seen.add(key)) continue;
+    hits.add(
+      ShopLocation(
+        displayName: displayName,
+        latitude: latitude,
+        longitude: longitude,
+      ),
+    );
+  }
+  return hits;
 }

@@ -24,6 +24,7 @@ export class DeliverySettingsService {
         serviceCenterLng: 125.6128,
         serviceRadiusKm: 25,
         priorityFeeAmount: 50,
+        deliveryFeePerKm: 50,
         extraDestinationSurcharge: 30,
       }),
     );

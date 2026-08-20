@@ -38,6 +38,13 @@ export enum PrintingPreference {
   MARKETING_MATERIALS = 'marketing_materials',
 }
 
+/** Client shopping preference used to auto-match a supplier. */
+export enum MatchingPreference {
+  QUALITY = 'quality',
+  PRICE = 'price',
+  SPEED = 'speed',
+}
+
 export enum AgeRange {
   UNDER_18 = 'under_18',
   FROM_18_TO_24 = '18_24',

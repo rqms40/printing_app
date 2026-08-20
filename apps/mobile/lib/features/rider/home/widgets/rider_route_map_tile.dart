@@ -35,20 +35,32 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
   final _mapController = MapController();
 
   List<RiderAssignmentView> get _planned =>
-      widget.stops.where((stop) => stop.planStop != null).toList()..sort(
-        (left, right) => left.planSequence!.compareTo(right.planSequence!),
+      widget.stops.where((stop) => stop.legs.isNotEmpty).toList()..sort(
+        (left, right) =>
+            (left.planSequence ?? 0).compareTo(right.planSequence ?? 0),
       );
 
+  bool get _hasSupplierPin =>
+      widget.stops.any((stop) => stop.supplierPin != null);
+
   List<LatLng> get _framePoints {
-    final points = <LatLng>[widget.planOrigin ?? MapHelpers.shopPoint];
-    for (final stop in _planned) {
-      final geometry = stop.planStop?.geometry;
-      if (geometry != null) points.addAll(geometry.points);
-      // Prefer order destination pin so it matches Delivery Info address text.
-      final pin = stop.pinDestination ?? stop.planStop!.destination;
-      points.add(pin);
+    final points = <LatLng>[];
+    if (!_hasSupplierPin) {
+      points.add(widget.planOrigin ?? MapHelpers.shopPoint);
     }
-    if (points.length == 1) points.add(MapHelpers.davaoCenter);
+    for (final stop in widget.stops) {
+      if (stop.supplierPin != null) points.add(stop.supplierPin!);
+      if (stop.pinDestination != null) points.add(stop.pinDestination!);
+      for (final leg in stop.legs) {
+        if (leg.geometry != null) points.addAll(leg.geometry!.points);
+      }
+    }
+    if (points.isEmpty) {
+      points.add(widget.planOrigin ?? MapHelpers.shopPoint);
+      points.add(MapHelpers.davaoCenter);
+    } else if (points.length == 1) {
+      points.add(MapHelpers.davaoCenter);
+    }
     return points;
   }
 
@@ -100,6 +112,9 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
         : null;
     final livePoint = gps?.point;
     final hasPlan = _planned.isNotEmpty;
+    final hasPins = widget.stops.any(
+      (stop) => stop.supplierPin != null || stop.pinDestination != null,
+    );
     final gpsChip = _gpsChip(gps, active);
 
     return GestureDetector(
@@ -128,28 +143,48 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                     brightness,
                     cachingProvider: const DisabledMapCachingProvider(),
                   ),
-                  for (var i = 0; i < _planned.length; i++)
-                    if (_planned[i].planStop?.geometry case final geometry?)
-                      MapHelpers.persistedRouteLeg(
-                        key: Key('route-leg-$i'),
-                        points: geometry.points,
-                        isCompleted:
-                            _planned[i].planStop!.status ==
-                            RiderDispatchStopStatus.completed,
-                        isCurrent: _planned[i].isCurrentPlanStop,
-                      ),
+                  for (final view in _planned)
+                    for (final leg in view.legs)
+                      if (leg.geometry case final geometry?)
+                        MapHelpers.persistedRouteLeg(
+                          key: Key('route-leg-${view.id}-${leg.kind.name}-${leg.sequence}'),
+                          points: geometry.points,
+                          isCompleted:
+                              leg.status == RiderDispatchStopStatus.completed,
+                          isCurrent:
+                              view.planStop?.sequence == leg.sequence &&
+                              view.isCurrentPlanStop,
+                        ),
                   MarkerLayer(
                     markers: [
-                      MapHelpers.shopMarker(point: widget.planOrigin ?? MapHelpers.shopPoint),
-                      for (final stop in _planned)
-                        Marker(
-                          point: stop.pinDestination ??
-                              stop.planStop!.destination,
-                          width: 34,
-                          height: 46,
-                          alignment: Alignment.topCenter,
-                          child: _numberBadge(stop.planSequence!, colors),
+                      if (!_hasSupplierPin)
+                        MapHelpers.shopMarker(
+                          point: widget.planOrigin ?? MapHelpers.shopPoint,
                         ),
+                      for (final stop in widget.stops)
+                        if (stop.supplierPin != null)
+                          MapHelpers.shopMarker(point: stop.supplierPin),
+                      for (final stop in widget.stops)
+                        if (stop.pinDestination != null)
+                          Marker(
+                            point: stop.pinDestination!,
+                            width: 34,
+                            height: 46,
+                            alignment: Alignment.topCenter,
+                            child: _numberBadge(
+                              stop.legs
+                                      .where(
+                                        (leg) =>
+                                            leg.kind ==
+                                            RiderDispatchStopKind.dropoff,
+                                      )
+                                      .firstOrNull
+                                      ?.sequence ??
+                                  stop.planSequence ??
+                                  1,
+                              colors,
+                            ),
+                          ),
                       if (livePoint != null)
                         riderVehicleMarker(
                           point: livePoint,
@@ -160,7 +195,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                   MapHelpers.attribution(includeRouting: true),
                 ],
               ),
-              if (!hasPlan)
+              if (!hasPlan && !hasPins)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: Center(

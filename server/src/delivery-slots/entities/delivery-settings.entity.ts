@@ -45,6 +45,15 @@ export class DeliverySettings {
   priorityFeeAmount: number;
 
   @Column({
+    name: 'delivery_fee_per_km',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 50,
+  })
+  deliveryFeePerKm: number;
+
+  @Column({
     name: 'extra_destination_surcharge',
     type: 'decimal',
     precision: 10,

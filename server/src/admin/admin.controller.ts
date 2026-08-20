@@ -489,9 +489,14 @@ export class AdminController {
           assignmentId?: number;
           logoUrl?: string | null;
           address?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
           broadAddress?: string | null;
           selfQcEvidenceUrls?: string[];
           selfQcEvidenceFileIds?: number[];
+          quotedPriceMinor?: string | null;
+          quotedPromisedDate?: Date | string | null;
+          customerConfirmedQuoteAt?: Date | string | null;
         } | null;
       }
     ).assignedSupplierContact;
@@ -504,9 +509,14 @@ export class AdminController {
       assignment_id: contact.assignmentId ?? null,
       logo_url: contact.logoUrl ?? null,
       address: contact.address ?? null,
+      latitude: contact.latitude ?? null,
+      longitude: contact.longitude ?? null,
       broad_address: contact.broadAddress ?? null,
       self_qc_evidence_urls: contact.selfQcEvidenceUrls ?? [],
       self_qc_evidence_file_ids: contact.selfQcEvidenceFileIds ?? [],
+      quoted_price_minor: contact.quotedPriceMinor ?? null,
+      quoted_promised_date: contact.quotedPromisedDate ?? null,
+      customer_confirmed_quote_at: contact.customerConfirmedQuoteAt ?? null,
     };
   }
 
@@ -536,6 +546,11 @@ export class AdminController {
       phone_number: user?.phoneNumber ?? null,
       vehicle_type: rider.vehicleType ?? null,
       plate_number: rider.plateNumber ?? null,
+      last_latitude:
+        rider.lastLatitude != null ? Number(rider.lastLatitude) : null,
+      last_longitude:
+        rider.lastLongitude != null ? Number(rider.lastLongitude) : null,
+      last_location_update: rider.lastLocationUpdate ?? null,
       delivery_assignment_id: assignment.id,
       delivery_status: assignment.status,
       pickup_otp: pickupOtp,
@@ -646,10 +661,23 @@ export class AdminController {
                 assignmentId: supplierAssignment.id,
                 logoUrl: null,
                 address: supplierAssignment.supplier?.address ?? null,
+                latitude:
+                  supplierAssignment.supplier?.latitude != null
+                    ? Number(supplierAssignment.supplier.latitude)
+                    : null,
+                longitude:
+                  supplierAssignment.supplier?.longitude != null
+                    ? Number(supplierAssignment.supplier.longitude)
+                    : null,
                 broadAddress: null,
                 selfQcEvidenceUrls: [],
                 selfQcEvidenceFileIds:
                   supplierAssignment.selfQcEvidenceFileIds ?? [],
+                quotedPriceMinor: supplierAssignment.quotedPriceMinor ?? null,
+                quotedPromisedDate:
+                  supplierAssignment.quotedPromisedDate ?? null,
+                customerConfirmedQuoteAt:
+                  supplierAssignment.customerConfirmedQuoteAt ?? null,
               }
             : null),
         deliveryProof: this.deliveryProofFromAssignment(assignment),

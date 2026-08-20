@@ -96,6 +96,7 @@ export function DeliverySettingsPage() {
           serviceCenterLng: lng,
           serviceRadiusKm: radius,
           priorityFeeAmount: Number(res.data.priorityFeeAmount),
+          deliveryFeePerKm: Number(res.data.deliveryFeePerKm),
           extraDestinationSurcharge: Number(res.data.extraDestinationSurcharge),
         });
         setCenter([lat, lng]);
@@ -311,6 +312,18 @@ export function DeliverySettingsPage() {
                   style={{ width: "100%" }}
                   min={0}
                   step={5}
+                  prefix="₱"
+                />
+              </Form.Item>
+              <Form.Item
+                name="deliveryFeePerKm"
+                label="Delivery fee per km (₱)"
+                rules={[{ required: true, type: "number", min: 0 }]}
+              >
+                <InputNumber
+                  style={{ width: "100%" }}
+                  min={0}
+                  step={1}
                   prefix="₱"
                 />
               </Form.Item>

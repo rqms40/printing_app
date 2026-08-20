@@ -14,14 +14,19 @@ import 'package:printing_app/features/rider/shared/off_route.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
+import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/models/route_geometry.dart';
 
 /// Rider delivery map backed only by the persisted server dispatch leg.
 class RiderMapView extends ConsumerStatefulWidget {
   const RiderMapView({
     super.key,
     required this.assignmentId,
+    this.isPickupActive = false,
     required this.destination,
     required this.planStop,
+    this.planStops = const [],
+    this.supplierPin,
     required this.trackLocation,
     this.interactive = true,
     this.showLiveBadge = true,
@@ -33,8 +38,11 @@ class RiderMapView extends ConsumerStatefulWidget {
   });
 
   final String assignmentId;
+  final bool isPickupActive;
   final LatLng? destination;
   final RiderDispatchPlanStop? planStop;
+  final List<RiderDispatchPlanStop> planStops;
+  final LatLng? supplierPin;
   final bool trackLocation;
   final bool interactive;
   final bool showLiveBadge;
@@ -58,9 +66,12 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
   int _offRouteFixes = 0;
   bool _offRouteDismissed = false;
   bool _replanInFlight = false;
+  GeoJsonLineString? _uiRoute;
+  bool _fetchingUiRoute = false;
   late final AnimationController _pulseController;
 
-  LatLng get _shop => widget.planOrigin ?? MapHelpers.shopPoint;
+  LatLng get _shop =>
+      widget.supplierPin ?? widget.planOrigin ?? MapHelpers.shopPoint;
 
   /// Prefer the order destination pin (matches Delivery Info address text)
   /// over plan-stop coordinates, which can be stale after address fixes.
@@ -69,15 +80,25 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
       widget.planStop?.destination ??
       MapHelpers.davaoCenter;
 
-  List<LatLng> get _routePoints => widget.showRoute
-      ? widget.planStop?.geometry?.points ?? const []
-      : const [];
+  List<RiderDispatchPlanStop> get _legs {
+    final all = widget.planStops.isNotEmpty
+        ? widget.planStops
+        : [if (widget.planStop != null) widget.planStop!];
+    if (widget.planStop != null) {
+      return all
+          .where((leg) => leg.sequence == widget.planStop!.sequence)
+          .toList();
+    }
+    return all;
+  }
 
-  bool get _routeDegraded =>
-      widget.showRoute &&
-      (widget.planStop == null ||
-          widget.planStop!.geometryMalformed ||
-          widget.planStop!.geometry == null);
+  List<LatLng> get _routePoints {
+    if (!widget.showRoute) return const [];
+    if (_uiRoute != null) return _uiRoute!.points;
+    return _legs.firstOrNull?.geometry?.points ?? const [];
+  }
+
+  bool get _routeDegraded => _routePoints.isEmpty;
 
   @override
   void initState() {
@@ -91,14 +112,24 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
   @override
   void didUpdateWidget(covariant RiderMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.planStop?.sequence != widget.planStop?.sequence ||
+        oldWidget.assignmentId != widget.assignmentId) {
+      _uiRoute = null;
+    } else if (_legs.firstOrNull?.geometry != null) {
+      _uiRoute = null;
+    }
     _fitBounds();
   }
 
   void _fitBounds() {
+    final riderPoint = ref.read(riderLocationTrackerProvider(_trackerArgs)).point;
     final bounds = LatLngBounds.fromPoints([
       _shop,
       _destination,
+      if (riderPoint != null) riderPoint,
       ..._routePoints,
+      for (final leg in _legs)
+        if (leg.geometry != null) ...leg.geometry!.points,
     ]);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -115,10 +146,34 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
           padding.horizontal + 80 > size.width) {
         padding = const EdgeInsets.all(48);
       }
-      _mapController.fitCamera(
-        CameraFit.bounds(bounds: bounds, padding: padding),
-      );
+      try {
+        _mapController.fitCamera(
+          CameraFit.bounds(bounds: bounds, padding: padding),
+        );
+      } catch (_) {}
     });
+  }
+
+  Future<void> _fetchUIRoute(LatLng from, LatLng to) async {
+    if (_fetchingUiRoute) return;
+    _fetchingUiRoute = true;
+    try {
+      final res = await ApiClient.instance.dio.get('/riders/route', queryParameters: {
+        'fromLat': from.latitude,
+        'fromLng': from.longitude,
+        'toLat': to.latitude,
+        'toLng': to.longitude,
+      });
+      if (res.data != null && res.data['geometry'] != null && mounted) {
+        setState(() {
+          _uiRoute = GeoJsonLineString.tryParse(res.data['geometry']);
+        });
+        if (_uiRoute != null) _fitBounds();
+      }
+    } catch (_) {
+    } finally {
+      _fetchingUiRoute = false;
+    }
   }
 
   RiderLocationTrackerArgs get _trackerArgs => RiderLocationTrackerArgs(
@@ -149,6 +204,9 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
       if (point == null || point == previous?.point) return;
       if (_followCamera) {
         _mapController.move(point, _mapController.camera.zoom);
+      }
+      if (_routeDegraded && _uiRoute == null && widget.isPickupActive) {
+        _fetchUIRoute(point, _shop);
       }
       final leg = _routePoints;
       if (widget.trackLocation && leg.length >= 2) {
@@ -199,13 +257,35 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
             ),
             children: [
               MapHelpers.tileLayer(brightness),
-              if (_routePoints.isNotEmpty)
-                MapHelpers.persistedRouteLeg(
-                  key: const Key('active-route-leg'),
-                  points: _routePoints,
-                  isCompleted: false,
-                  isCurrent: true,
-                ),
+              if (widget.showRoute)
+                Builder(builder: (context) {
+                  final activeLeg = _legs.firstOrNull;
+                  // Only use the server's leg geometry if it matches the current phase (pickup vs dropoff)
+                  final isLegPickup = activeLeg?.kind == RiderDispatchStopKind.pickup;
+                  final useGeometry = activeLeg?.geometry?.points != null &&
+                      (widget.isPickupActive ? isLegPickup : !isLegPickup);
+                  final geometryPoints = useGeometry ? activeLeg!.geometry!.points : null;
+                  
+                  final linePoints = <LatLng>[];
+                  if (riderPoint != null) {
+                    linePoints.add(riderPoint);
+                  }
+                  if (geometryPoints != null && geometryPoints.isNotEmpty) {
+                    linePoints.addAll(geometryPoints);
+                  } else if (riderPoint != null) {
+                    // Fallback straight line if no routing data is available for the active phase.
+                    linePoints.add(widget.isPickupActive ? _shop : _destination);
+                  }
+                  if (linePoints.length >= 2) {
+                    return MapHelpers.persistedRouteLeg(
+                      key: const Key('active-route-leg'),
+                      points: linePoints,
+                      isCompleted: false,
+                      isCurrent: true,
+                    );
+                  }
+                  return const SizedBox.shrink();
+                }),
               MarkerLayer(markers: markers),
               if (riderPoint != null)
                 AnimatedVehiclePosition(

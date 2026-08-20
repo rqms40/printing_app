@@ -116,7 +116,17 @@ export class LocationGateway implements OnGatewayConnection {
       if (assignment.rider?.userId !== userId) {
         throw new WsException('Forbidden');
       }
-    } else if (!isAdminRole(role)) {
+    } else if (isAdminRole(role)) {
+      if (
+        [
+          DeliveryStatus.DELIVERED,
+          DeliveryStatus.DECLINED,
+          DeliveryStatus.FAILED,
+        ].includes(assignment.status)
+      ) {
+        throw new WsException('Live tracking is not available for this stop');
+      }
+    } else {
       throw new WsException('Forbidden');
     }
 
@@ -124,7 +134,10 @@ export class LocationGateway implements OnGatewayConnection {
       await this.dispatchPlanService.getCurrentPendingStopForRider(
         assignment.riderId,
       );
-    if (currentStop?.stop.assignmentId !== assignment.id) {
+    if (
+      !isAdminRole(role) &&
+      currentStop?.stop.assignmentId !== assignment.id
+    ) {
       throw new WsException('Live tracking is not available for this stop');
     }
 
@@ -133,7 +146,7 @@ export class LocationGateway implements OnGatewayConnection {
       event: 'subscribed',
       data: {
         assignmentId: String(numericId),
-        planVersion: currentStop.planVersion,
+        planVersion: currentStop?.planVersion ?? null,
       },
     };
   }

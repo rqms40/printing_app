@@ -17,6 +17,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   AgeRange,
   ClientAccountType,
+  MatchingPreference,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -110,6 +111,11 @@ export class RegisterDto {
   @IsArray()
   @IsEnum(PrintingPreference, { each: true })
   printingPreferences?: PrintingPreference[];
+
+  @ApiPropertyOptional({ enum: MatchingPreference })
+  @IsOptional()
+  @IsEnum(MatchingPreference)
+  matchingPreference?: MatchingPreference;
 
   /**
    * Supplier lane only: ordered service focuses (1st = index 0).

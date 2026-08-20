@@ -84,6 +84,9 @@ export type RankedSupplierCandidate = {
     leadTimeDays: number;
     serviceZones: string[];
     ratingAverage: number;
+    shopLatitude: number | null;
+    shopLongitude: number | null;
+    distanceMeters: number | null;
     acceptanceStats: {
       accepted: number;
       declined: number;
@@ -104,7 +107,59 @@ export type RankingExcludeReason =
   | 'unverified'
   | 'no_capability'
   | 'zone_mismatch'
-  | 'capacity_exhausted';
+  | 'capacity_exhausted'
+  | 'missing_pin';
+
+export type MatchingPreference = 'quality' | 'price' | 'speed';
+
+export type GeoPoint = { latitude: number; longitude: number };
+
+export function resolveMatchingPreference(
+  value: unknown,
+): MatchingPreference {
+  if (value === 'price' || value === 'speed' || value === 'quality') {
+    return value;
+  }
+  return 'quality';
+}
+
+export function shopPinFromProfile(
+  profile: Pick<SupplierProfile, 'latitude' | 'longitude'>,
+): GeoPoint | null {
+  const lat = Number(profile.latitude);
+  const lng = Number(profile.longitude);
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    lat < -90 ||
+    lat > 90 ||
+    lng < -180 ||
+    lng > 180 ||
+    (lat === 0 && lng === 0)
+  ) {
+    return null;
+  }
+  return { latitude: lat, longitude: lng };
+}
+
+export function haversineMeters(from: GeoPoint, to: GeoPoint): number {
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const dLat = toRad(to.latitude - from.latitude);
+  const dLng = toRad(to.longitude - from.longitude);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(from.latitude)) *
+      Math.cos(toRad(to.latitude)) *
+      Math.sin(dLng / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/** Checkout distance fee in pesos: max(₱25, ₱15 × km). */
+export function quoteDistanceFeePesos(distanceMeters: number): number {
+  if (!Number.isFinite(distanceMeters) || distanceMeters < 0) return 25;
+  const km = distanceMeters / 1000;
+  return Math.max(25, Math.round(15 * km * 100) / 100);
+}
 
 function normalizeToken(value: string): string {
   return value.trim().toLowerCase();
@@ -177,6 +232,7 @@ export function rankSupplierCandidates(
   profiles: SupplierProfile[],
   openLoads: Map<number, number>,
   acceptanceStats: Map<number, SupplierAcceptanceStats>,
+  options: { requireShopPin?: boolean } = {},
 ): {
   candidates: RankedSupplierCandidate[];
   excluded: Array<{ supplierId: number; reason: RankingExcludeReason }>;
@@ -234,6 +290,12 @@ export function rankSupplierCandidates(
         ? Math.max(0, capability.maxCapacity - openLoad)
         : null;
 
+    const pin = shopPinFromProfile(profile);
+    if (options.requireShopPin && !pin) {
+      excluded.push({ supplierId: profile.id, reason: 'missing_pin' });
+      continue;
+    }
+
     scored.push({
       supplierId: profile.id,
       businessName: profile.businessName,
@@ -256,6 +318,9 @@ export function rankSupplierCandidates(
         leadTimeDays: capability.leadTimeDays,
         serviceZones: profile.serviceZones ?? [],
         ratingAverage: Number(profile.ratingAverage ?? 0),
+        shopLatitude: pin?.latitude ?? null,
+        shopLongitude: pin?.longitude ?? null,
+        distanceMeters: null,
         acceptanceStats: {
           accepted: stats?.accepted ?? 0,
           declined: stats?.declined ?? 0,
@@ -282,6 +347,63 @@ export function rankSupplierCandidates(
   });
 
   return { candidates: scored, excluded };
+}
+
+export function sortByMatchingPreference(
+  candidates: RankedSupplierCandidate[],
+  preference: MatchingPreference,
+  destination: GeoPoint | null,
+): RankedSupplierCandidate[] {
+  const withDistance = candidates.map((candidate) => {
+    const pin =
+      candidate.rankingInputs.shopLatitude != null &&
+      candidate.rankingInputs.shopLongitude != null
+        ? {
+            latitude: candidate.rankingInputs.shopLatitude,
+            longitude: candidate.rankingInputs.shopLongitude,
+          }
+        : null;
+    const distanceMeters =
+      destination && pin ? haversineMeters(pin, destination) : null;
+    return {
+      ...candidate,
+      rankingInputs: {
+        ...candidate.rankingInputs,
+        distanceMeters,
+      },
+    };
+  });
+
+  const effective: MatchingPreference =
+    preference === 'price' && destination == null ? 'quality' : preference;
+
+  withDistance.sort((left, right) => {
+    if (effective === 'price') {
+      const l = left.rankingInputs.distanceMeters ?? Number.POSITIVE_INFINITY;
+      const r = right.rankingInputs.distanceMeters ?? Number.POSITIVE_INFINITY;
+      if (l !== r) return l - r;
+      return left.supplierId - right.supplierId;
+    }
+    if (effective === 'speed') {
+      const lead =
+        left.rankingInputs.leadTimeDays - right.rankingInputs.leadTimeDays;
+      if (lead !== 0) return lead;
+      const l = left.rankingInputs.distanceMeters ?? Number.POSITIVE_INFINITY;
+      const r = right.rankingInputs.distanceMeters ?? Number.POSITIVE_INFINITY;
+      if (l !== r) return l - r;
+      return left.supplierId - right.supplierId;
+    }
+    const rating =
+      right.rankingInputs.ratingAverage - left.rankingInputs.ratingAverage;
+    if (rating !== 0) return rating;
+    if (right.score !== left.score) return right.score - left.score;
+    return left.supplierId - right.supplierId;
+  });
+
+  return withDistance.map((candidate, index) => ({
+    ...candidate,
+    rankPosition: index + 1,
+  }));
 }
 
 /** Decisions that hold soft capacity. */

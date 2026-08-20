@@ -1,5 +1,6 @@
 export type DispatchPlanStatus = "active" | "superseded" | "completed";
 export type DispatchStopStatus = "pending" | "completed" | "skipped";
+export type DispatchStopKind = "pickup" | "dropoff";
 
 export interface LineStringGeometry {
   type: "LineString";
@@ -12,6 +13,7 @@ export interface DispatchPlanStop {
   assignment_id: number;
   sequence: number;
   status: DispatchStopStatus;
+  kind: DispatchStopKind;
   destination_latitude: number;
   destination_longitude: number;
   leg_duration_seconds: number;

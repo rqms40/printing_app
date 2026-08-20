@@ -9,6 +9,7 @@ import { AuditModule } from '../audit/audit.module';
 import { FilesModule } from '../files/files.module';
 import { QualityService } from './quality.service';
 import { QualityController } from './quality.controller';
+import { MatchingModule } from '../matching/matching.module';
 
 /**
  * Ops Quality / QA gate (Task 4.1) + Pickup QA submissions (supplier/rider).
@@ -24,6 +25,7 @@ import { QualityController } from './quality.controller';
     ]),
     AuditModule,
     FilesModule,
+    MatchingModule,
   ],
   controllers: [QualityController],
   providers: [QualityService],

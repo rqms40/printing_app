@@ -105,6 +105,9 @@ class AssignedSupplierContact {
     this.broadAddress,
     this.selfQcEvidenceUrls = const [],
     this.selfQcEvidenceFileIds = const [],
+    this.quotedPriceMinor,
+    this.quotedPromisedDate,
+    this.customerConfirmedQuoteAt,
   });
 
   final int supplierId;
@@ -117,6 +120,13 @@ class AssignedSupplierContact {
   final String? broadAddress;
   final List<String> selfQcEvidenceUrls;
   final List<int> selfQcEvidenceFileIds;
+  final int? quotedPriceMinor;
+  final DateTime? quotedPromisedDate;
+  final DateTime? customerConfirmedQuoteAt;
+
+  bool get hasQuotedPrice =>
+      quotedPriceMinor != null && quotedPriceMinor! > 0;
+  bool get isQuoteConfirmed => customerConfirmedQuoteAt != null;
 
   factory AssignedSupplierContact.fromJson(Map<String, dynamic> json) {
     Object? read(String camel, String snake) => json[camel] ?? json[snake];
@@ -162,6 +172,19 @@ class AssignedSupplierContact {
       }
     }
 
+    int? parseMinor(Object? value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is num) return value.round();
+      return int.tryParse(value.toString()) ??
+          double.tryParse(value.toString())?.round();
+    }
+
+    DateTime? parseDate(Object? value) {
+      if (value == null) return null;
+      return DateTime.tryParse(value.toString());
+    }
+
     return AssignedSupplierContact(
       supplierId: id,
       businessName: name,
@@ -173,6 +196,15 @@ class AssignedSupplierContact {
       broadAddress: read('broadAddress', 'broad_address')?.toString(),
       selfQcEvidenceUrls: urls,
       selfQcEvidenceFileIds: ids,
+      quotedPriceMinor: parseMinor(
+        read('quotedPriceMinor', 'quoted_price_minor'),
+      ),
+      quotedPromisedDate: parseDate(
+        read('quotedPromisedDate', 'quoted_promised_date'),
+      ),
+      customerConfirmedQuoteAt: parseDate(
+        read('customerConfirmedQuoteAt', 'customer_confirmed_quote_at'),
+      ),
     );
   }
 }

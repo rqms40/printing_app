@@ -114,6 +114,10 @@ export class Order {
   @Column({ name: 'destination_id', type: 'int', nullable: true })
   destinationId: number | null;
 
+  /** Preview-matched shop; becomes a SupplierAssignment after QA. */
+  @Column({ name: 'preferred_supplier_id', type: 'int', nullable: true })
+  preferredSupplierId: number | null;
+
   @ManyToOne(() => DeliveryDestination, { nullable: true })
   @JoinColumn({ name: 'destination_id' })
   destination: DeliveryDestination | null;

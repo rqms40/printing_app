@@ -137,6 +137,9 @@ export type SupplierJobDetail = {
     decisionReason: string | null;
     acceptanceDeadline: Date;
     finalPriceMinor: string | null;
+    quotedPriceMinor: string | null;
+    quotedPromisedDate: Date | null;
+    customerConfirmedQuoteAt: Date | null;
     promisedDate: Date | null;
     rankPosition: number;
     decidedAt: Date | null;
@@ -393,6 +396,9 @@ export class SupplierJobsService {
         decisionReason: assignment.decisionReason,
         acceptanceDeadline: assignment.acceptanceDeadline,
         finalPriceMinor: assignment.finalPriceMinor,
+        quotedPriceMinor: assignment.quotedPriceMinor,
+        quotedPromisedDate: assignment.quotedPromisedDate,
+        customerConfirmedQuoteAt: assignment.customerConfirmedQuoteAt,
         promisedDate: assignment.promisedDate,
         rankPosition: assignment.rankPosition,
         decidedAt: assignment.decidedAt,
@@ -484,6 +490,141 @@ export class SupplierJobsService {
   }
 
   /**
+   * Supplier dictates the final goods price. The job stays pending until the
+   * customer confirms that quote, then the supplier can accept.
+   */
+  async quoteJob(
+    jobId: number,
+    dto: AcceptSupplierJobDto,
+    actor: SupplierJobActor,
+  ): Promise<SupplierJobActionResult> {
+    assertSupplierActor(actor);
+    const profile = await this.requireProfileForUser(actor.userId);
+    const now = new Date();
+    const promisedDate = new Date(dto.promisedDate);
+    if (Number.isNaN(promisedDate.getTime())) {
+      throw new BadRequestException({
+        code: 'invalid_promised_date',
+        message: 'promisedDate must be a valid ISO-8601 date',
+      });
+    }
+    if (promisedDate.getTime() < now.getTime() - 60_000) {
+      throw new BadRequestException({
+        code: 'promised_date_in_past',
+        message: 'promisedDate must be now or in the future',
+      });
+    }
+    let quotedPriceMinor: string;
+    try {
+      quotedPriceMinor = normalizeMinor(dto.finalPriceMinor, 'finalPriceMinor');
+    } catch {
+      throw new BadRequestException({
+        code: 'invalid_final_price',
+        message: 'finalPriceMinor must be a positive integer (centavos)',
+      });
+    }
+    if (Number(quotedPriceMinor) <= 0) {
+      throw new BadRequestException({
+        code: 'invalid_final_price',
+        message: 'finalPriceMinor must be a positive integer (centavos)',
+      });
+    }
+
+    const result = await this.dataSource.transaction(async (manager) => {
+      const assignmentRepo = manager.getRepository(SupplierAssignment);
+      const ordersRepo = manager.getRepository(Order);
+      const locked = await assignmentRepo.findOne({
+        where: { id: jobId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException(`Job ${jobId} not found`);
+      if (locked.supplierId !== profile.id) {
+        throw new ForbiddenException({
+          code: 'not_own_assignment',
+          message: 'You can only quote your own assigned jobs',
+        });
+      }
+      if (locked.decision !== SupplierAssignmentDecision.PENDING) {
+        throw new BadRequestException({
+          code: 'assignment_not_pending',
+          message: `Assignment decision is ${locked.decision} (expected pending)`,
+        });
+      }
+      if (new Date(locked.acceptanceDeadline).getTime() < now.getTime()) {
+        throw new BadRequestException({
+          code: 'acceptance_sla_expired',
+          message: 'Acceptance SLA has expired; wait for re-matching',
+        });
+      }
+      const order = await ordersRepo.findOne({
+        where: { id: locked.orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!order) throw new NotFoundException('Order not found');
+      if (order.orderStatus !== OrderStatus.SUPPLIER_ASSIGNED) {
+        throw new BadRequestException({
+          code: 'order_not_supplier_assigned',
+          message: `Order status ${order.orderStatus} is not open for quote`,
+        });
+      }
+      const priceChanged = locked.quotedPriceMinor !== quotedPriceMinor;
+      locked.quotedPriceMinor = quotedPriceMinor;
+      locked.quotedPromisedDate = promisedDate;
+      if (priceChanged || !locked.customerConfirmedQuoteAt) {
+        locked.customerConfirmedQuoteAt = null;
+      }
+      const saved = await assignmentRepo.save(locked);
+      await this.auditService.append(
+        {
+          actorId: actor.userId,
+          actorRole: actor.role,
+          action: 'supplier_job_quoted',
+          entityType: 'supplier_assignment',
+          entityId: String(saved.id),
+          orderId: order.id,
+          reason: `Supplier quoted ${quotedPriceMinor} centavos, promised ${promisedDate.toISOString()}`,
+          metadata: {
+            quotedPriceMinor,
+            quotedPromisedDate: promisedDate.toISOString(),
+          },
+        },
+        manager,
+      );
+      return {
+        assignment: saved,
+        order: {
+          id: order.id,
+          orderId: order.orderId,
+          orderStatus: order.orderStatus,
+          userId: order.userId,
+        },
+        fromStatus: order.orderStatus,
+        toStatus: order.orderStatus,
+      };
+    });
+
+    await this.notifyClientQuoted(result.order.userId, result);
+
+    return {
+      assignment: {
+        id: result.assignment.id,
+        decision: result.assignment.decision,
+        finalPriceMinor: result.assignment.finalPriceMinor,
+        promisedDate: result.assignment.promisedDate,
+        decisionReason: result.assignment.decisionReason,
+        decidedAt: result.assignment.decidedAt,
+      },
+      order: {
+        id: result.order.id,
+        orderId: result.order.orderId,
+        orderStatus: result.order.orderStatus,
+      },
+      fromStatus: result.fromStatus,
+      toStatus: result.toStatus,
+    };
+  }
+
+  /**
    * Accept pending assignment: final price + promised date → ACCEPTED,
    * order supplier_assigned → supplier_accepted.
    */
@@ -566,6 +707,20 @@ export class SupplierJobsService {
           message: `Order status ${order.orderStatus} is not open for accept (expected supplier_assigned)`,
         });
       }
+      if (!locked.quotedPriceMinor || !locked.quotedPromisedDate) {
+        throw new BadRequestException({
+          code: 'supplier_quote_required',
+          message: 'Set the final price and wait for the customer to confirm before accepting',
+        });
+      }
+      if (!locked.customerConfirmedQuoteAt) {
+        throw new BadRequestException({
+          code: 'customer_quote_not_confirmed',
+          message: 'Customer must confirm the final price before you can accept',
+        });
+      }
+      finalPriceMinor = locked.quotedPriceMinor;
+      const promisedFromQuote = locked.quotedPromisedDate;
 
       assertTransition(
         OrderStatus.SUPPLIER_ASSIGNED,
@@ -575,7 +730,7 @@ export class SupplierJobsService {
 
       locked.decision = SupplierAssignmentDecision.ACCEPTED;
       locked.finalPriceMinor = finalPriceMinor;
-      locked.promisedDate = promisedDate;
+      locked.promisedDate = promisedFromQuote;
       locked.decidedAt = now;
       locked.decisionReason = null;
       const savedAssignment = await assignmentRepo.save(locked);
@@ -597,14 +752,14 @@ export class SupplierJobsService {
           orderStatus: toStatus,
           finalTotalMinor,
           deliveryFeeMinor,
-          estimatedCompletionAt: promisedDate,
+          estimatedCompletionAt: promisedFromQuote,
         },
       );
       if (updateResult.affected != null && updateResult.affected !== 1) {
         throw new BadRequestException('Order changed during accept');
       }
 
-      const reason = `Supplier accepted job with final price ${finalPriceMinor} centavos, promised ${promisedDate.toISOString()}`;
+      const reason = `Supplier accepted job with final price ${finalPriceMinor} centavos, promised ${promisedFromQuote.toISOString()}`;
       await historyRepo.insert({
         orderId: order.id,
         fromStatus,
@@ -1583,7 +1738,10 @@ export class SupplierJobsService {
       assignment.decision === SupplierAssignmentDecision.PENDING &&
       order.orderStatus === OrderStatus.SUPPLIER_ASSIGNED
     ) {
-      actions.push('accept', 'decline');
+      actions.push('quote', 'decline');
+      if (assignment.quotedPriceMinor && assignment.customerConfirmedQuoteAt) {
+        actions.push('accept');
+      }
     }
     if (assignment.decision === SupplierAssignmentDecision.ACCEPTED) {
       if (
@@ -1601,6 +1759,31 @@ export class SupplierJobsService {
       }
     }
     return actions;
+  }
+
+  private async notifyClientQuoted(
+    clientUserId: number,
+    result: {
+      order: { id: number; orderId: string };
+      assignment: SupplierAssignment;
+    },
+  ): Promise<void> {
+    if (!this.notificationsService) return;
+    try {
+      await this.notificationsService.create({
+        userId: clientUserId,
+        title: 'Pay your final print price',
+        message: `A supplier set the final price for order ${result.order.orderId}. Open the order and pay to confirm.`,
+        type: 'supplier_quoted',
+        orderRef: result.order.orderId,
+        metadata: {
+          assignmentId: result.assignment.id,
+          quotedPriceMinor: result.assignment.quotedPriceMinor,
+        },
+      });
+    } catch {
+      /* non-fatal */
+    }
   }
 
   private async notifyClientAccepted(

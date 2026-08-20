@@ -8,6 +8,8 @@ class SupplierProfile {
     this.contactPhone,
     this.contactEmail,
     this.address,
+    this.latitude,
+    this.longitude,
     this.logoFileId,
     this.logoUrl,
     this.attributes = const {},
@@ -27,6 +29,8 @@ class SupplierProfile {
   final String? contactPhone;
   final String? contactEmail;
   final String? address;
+  final double? latitude;
+  final double? longitude;
   final int? logoFileId;
   final String? logoUrl;
   final Map<String, String> attributes;
@@ -97,6 +101,8 @@ class SupplierProfile {
       contactEmail:
           (json['contactEmail'] ?? json['contact_email'])?.toString(),
       address: json['address']?.toString(),
+      latitude: _asDoubleOrNull(json['latitude']),
+      longitude: _asDoubleOrNull(json['longitude']),
       logoFileId: _asInt(json['logoFileId'] ?? json['logo_file_id']),
       logoUrl: (json['logoUrl'] ?? json['logo_url'])?.toString(),
       attributes: attrs,
@@ -116,6 +122,8 @@ class SupplierProfile {
     String? contactPhone,
     String? contactEmail,
     String? address,
+    double? latitude,
+    double? longitude,
     int? logoFileId,
     String? logoUrl,
     Map<String, String>? attributes,
@@ -131,6 +139,8 @@ class SupplierProfile {
       contactPhone: contactPhone ?? this.contactPhone,
       contactEmail: contactEmail ?? this.contactEmail,
       address: address ?? this.address,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
       logoFileId: logoFileId ?? this.logoFileId,
       logoUrl: logoUrl ?? this.logoUrl,
       attributes: attributes ?? this.attributes,
@@ -194,4 +204,11 @@ double _asDouble(Object? value) {
   if (value is double) return value;
   if (value is num) return value.toDouble();
   return double.tryParse(value.toString()) ?? 0;
+}
+
+double? _asDoubleOrNull(Object? value) {
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString());
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
@@ -10,8 +12,11 @@ import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/supplier/models/supplier_profile.dart';
 import 'package:printing_app/features/supplier/models/supplier_service_focus.dart';
 import 'package:printing_app/features/supplier/providers/supplier_profile_provider.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
+import 'package:printing_app/features/customer/address/widgets/map_pin_picker.dart';
+import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Full editor for supplier shop profile: details, attributes, logo, capabilities.
 class SupplierProfileEditScreen extends ConsumerStatefulWidget {
@@ -34,6 +39,12 @@ class _SupplierProfileEditScreenState
   final Map<String, String> _attributes = {};
   bool _seeded = false;
   int? _seededProfileId;
+  bool _geocodeEnabled = false;
+  bool _geocoding = false;
+  Timer? _geocodeTimer;
+  String? _selectedAddress;
+  List<ShopLocation> _suggestions = const [];
+  LatLng _shopPin = MapHelpers.shopPoint;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -49,6 +60,7 @@ class _SupplierProfileEditScreenState
     _emailController.dispose();
     _addressController.dispose();
     _zonesController.dispose();
+    _geocodeTimer?.cancel();
     super.dispose();
   }
 
@@ -59,12 +71,57 @@ class _SupplierProfileEditScreenState
     _phoneController.text = profile.contactPhone ?? '';
     _emailController.text = profile.contactEmail ?? '';
     _addressController.text = profile.address ?? '';
+    if (profile.latitude != null && profile.longitude != null) {
+      _shopPin = LatLng(profile.latitude!, profile.longitude!);
+    }
     _zonesController.text = profile.serviceZones.join(', ');
     _attributes
       ..clear()
       ..addAll(profile.attributes);
     _seeded = true;
     _seededProfileId = profile.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _geocodeEnabled = true;
+      final address = profile.address?.trim() ?? '';
+      if ((profile.latitude == null || profile.longitude == null) &&
+          address.length >= 3) {
+        unawaited(_loadSuggestions(address));
+      }
+    });
+  }
+
+  void _scheduleGeocode(String address) {
+    _geocodeTimer?.cancel();
+    if (!_geocodeEnabled) return;
+    if (_selectedAddress != null && _selectedAddress == address.trim()) {
+      return;
+    }
+    _geocodeTimer = Timer(const Duration(milliseconds: 350), () {
+      unawaited(_loadSuggestions(address));
+    });
+  }
+
+  Future<void> _loadSuggestions(String address) async {
+    if (!mounted) return;
+    setState(() => _geocoding = true);
+    final hits = await ref
+        .read(supplierProfileProvider.notifier)
+        .searchShopAddresses(address);
+    if (!mounted) return;
+    setState(() {
+      _geocoding = false;
+      _suggestions = hits;
+    });
+  }
+
+  void _applySuggestion(ShopLocation place) {
+    _selectedAddress = place.displayName;
+    _addressController.text = place.displayName;
+    setState(() {
+      _shopPin = place.latLng;
+      _suggestions = const [];
+      _geocoding = false;
+    });
   }
 
   Future<void> _pickLogo() async {
@@ -159,6 +216,8 @@ class _SupplierProfileEditScreenState
           contactPhone: _phoneController.text.trim(),
           contactEmail: _emailController.text.trim(),
           address: _addressController.text.trim(),
+          latitude: _shopPin.latitude,
+          longitude: _shopPin.longitude,
           serviceZones: zones,
           attributes: Map<String, String>.from(_attributes),
         );
@@ -483,6 +542,57 @@ class _SupplierProfileEditScreenState
                             label: 'Address',
                             hintText: 'Shop address',
                             maxLines: 2,
+                            onChanged: _scheduleGeocode,
+                          ),
+                          if (_geocoding || _suggestions.isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            if (_geocoding)
+                              Text(
+                                'Searching places…',
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            for (final place in _suggestions)
+                              ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  Icons.place_outlined,
+                                  color: colors.brand,
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  place.displayName,
+                                  style: AppTypography.body.copyWith(
+                                    color: colors.onBackground,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                onTap: () => _applySuggestion(place),
+                              ),
+                          ],
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            'Shop pin',
+                            style: AppTypography.caption.copyWith(
+                              color: colors.onSurfaceDim,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            'Type an address, then tap a suggested place to drop the pin. Drag to fine-tune.',
+                            style: AppTypography.caption.copyWith(
+                              color: colors.onSurfaceDim,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          MapPinPicker(
+                            initialCenter: _shopPin,
+                            height: 180,
+                            onChanged: (point) => _shopPin = point,
                           ),
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(

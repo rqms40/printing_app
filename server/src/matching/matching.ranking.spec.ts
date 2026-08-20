@@ -6,6 +6,8 @@ import {
 } from '../suppliers/entities/supplier-verification.entity';
 import {
   rankSupplierCandidates,
+  sortByMatchingPreference,
+  quoteDistanceFeePesos,
   OrderMatchContext,
   SupplierAcceptanceStats,
 } from './matching.ranking';
@@ -59,6 +61,8 @@ function profile(
     isActive: overrides.isActive ?? true,
     ratingAverage: overrides.ratingAverage ?? 4,
     ratingCount: overrides.ratingCount ?? 1,
+    latitude: overrides.latitude ?? null,
+    longitude: overrides.longitude ?? null,
     capabilities: overrides.capabilities ?? caps,
     verification: overrides.verification ?? verification,
     createdAt: new Date(),
@@ -194,5 +198,128 @@ describe('rankSupplierCandidates', () => {
     expect(candidates[0].rankPosition).toBe(1);
     expect(candidates[0].score).toBeGreaterThan(candidates[1].score);
     expect(candidates[0].rankingInputs.formula).toContain('0.35*capability');
+  });
+
+  it('excludes shops without a pin when requireShopPin is set', () => {
+    const profiles = [
+      profile({ id: 1, latitude: 7.05, longitude: 125.58 }),
+      profile({ id: 2, latitude: null, longitude: null }),
+    ];
+
+    const { candidates, excluded } = rankSupplierCandidates(
+      baseOrder,
+      profiles,
+      new Map(),
+      new Map(),
+      { requireShopPin: true },
+    );
+
+    expect(candidates.map((c) => c.supplierId)).toEqual([1]);
+    expect(excluded).toContainEqual({
+      supplierId: 2,
+      reason: 'missing_pin',
+    });
+  });
+
+  it('sorts price preference by closest shop pin', () => {
+    const dest = { latitude: 7.0731, longitude: 125.6128 };
+    const { candidates } = rankSupplierCandidates(
+      baseOrder,
+      [
+        profile({
+          id: 1,
+          ratingAverage: 5,
+          latitude: 7.2,
+          longitude: 125.7,
+        }),
+        profile({
+          id: 2,
+          ratingAverage: 3,
+          latitude: 7.074,
+          longitude: 125.613,
+        }),
+      ],
+      new Map(),
+      new Map(),
+      { requireShopPin: true },
+    );
+
+    const ranked = sortByMatchingPreference(candidates, 'price', dest);
+    expect(ranked.map((c) => c.supplierId)).toEqual([2, 1]);
+    expect(ranked[0].rankingInputs.distanceMeters).toBeLessThan(
+      ranked[1].rankingInputs.distanceMeters ?? Infinity,
+    );
+  });
+
+  it('sorts speed preference by lead time then distance', () => {
+    const dest = { latitude: 7.0731, longitude: 125.6128 };
+    const { candidates } = rankSupplierCandidates(
+      baseOrder,
+      [
+        profile({
+          id: 1,
+          latitude: 7.074,
+          longitude: 125.613,
+          capabilities: [
+            capability({
+              supplierId: 1,
+              productFamily: 'paper',
+              leadTimeDays: 3,
+            }),
+          ],
+        }),
+        profile({
+          id: 2,
+          latitude: 7.2,
+          longitude: 125.7,
+          capabilities: [
+            capability({
+              supplierId: 2,
+              productFamily: 'paper',
+              leadTimeDays: 1,
+            }),
+          ],
+        }),
+      ],
+      new Map(),
+      new Map(),
+      { requireShopPin: true },
+    );
+
+    const ranked = sortByMatchingPreference(candidates, 'speed', dest);
+    expect(ranked[0].supplierId).toBe(2);
+    expect(ranked[0].rankingInputs.leadTimeDays).toBe(1);
+  });
+
+  it('falls price preference back to quality when there is no destination', () => {
+    const { candidates } = rankSupplierCandidates(
+      baseOrder,
+      [
+        profile({
+          id: 1,
+          ratingAverage: 2,
+          latitude: 7.074,
+          longitude: 125.613,
+        }),
+        profile({
+          id: 2,
+          ratingAverage: 5,
+          latitude: 7.2,
+          longitude: 125.7,
+        }),
+      ],
+      new Map(),
+      new Map(),
+      { requireShopPin: true },
+    );
+
+    const ranked = sortByMatchingPreference(candidates, 'price', null);
+    expect(ranked[0].supplierId).toBe(2);
+  });
+
+  it('quotes delivery fee as max 25 pesos or 15 per km', () => {
+    expect(quoteDistanceFeePesos(0)).toBe(25);
+    expect(quoteDistanceFeePesos(1000)).toBe(25);
+    expect(quoteDistanceFeePesos(4200)).toBe(63);
   });
 });

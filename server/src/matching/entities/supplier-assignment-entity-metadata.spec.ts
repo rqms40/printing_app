@@ -29,6 +29,13 @@ describe('SupplierAssignment entity metadata', () => {
     );
     expect(columnType(SupplierAssignment, 'decision')).toBe('enum');
     expect(columnType(SupplierAssignment, 'finalPriceMinor')).toBe('bigint');
+    expect(columnType(SupplierAssignment, 'quotedPriceMinor')).toBe('bigint');
+    expect(columnType(SupplierAssignment, 'quotedPromisedDate')).toBe(
+      'timestamptz',
+    );
+    expect(columnType(SupplierAssignment, 'customerConfirmedQuoteAt')).toBe(
+      'timestamptz',
+    );
     expect(columnType(SupplierAssignment, 'promisedDate')).toBe('timestamptz');
   });
 });

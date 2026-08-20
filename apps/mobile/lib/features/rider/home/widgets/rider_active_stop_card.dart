@@ -23,18 +23,12 @@ class RiderActiveStopCard extends StatelessWidget {
   final VoidCallback? onMessage;
   final VoidCallback? onTap;
 
-  String get _orderSummary {
-    final category = view.order.category;
-    final qty = view.order.quantity;
-    return '$category, $qty ${qty == 1 ? 'Copy' : 'Copies'}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-    final customerName = view.order.customerName ?? 'Customer';
+    final customerName = view.activeStopTitle;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,7 +87,7 @@ class RiderActiveStopCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _orderSummary,
+                          view.activeStopSubtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption.copyWith(

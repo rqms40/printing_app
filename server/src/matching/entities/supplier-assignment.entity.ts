@@ -73,6 +73,20 @@ export class SupplierAssignment {
   @Column({ name: 'final_price_minor', type: 'bigint', nullable: true })
   finalPriceMinor: string | null;
 
+  /** Supplier-dictated goods price waiting on customer confirmation. */
+  @Column({ name: 'quoted_price_minor', type: 'bigint', nullable: true })
+  quotedPriceMinor: string | null;
+
+  @Column({ name: 'quoted_promised_date', type: 'timestamptz', nullable: true })
+  quotedPromisedDate: Date | null;
+
+  @Column({
+    name: 'customer_confirmed_quote_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  customerConfirmedQuoteAt: Date | null;
+
   @Column({ name: 'promised_date', type: 'timestamptz', nullable: true })
   promisedDate: Date | null;
 

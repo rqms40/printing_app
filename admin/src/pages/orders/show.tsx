@@ -23,6 +23,7 @@ import {
   UserSwitchOutlined,
 } from "@ant-design/icons";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import { RiderLiveTrackingMap } from "./rider-live-map";
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useParams } from "react-router";
@@ -303,6 +304,21 @@ export function OrderShow() {
     ]).finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    if (!id || !order?.assigned_rider_contact?.delivery_assignment_id) return;
+    const timer = window.setInterval(() => {
+      void apiClient
+        .get(`/admin/orders/${id}`)
+        .then((r) => setOrder(normalizeOrder(r.data)))
+        .catch(() => {
+          /* keep last snapshot */
+        });
+    }, 8000);
+    const timeout = timer as unknown as { unref?: () => void };
+    timeout.unref?.();
+    return () => window.clearInterval(timer);
+  }, [id, order?.assigned_rider_contact?.delivery_assignment_id]);
+
   if (loading) {
     return (
       <ShowPage title="Order" backTo="/orders" contentCard={false}>
@@ -378,7 +394,19 @@ export function OrderShow() {
       const res = await apiClient.get(`/admin/orders/${id}`);
       setOrder(normalizeOrder(res.data));
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? "Failed to assign rider";
+      const data = e?.response?.data;
+      const payload =
+        data?.message && typeof data.message === "object"
+          ? data.message
+          : data;
+      const code = payload?.code;
+      const fallback = payload?.message ?? data?.message ?? "Failed to assign rider";
+      const msg =
+        code === "supplier_location_required"
+          ? "Supplier shop pin required"
+          : code === "rider_has_active_assignment"
+            ? "Rider already has an active job"
+            : fallback;
       void message.error(Array.isArray(msg) ? msg.join(", ") : String(msg));
     }
   };
@@ -911,6 +939,50 @@ export function OrderShow() {
             }
           >
             <OrderDestinationMap destinations={destinations} />
+          </Card>
+        )}
+
+        {order.assigned_rider_contact?.delivery_assignment_id && (
+          <Card
+            title={
+              <Space>
+                <UserSwitchOutlined />
+                Live rider tracking
+              </Space>
+            }
+            extra={
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {(order.assigned_rider_contact.delivery_status === "picked_up" ||
+                order.assigned_rider_contact.delivery_status === "on_the_way" ||
+                order.assigned_rider_contact.delivery_status === "arrived")
+                  ? "Heading to customer"
+                  : "Heading to supplier shop"}
+              </Text>
+            }
+          >
+            <RiderLiveTrackingMap
+              assignmentId={Number(
+                order.assigned_rider_contact.delivery_assignment_id,
+              )}
+              riderProfileId={
+                order.assigned_rider_contact.rider_profile_id == null
+                  ? null
+                  : Number(order.assigned_rider_contact.rider_profile_id)
+              }
+              riderLatitude={order.assigned_rider_contact.last_latitude}
+              riderLongitude={order.assigned_rider_contact.last_longitude}
+              supplierLatitude={order.assigned_supplier_contact?.latitude}
+              supplierLongitude={order.assigned_supplier_contact?.longitude}
+              customerLatitude={destinations[0]?.latitude}
+              customerLongitude={destinations[0]?.longitude}
+              headingTo={
+                order.assigned_rider_contact.delivery_status === "picked_up" ||
+                order.assigned_rider_contact.delivery_status === "on_the_way" ||
+                order.assigned_rider_contact.delivery_status === "arrived"
+                  ? "customer"
+                  : "supplier"
+              }
+            />
           </Card>
         )}
 

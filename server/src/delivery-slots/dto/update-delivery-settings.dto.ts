@@ -22,5 +22,10 @@ export class UpdateDeliverySettingsDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  deliveryFeePerKm?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   extraDestinationSurcharge?: number;
 }

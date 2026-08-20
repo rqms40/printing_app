@@ -189,6 +189,35 @@ class ProfilingFormSection extends StatelessWidget {
               );
             }).toList(),
           ),
+          const SizedBox(height: AppSpacing.xl),
+          Text(
+            'What should we optimize when matching a print shop?',
+            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Column(
+            children: [
+              for (final option in matchingPreferenceOptions) ...[
+                _FieldCard(
+                  option: ProfilingFieldOption(
+                    category: value.profileCategory ?? 'client',
+                    value: option.value,
+                    label: option.label,
+                    description: option.description,
+                  ),
+                  colors: colors,
+                  isSelected: value.matchingPreference == option.value,
+                  onTap: () {
+                    onChanged(
+                      value.copyWith(matchingPreference: option.value),
+                    );
+                  },
+                ),
+                if (option != matchingPreferenceOptions.last)
+                  const SizedBox(height: AppSpacing.sm),
+              ],
+            ],
+          ),
         ],
       ],
     );
