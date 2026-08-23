@@ -1,7 +1,7 @@
 const defaultMobileWebPort = '8088';
 const defaultApkAssetName = 'GRIDGO-latest.apk';
-export const currentReleaseVersion = 'v1.12.4';
-export const currentReleaseApkAssetName = 'GRIDGO-v1.12.4.apk';
+export const currentReleaseVersion = 'v1.12.5';
+export const currentReleaseApkAssetName = 'GRIDGO-v1.12.5.apk';
 const defaultCommunityUrl = 'https://m.me/GRIDGOPrintPH';
 
 type LocationLike = Pick<
