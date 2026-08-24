@@ -494,6 +494,22 @@ Order _parseOrder(Map<String, dynamic> json) {
               '0',
         ) ??
         0,
+    priorityFee: batchJson == null
+        ? 0
+        : _readDouble(
+            _readJsonValue(batchJson, 'priorityFee', 'priority_fee'),
+            0,
+          ),
+    extraDestinationFee: batchJson == null
+        ? 0
+        : _readDouble(
+            _readJsonValue(
+              batchJson,
+              'extraDestinationFee',
+              'extra_destination_fee',
+            ),
+            0,
+          ),
     paymentMethod: _parsePaymentMethod(
       _readJsonValue(json, 'paymentMethod', 'payment_method')?.toString() ??
           'cod',

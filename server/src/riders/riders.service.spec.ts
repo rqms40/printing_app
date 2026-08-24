@@ -344,6 +344,7 @@ describe('RidersService', () => {
     it('creates a current assignment and actor-aware order history atomically', async () => {
       const readyOrder = {
         id: 1,
+          deliveryOption: 'delivery',
         orderId: 'ORD-1',
         batchOrderId: null,
         deliveryOption: 'delivery',
@@ -445,6 +446,7 @@ describe('RidersService', () => {
     it('rejects marketplace assign when the supplier has no shop pin', async () => {
       const readyOrder = {
         id: 1,
+          deliveryOption: 'delivery',
         orderId: 'ORD-1',
         batchOrderId: null,
         destinationId: 9,
@@ -475,6 +477,7 @@ describe('RidersService', () => {
     it('rejects marketplace assign when the rider already has an active job', async () => {
       const readyOrder = {
         id: 1,
+          deliveryOption: 'delivery',
         orderId: 'ORD-1',
         batchOrderId: null,
         destinationId: 9,
@@ -509,6 +512,7 @@ describe('RidersService', () => {
     it('auto-creates a two-stop plan after marketplace rider assignment', async () => {
       const readyOrder = {
         id: 1,
+          deliveryOption: 'delivery',
         orderId: 'ORD-1',
         batchOrderId: null,
         destinationId: 9,
@@ -558,6 +562,7 @@ describe('RidersService', () => {
     it('records super_admin actor role on assign when provided from JWT', async () => {
       const readyOrder = {
         id: 1,
+          deliveryOption: 'delivery',
         orderId: 'ORD-1',
         batchOrderId: null,
         deliveryOption: 'delivery',
@@ -608,6 +613,7 @@ describe('RidersService', () => {
     it('returns the committed assignment when post-commit customer publication fails', async () => {
       const readyOrder = {
         id: 1,
+          deliveryOption: 'delivery',
         orderId: 'ORD-1',
         batchOrderId: null,
         deliveryOption: 'delivery',
@@ -652,6 +658,7 @@ describe('RidersService', () => {
     it('still returns committed assignment data when publication and reload both fail', async () => {
       const readyOrder = {
         id: 1,
+          deliveryOption: 'delivery',
         orderId: 'ORD-1',
         batchOrderId: null,
         deliveryOption: 'delivery',
@@ -731,6 +738,7 @@ describe('RidersService', () => {
     it('converts a current-assignment unique violation to a conflict', async () => {
       const readyOrder = {
         id: 1,
+          deliveryOption: 'delivery',
         batchOrderId: null,
         deliveryOption: 'delivery',
         orderStatus: OrderStatus.READY_FOR_DISPATCH,
@@ -769,6 +777,7 @@ describe('RidersService', () => {
       async (_label, isAvailable, isActive, role) => {
         const readyOrder = {
           id: 1,
+          deliveryOption: 'delivery',
           batchOrderId: null,
           deliveryOption: 'delivery',
           orderStatus: OrderStatus.READY_FOR_DISPATCH,
@@ -804,6 +813,7 @@ describe('RidersService', () => {
       async (deliveryOption) => {
         const readyOrder = {
           id: 1,
+          deliveryOption: 'delivery',
           batchOrderId: null,
           deliveryOption,
           orderStatus: OrderStatus.READY_FOR_DISPATCH,

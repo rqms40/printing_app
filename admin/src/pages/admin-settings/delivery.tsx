@@ -98,6 +98,7 @@ export function DeliverySettingsPage() {
           priorityFeeAmount: Number(res.data.priorityFeeAmount),
           deliveryFeePerKm: Number(res.data.deliveryFeePerKm),
           extraDestinationSurcharge: Number(res.data.extraDestinationSurcharge),
+          serviceFeePercent: Number(res.data.serviceFeePercent ?? 0),
         });
         setCenter([lat, lng]);
         setRadiusKm(radius);
@@ -331,13 +332,27 @@ export function DeliverySettingsPage() {
                 name="extraDestinationSurcharge"
                 label="Extra destination surcharge (₱)"
                 rules={[{ required: true, type: "number", min: 0 }]}
-                style={{ marginBottom: 0 }}
               >
                 <InputNumber
                   style={{ width: "100%" }}
                   min={0}
                   step={5}
                   prefix="₱"
+                />
+              </Form.Item>
+              <Form.Item
+                name="serviceFeePercent"
+                label="Service fee (%)"
+                extra="Percent of print subtotal only — not delivery. 10% of ₱200 = ₱20."
+                rules={[{ required: true, type: "number", min: 0, max: 100 }]}
+                style={{ marginBottom: 0 }}
+              >
+                <InputNumber
+                  style={{ width: "100%" }}
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  addonAfter="%"
                 />
               </Form.Item>
             </Card>

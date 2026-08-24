@@ -333,6 +333,8 @@ class Order {
     required this.quantity,
     required this.totalPrice,
     required this.deliveryFee,
+    this.priorityFee = 0,
+    this.extraDestinationFee = 0,
     required this.paymentMethod,
     required this.paymentStatus,
     required this.orderStatus,
@@ -388,6 +390,8 @@ class Order {
   final int quantity;
   final double totalPrice;
   final double deliveryFee;
+  final double priorityFee;
+  final double extraDestinationFee;
   final PaymentMethod paymentMethod;
   final PaymentStatus paymentStatus;
   final OrderStatus orderStatus;
@@ -497,6 +501,8 @@ class Order {
     int? quantity,
     double? totalPrice,
     double? deliveryFee,
+    double? priorityFee,
+    double? extraDestinationFee,
     PaymentMethod? paymentMethod,
     PaymentStatus? paymentStatus,
     OrderStatus? orderStatus,
@@ -552,6 +558,8 @@ class Order {
       quantity: quantity ?? this.quantity,
       totalPrice: totalPrice ?? this.totalPrice,
       deliveryFee: deliveryFee ?? this.deliveryFee,
+      priorityFee: priorityFee ?? this.priorityFee,
+      extraDestinationFee: extraDestinationFee ?? this.extraDestinationFee,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       paymentStatus: paymentStatus ?? this.paymentStatus,
       orderStatus: orderStatus ?? this.orderStatus,

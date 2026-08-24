@@ -11,18 +11,24 @@ import {
   Post,
   Query,
   Request,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { UserRole } from '../users/entities/user.entity';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 import { SuppliersService } from './suppliers.service';
+import { SupplierCatalogService } from './supplier-catalog.service';
 import { CreateSupplierProfileDto } from './dto/create-supplier-profile.dto';
 import { UpdateSupplierProfileDto } from './dto/update-supplier-profile.dto';
 import { SetSupplierVerificationDto } from './dto/set-supplier-verification.dto';
 import { CreateSupplierCapabilityDto } from './dto/create-supplier-capability.dto';
+import { UpsertSupplierCatalogOfferingDto } from './dto/supplier-catalog.dto';
 import { searchShopAddresses } from '../geo/geocode-address';
 
 @ApiTags('suppliers')
@@ -30,7 +36,10 @@ import { searchShopAddresses } from '../geo/geocode-address';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('suppliers')
 export class SuppliersController {
-  constructor(private readonly suppliersService: SuppliersService) {}
+  constructor(
+    private readonly suppliersService: SuppliersService,
+    private readonly catalogService: SupplierCatalogService,
+  ) {}
 
   /**
    * Access gate for supplier UIs. Allowed even when pending/under_review
@@ -98,6 +107,54 @@ export class SuppliersController {
     return this.suppliersService.removeOwnCapability(
       req.user.sub,
       capabilityId,
+    );
+  }
+
+  @Get('me/catalog')
+  @Roles(UserRole.SUPPLIER)
+  listMineCatalog(@Request() req: RequestWithUser) {
+    return this.catalogService.listMine(req.user.sub);
+  }
+
+  @Post('me/catalog')
+  @Roles(UserRole.SUPPLIER)
+  upsertMineCatalog(
+    @Request() req: RequestWithUser,
+    @Body() dto: UpsertSupplierCatalogOfferingDto,
+  ) {
+    return this.catalogService.upsertMine(req.user.sub, dto);
+  }
+
+  @Delete('me/catalog/:offeringId')
+  @Roles(UserRole.SUPPLIER)
+  removeMineCatalog(
+    @Request() req: RequestWithUser,
+    @Param('offeringId', ParseIntPipe) offeringId: number,
+  ) {
+    return this.catalogService.removeMine(req.user.sub, offeringId);
+  }
+
+  @Post('me/catalog/import')
+  @Roles(UserRole.SUPPLIER)
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 20 * 1024 * 1024 },
+    }),
+  )
+  importMineCatalog(
+    @Request() req: RequestWithUser,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('apply') apply?: string,
+  ) {
+    if (!file?.buffer) {
+      throw new NotFoundException('Catalog file is required');
+    }
+    return this.catalogService.importMine(
+      req.user.sub,
+      { buffer: file.buffer, originalname: file.originalname },
+      apply !== 'false',
     );
   }
 

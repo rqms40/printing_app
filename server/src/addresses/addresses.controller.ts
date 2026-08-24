@@ -9,6 +9,7 @@ import {
   Body,
   UseGuards,
   Request,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -17,12 +18,23 @@ import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
+import { searchShopAddresses } from '../geo/geocode-address';
+
 @ApiTags('addresses')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('addresses')
 export class AddressesController {
   constructor(private addressesService: AddressesService) {}
+
+  @Get('geocode')
+  async geocode(@Query('q') q?: string) {
+    const suggestions = await searchShopAddresses(
+      typeof q === 'string' ? q : '',
+      6,
+    );
+    return { suggestions };
+  }
 
   @Get()
   getAddresses(@Request() req: RequestWithUser) {

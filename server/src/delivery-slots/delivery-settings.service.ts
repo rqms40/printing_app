@@ -26,6 +26,7 @@ export class DeliverySettingsService {
         priorityFeeAmount: 50,
         deliveryFeePerKm: 50,
         extraDestinationSurcharge: 30,
+        serviceFeePercent: 0,
       }),
     );
   }

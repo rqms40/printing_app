@@ -275,3 +275,137 @@ export async function removeMySupplierCapability(capabilityId: number) {
   const res = await apiClient.delete(`/suppliers/me/capabilities/${capabilityId}`);
   return res.data;
 }
+
+export type SupplierCatalogAddon = {
+  name: string;
+  price: number;
+  priceType: "flat" | "per_unit";
+};
+
+export type SupplierCatalogOffering = {
+  id: number;
+  title: string;
+  categorySlugs: string[];
+  specOptions: Record<string, string[]>;
+  addons: SupplierCatalogAddon[];
+  notes: string[];
+  baseRatePesos: number | null;
+  pricingUnit: string | null;
+  source: string;
+  sourceFileName: string | null;
+  isActive: boolean;
+};
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+export function normalizeCatalogOffering(
+  raw: unknown,
+): SupplierCatalogOffering | null {
+  const r = asRecord(raw);
+  const id = toNumber(read(r, "id"), 0);
+  if (id <= 0) return null;
+  const specRaw = asRecord(read(r, "specOptions", "spec_options"));
+  const specOptions: Record<string, string[]> = {};
+  for (const [key, values] of Object.entries(specRaw)) {
+    specOptions[key] = asStringArray(values);
+  }
+  const addonsRaw = read(r, "addons");
+  const addons: SupplierCatalogAddon[] = Array.isArray(addonsRaw)
+    ? addonsRaw.map((item) => {
+        const a = asRecord(item);
+        return {
+          name: String(read(a, "name") ?? ""),
+          price: toNumber(read(a, "price")),
+          priceType:
+            read(a, "priceType", "price_type") === "per_unit"
+              ? "per_unit"
+              : "flat",
+        };
+      })
+    : [];
+  return {
+    id,
+    title: String(read(r, "title") ?? "Catalog item"),
+    categorySlugs: asStringArray(read(r, "categorySlugs", "category_slugs")),
+    specOptions,
+    addons,
+    notes: asStringArray(read(r, "notes")),
+    baseRatePesos:
+      read(r, "baseRatePesos", "base_rate_pesos") == null
+        ? null
+        : toNumber(read(r, "baseRatePesos", "base_rate_pesos")),
+    pricingUnit: toStringOrNull(read(r, "pricingUnit", "pricing_unit")),
+    source: String(read(r, "source") ?? "manual"),
+    sourceFileName: toStringOrNull(
+      read(r, "sourceFileName", "source_file_name"),
+    ),
+    isActive: read(r, "isActive", "is_active") !== false,
+  };
+}
+
+export async function listMyCatalogOfferings(): Promise<
+  SupplierCatalogOffering[]
+> {
+  const res = await apiClient.get("/suppliers/me/catalog");
+  const raw = Array.isArray(res.data) ? res.data : [];
+  return raw
+    .map(normalizeCatalogOffering)
+    .filter((row): row is SupplierCatalogOffering => row != null);
+}
+
+export async function upsertMyCatalogOffering(payload: {
+  title: string;
+  categorySlugs: string[];
+  specOptions?: Record<string, string[]>;
+}): Promise<SupplierCatalogOffering[]> {
+  const res = await apiClient.post("/suppliers/me/catalog", payload);
+  const raw = Array.isArray(res.data) ? res.data : [];
+  return raw
+    .map(normalizeCatalogOffering)
+    .filter((row): row is SupplierCatalogOffering => row != null);
+}
+
+export async function removeMyCatalogOffering(offeringId: number) {
+  await apiClient.delete(`/suppliers/me/catalog/${offeringId}`);
+}
+
+export async function importMyCatalogFile(file: File): Promise<{
+  warnings: string[];
+  offerings: number;
+}> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await apiClient.post("/suppliers/me/catalog/import", form);
+  const parsed = asRecord(res.data?.parsed);
+  const applied = asRecord(res.data?.applied);
+  const warnings = asStringArray(parsed.warnings);
+  return {
+    warnings,
+    offerings: toNumber(applied.offerings),
+  };
+}
+
+export type CatalogCategoryOption = {
+  slug: string;
+  name: string;
+};
+
+export async function listOrderableCatalogCategories(): Promise<
+  CatalogCategoryOption[]
+> {
+  const res = await apiClient.get("/products/catalog");
+  const cats = Array.isArray(res.data?.categories) ? res.data.categories : [];
+  return cats
+    .map((item: unknown) => {
+      const r = asRecord(item);
+      const slug = String(read(r, "slug") ?? "").trim();
+      const name = String(read(r, "name") ?? slug).trim();
+      const orderable = read(r, "isOrderable", "is_orderable");
+      if (!slug || orderable === false) return null;
+      return { slug, name };
+    })
+    .filter(Boolean) as CatalogCategoryOption[];
+}

@@ -1120,9 +1120,12 @@ export class QualityService {
       const locked = await ordersRepo.findOne({
         where: { id: order.id },
         lock: { mode: 'pessimistic_write' },
-        relations: ['user'],
       });
       if (!locked) throw new NotFoundException('Order not found');
+      
+      // Preserve the user relation that was loaded by the caller
+      locked.user = order.user;
+
       if (locked.orderStatus !== OrderStatus.SUBMITTED) {
         return locked;
       }

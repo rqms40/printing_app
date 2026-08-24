@@ -9,9 +9,11 @@ import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { Payout } from '../payouts/entities/payout.entity';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
+import { FilesModule } from '../files/files.module';
 
 @Module({
   imports: [
+    FilesModule,
     TypeOrmModule.forFeature([
       PaymentTransaction,
       CodCollection,

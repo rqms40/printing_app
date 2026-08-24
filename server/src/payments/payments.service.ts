@@ -40,6 +40,7 @@ import {
   FileMetadata,
   FilePurpose,
 } from '../files/entities/file-metadata.entity';
+import { FilesService } from '../files/files.service';
 
 /** Order statuses that no longer count as active unpaid COD. */
 const COD_INACTIVE_ORDER_STATUSES: OrderStatus[] = [
@@ -81,6 +82,7 @@ export class PaymentsService {
     private payoutRepo: Repository<Payout>,
     @InjectRepository(FileMetadata)
     private fileRepo: Repository<FileMetadata>,
+    private readonly filesService: FilesService,
     private readonly config: ConfigService,
   ) {}
 
@@ -767,29 +769,45 @@ export class PaymentsService {
     }
 
     const rows = await qb.getMany();
-    return rows.map((r) => ({
-      id: r.id,
-      orderId: r.orderId,
-      orderRef: r.order?.orderId ?? null,
-      batchOrderId: r.batchOrderId,
-      userId: r.userId,
-      userEmail: r.user?.email ?? null,
-      userName: r.user?.fullName ?? r.user?.nickname ?? null,
-      fileId: r.fileId,
-      receiptUrl: r.file?.url ?? null,
-      receiptFileName: r.file?.originalName ?? null,
-      status: r.status,
-      paymentMethod: r.order?.paymentMethod ?? null,
-      paymentStatus: r.order?.paymentStatus ?? null,
-      orderTotal:
-        r.order?.totalPrice != null
-          ? Number(r.order.totalPrice) + Number(r.order.deliveryFee ?? 0)
-          : null,
-      rejectionReason: r.rejectionReason,
-      verifiedByUserId: r.verifiedByUserId,
-      verifiedAt: r.verifiedAt,
-      createdAt: r.createdAt,
-    }));
+    return Promise.all(
+      rows.map(async (r) => {
+        let receiptUrl = r.file?.url ?? null;
+        if (r.file?.objectKey) {
+          try {
+            receiptUrl = await this.filesService.getPresignedUrlForKey(
+              r.file.objectKey,
+              3600 * 24, // 24 hours
+            ) || receiptUrl;
+          } catch {
+            // fallback to direct url if signing fails
+          }
+        }
+
+        return {
+          id: r.id,
+          orderId: r.orderId,
+          orderRef: r.order?.orderId ?? null,
+          batchOrderId: r.batchOrderId,
+          userId: r.userId,
+          userEmail: r.user?.email ?? null,
+          userName: r.user?.fullName ?? r.user?.nickname ?? null,
+          fileId: r.fileId,
+          receiptUrl,
+          receiptFileName: r.file?.originalName ?? null,
+          status: r.status,
+          paymentMethod: r.order?.paymentMethod ?? null,
+          paymentStatus: r.order?.paymentStatus ?? null,
+          orderTotal:
+            r.order?.totalPrice != null
+              ? Number(r.order.totalPrice) + Number(r.order.deliveryFee ?? 0)
+              : null,
+          rejectionReason: r.rejectionReason,
+          verifiedByUserId: r.verifiedByUserId,
+          verifiedAt: r.verifiedAt,
+          createdAt: r.createdAt,
+        };
+      }),
+    );
   }
 
   /**

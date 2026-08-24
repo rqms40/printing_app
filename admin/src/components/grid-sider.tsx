@@ -20,6 +20,7 @@ const BADGE_MAP: Partial<Record<string, keyof BadgeCounts>> = {
 const SUPPLIER_PORTAL_RESOURCES = new Set([
   "supplier-jobs",
   "supplier-payouts",
+  "supplier-catalog",
   "supplier-support",
   "supplier-profile",
 ]);

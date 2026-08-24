@@ -103,7 +103,20 @@ import { MatchingService } from '../matching/matching.service';
 const PH_OFFSET_MINUTES = 8 * 60;
 const AUTO_SLOT_SEARCH_DAYS = 14;
 const STANDARD_DELIVERY_FEE = 25;
-const SERVICE_FEE = 2;
+
+/** Pesos service fee from print subtotal × admin percent (10 = 10%). */
+export function serviceFeeFromPercent(
+  subtotal: number,
+  percent: number | string | null | undefined,
+): number {
+  const s = Number(subtotal);
+  const p = Number(percent);
+  if (!Number.isFinite(s) || s <= 0 || !Number.isFinite(p) || p <= 0) {
+    return 0;
+  }
+  return Math.round((s * p) / 100 * 100) / 100;
+}
+
 const RIDER_ASSIGNMENT_WORKFLOW_STATUSES = new Set<OrderStatus>([
   OrderStatus.RIDER_ASSIGNED,
   OrderStatus.PICKED_UP,
@@ -389,8 +402,17 @@ export class OrdersService {
         order.deliveryFeeMinor != null && order.deliveryFeeMinor !== ''
           ? normalizeMinor(order.deliveryFeeMinor, 'deliveryFeeMinor')
           : pesosToMinor(order.deliveryFee ?? 0);
+      const quotedMinor = Number(assignment.quotedPriceMinor);
+      const feeSettings = await this.settingsService.getSettings();
+      const serviceMinor = Math.round(
+        quotedMinor *
+          (Number(feeSettings.serviceFeePercent) > 0
+            ? Number(feeSettings.serviceFeePercent)
+            : 0) /
+          100,
+      );
       const finalTotalMinor = String(
-        Number(assignment.quotedPriceMinor) + Number(deliveryFeeMinor),
+        quotedMinor + Number(deliveryFeeMinor) + serviceMinor,
       );
       order.finalTotalMinor = finalTotalMinor;
       order.deliveryFeeMinor = deliveryFeeMinor;
@@ -1102,12 +1124,16 @@ export class OrdersService {
       speedTier: dto.speedTier,
     });
     const subtotal = quote.subtotal;
-    // Client totals are display hints only. Checkout charges are authoritative
-    // on the server so a direct request cannot underpay a credit order.
-    // May be overridden by geo-zone base fee after zone match below.
-    let deliveryFee =
-      (dto.deliveryOption === 'delivery' ? STANDARD_DELIVERY_FEE : 0) +
-      SERVICE_FEE;
+    // Client totals are display hints only. Persist the admin Delivery-options
+    // fee (deliveryFeePerKm); do not replace it with a zone or matching quote.
+    const settings = await this.settingsService.getSettings();
+    const perKmFee = Number(settings.deliveryFeePerKm);
+    const deliveryFee =
+      dto.deliveryOption === 'delivery'
+        ? Number.isFinite(perKmFee) && perKmFee > 0
+          ? perKmFee
+          : STANDARD_DELIVERY_FEE
+        : 0;
     const deliveryAddressId =
       dto.deliveryAddressId == null ? undefined : Number(dto.deliveryAddressId);
     const validatedDeliveryAddress =
@@ -1207,7 +1233,6 @@ export class OrdersService {
     }
 
     let deliveryType: 'local' | 'external' = 'local';
-    let zoneDeliveryFeePesos: number | null = null;
 
     for (const dest of resolvedDestinations) {
       const inside = await this.settingsService.isInsideServiceArea(
@@ -1233,38 +1258,15 @@ export class OrdersService {
         deliveryType = 'external';
         break;
       }
-
-      if (this.geoZonesService && zoneDeliveryFeePesos == null) {
-        try {
-          const match = await this.geoZonesService.matchPoint(
-            dest.latitude,
-            dest.longitude,
-          );
-          if (match.inside && match.zone) {
-            zoneDeliveryFeePesos = Number(match.deliveryFeeMinor) / 100;
-          }
-        } catch {
-          /* optional zone fee */
-        }
-      }
     }
 
     // --- Fee computation ---
-    const settings = await this.settingsService.getSettings();
     const speedTier = dto.speedTier ?? DeliverySpeedTier.STANDARD;
     const isPriority = speedTier === DeliverySpeedTier.PRIORITY;
     const priorityFee = isPriority ? Number(settings.priorityFeeAmount) : 0;
     const extraDestCount = Math.max(0, resolvedDestinations.length - 1);
     const extraDestinationFee =
       extraDestCount * Number(settings.extraDestinationSurcharge);
-    // Prefer zone base fee for local delivery when a zone match exists.
-    if (
-      deliveryType === 'local' &&
-      dto.deliveryOption === 'delivery' &&
-      zoneDeliveryFeePesos != null
-    ) {
-      deliveryFee = zoneDeliveryFeePesos + SERVICE_FEE;
-    }
 
     let preferredSupplierId: number | null = null;
     const quoteDest = resolvedDestinations[0];
@@ -1276,19 +1278,21 @@ export class OrdersService {
           longitude: quoteDest?.longitude ?? undefined,
         });
         preferredSupplierId = preview.supplier.supplierId;
-        if (dto.deliveryOption === 'delivery') {
-          deliveryFee = preview.deliveryFeePesos + SERVICE_FEE;
-        }
       } catch {
-        /* keep zone/flat fee; ops matching remains available */
+        /* ops matching remains available after place-order */
       }
     }
-    const totalPrice = calculateChargeTotal({
+    const serviceFee = serviceFeeFromPercent(
       subtotal,
-      deliveryFee,
-      priorityFee,
-      extraDestinationFee,
-    });
+      settings.serviceFeePercent,
+    );
+    const totalPrice =
+      calculateChargeTotal({
+        subtotal,
+        deliveryFee,
+        priorityFee,
+        extraDestinationFee,
+      }) + serviceFee;
 
     // --- 3D bounds enforcement ---
     const profile = await this.printerProfileService.getProfile();

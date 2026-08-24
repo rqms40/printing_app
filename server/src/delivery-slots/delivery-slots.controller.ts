@@ -40,6 +40,18 @@ export class DeliverySlotsController {
     });
   }
 
+  /** Client checkout fees from admin Delivery → Fee Settings. */
+  @Get('delivery-settings')
+  async getClientFeeSettings() {
+    const s = await this.settingsService.getSettings();
+    return {
+      deliveryFeePerKm: Number(s.deliveryFeePerKm),
+      priorityFeeAmount: Number(s.priorityFeeAmount),
+      extraDestinationSurcharge: Number(s.extraDestinationSurcharge),
+      serviceFeePercent: Number(s.serviceFeePercent),
+    };
+  }
+
   @Get('admin/delivery-slot-templates')
   @UseGuards(RolesGuard)
   @Roles('ops_admin', 'super_admin')

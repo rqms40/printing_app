@@ -4,6 +4,7 @@ import { SupplierAssignment } from './entities/supplier-assignment.entity';
 import { Order } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { SupplierProfile } from '../suppliers/entities/supplier-profile.entity';
+import { SupplierCatalogOffering } from '../suppliers/entities/supplier-catalog-offering.entity';
 import { AuditModule } from '../audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MatchingService } from './matching.service';
@@ -29,6 +30,7 @@ import { OsrmRoutingProvider } from '../riders/routing/osrm-routing.provider';
       Order,
       OrderStatusHistory,
       SupplierProfile,
+      SupplierCatalogOffering,
       Address,
     ]),
     AuditModule,

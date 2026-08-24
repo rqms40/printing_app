@@ -272,6 +272,8 @@ export function OrderShow() {
       excludeReason: string | null;
       capabilities: string[];
       serviceZones: string[];
+      catalogMatch?: boolean | null;
+      catalogMissing?: string[];
     }[]
   >([]);
   const [suppliersLoading, setSuppliersLoading] = useState(false);
@@ -460,6 +462,8 @@ export function OrderShow() {
               excludeReason: null,
               capabilities: [],
               serviceZones: [],
+              catalogMatch: true,
+              catalogMissing: [],
             }),
           )
           : [];
@@ -1304,7 +1308,8 @@ export function OrderShow() {
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Text type="secondary">
             Showing verified active suppliers. Ranked-eligible shops appear
-            first; you can still assign any verified supplier (ops override).
+            first. Shops whose catalog does not cover the selected specs are
+            dimmed; you can still assign them as an ops override.
           </Text>
           <Button
             onClick={() => void handleAutoMatchSupplier()}
@@ -1320,6 +1325,12 @@ export function OrderShow() {
             pagination={{ pageSize: 8 }}
             size="small"
             locale={{ emptyText: "No verified suppliers available" }}
+            onRow={(row) => ({
+              style:
+                row.catalogMatch === false
+                  ? { opacity: 0.4 }
+                  : undefined,
+            })}
             columns={[
               {
                 title: "Shop",
@@ -1348,9 +1359,11 @@ export function OrderShow() {
                     </Tag>
                   ) : (
                     <Tag color="default">
-                      {row.excludeReason
-                        ? humanizeEnumValue(row.excludeReason)
-                        : "Override OK"}
+                      {row.catalogMatch === false
+                        ? "Catalog mismatch"
+                        : row.excludeReason
+                          ? humanizeEnumValue(row.excludeReason)
+                          : "Override OK"}
                     </Tag>
                   ),
               },

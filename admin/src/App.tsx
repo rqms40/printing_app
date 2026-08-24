@@ -39,6 +39,7 @@ import {
   TrophyOutlined,
   CustomerServiceOutlined,
   UserOutlined,
+  BookOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -82,6 +83,7 @@ import { SupplierJobShowPage } from '@/pages/supplier/job-show';
 import { SupplierPayoutsListPage } from '@/pages/supplier/payouts-list';
 import { SupplierSupportPage } from '@/pages/supplier/support';
 import { SupplierProfilePage } from '@/pages/supplier/profile';
+import { SupplierCatalogPage } from '@/pages/supplier/catalog';
 import { SuperVerificationPage } from '@/pages/super/verification';
 import { SuperZonesPage } from '@/pages/super/zones';
 import { SuperAuditPage } from '@/pages/super/audit';
@@ -162,6 +164,15 @@ function App() {
                 meta: {
                   label: "Payouts",
                   icon: <DollarOutlined />,
+                  portal: "supplier",
+                },
+              },
+              {
+                name: "supplier-catalog",
+                list: "/supplier/catalog",
+                meta: {
+                  label: "Shop catalog",
+                  icon: <BookOutlined />,
                   portal: "supplier",
                 },
               },
@@ -419,6 +430,7 @@ function App() {
                 </Route>
                 <Route path="/supplier/payouts" element={<SupplierPayoutsListPage />} />
                 <Route path="/supplier/support" element={<SupplierSupportPage />} />
+                <Route path="/supplier/catalog" element={<SupplierCatalogPage />} />
                 <Route path="/supplier/profile" element={<SupplierProfilePage />} />
                 <Route path="/orders">
                   <Route index element={<OrderList />} />

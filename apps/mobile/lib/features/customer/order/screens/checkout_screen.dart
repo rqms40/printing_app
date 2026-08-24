@@ -40,12 +40,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   bool _advancedThisFrame = false;
   PipelineTutorialNotifier? _pipelineNotifier;
   PipelineState _pipelineState = const PipelineState();
+  ProviderSubscription<PipelineState>? _pipelineSubscription;
 
   @override
   void initState() {
     super.initState();
     _pipelineNotifier = ref.read(pipelineTutorialProvider.notifier);
-    ref.listenManual<PipelineState>(
+    _pipelineSubscription = ref.listenManual<PipelineState>(
       pipelineTutorialProvider,
       (_, next) => _pipelineState = next,
       fireImmediately: true,
@@ -57,6 +58,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   @override
   void dispose() {
+    _pipelineSubscription?.close();
     const pipelineSteps = {
       PipelineStep.checkoutItems,
       PipelineStep.checkoutDelivery,
@@ -389,8 +391,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       final checkout = ref.read(checkoutProvider);
       final placed = await notifier.placeCheckout(checkout);
       if (!context.mounted) return;
-      ref.read(checkoutProvider.notifier).reset();
-      if (!context.mounted) return;
       final refs = placed
           .map((o) => o.orderId)
           .where((ref) => ref.trim().isNotEmpty)
@@ -398,11 +398,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       final firstNumericId = placed.isEmpty
           ? null
           : int.tryParse(placed.first.id);
-      // Defer navigation one frame so checkout rebuilds (and any realtime
-      // listeners) settle before we leave the route — avoids web RTI errors
-      // from disposing mid-callback.
-      await Future<void>.delayed(Duration.zero);
-      if (!context.mounted) return;
+
+      final checkoutNotifier = ref.read(checkoutProvider.notifier);
+
       context.go(
         '/customer/order/success',
         extra: <String, dynamic>{
@@ -410,6 +408,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           'firstOrderId': firstNumericId,
         },
       );
+
+      // Delay reset so the current screen doesn't tear down its GlobalKeys 
+      // mid-transition, which avoids _dependents.isEmpty InheritedWidget assertions.
+      Future.delayed(const Duration(milliseconds: 300), () {
+        checkoutNotifier.reset();
+      });
     } on BetaOrderLimitException {
       if (!context.mounted) return;
       await BetaOrderLimitSheet.show(context);

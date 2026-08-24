@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, Min } from 'class-validator';
+import { IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 export class UpdateDeliverySettingsDto {
   @IsOptional()
@@ -28,4 +28,10 @@ export class UpdateDeliverySettingsDto {
   @IsNumber()
   @Min(0)
   extraDestinationSurcharge?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  serviceFeePercent?: number;
 }

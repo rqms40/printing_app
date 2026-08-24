@@ -13,7 +13,9 @@ describe('DeliverySettings entity metadata', () => {
       'serviceCenterLng',
       'serviceRadiusKm',
       'priorityFeeAmount',
+      'deliveryFeePerKm',
       'extraDestinationSurcharge',
+      'serviceFeePercent',
     ]) {
       expect(cols).toContain(name);
     }

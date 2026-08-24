@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
 import 'package:printing_app/features/customer/order/providers/matching_preview_provider.dart';
 import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
 import 'package:printing_app/features/customer/order/models/destination_group.dart';
@@ -190,7 +191,42 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
 }
 
 final checkoutProvider = StateNotifierProvider<CheckoutNotifier, CheckoutState>(
-  (ref) => CheckoutNotifier(),
+  (ref) {
+    final notifier = CheckoutNotifier();
+
+    void fetchPreview(CheckoutState s) {
+      if (s.items.isEmpty) return;
+      final category = s.items.first.category;
+      final addrId = s.singleAddress?.id;
+      final lat = s.temporaryAddress?.latitude;
+      final lng = s.temporaryAddress?.longitude;
+
+      ref.read(matchingPreviewProvider.notifier).preview(
+        category: category,
+        destinationId: addrId != null ? int.tryParse(addrId) : null,
+        latitude: lat,
+        longitude: lng,
+      ).catchError((_) => null);
+    }
+
+    CheckoutState? previous;
+    notifier.addListener(
+      (next) {
+        final categoryChanged = previous?.items.firstOrNull?.category !=
+            next.items.firstOrNull?.category;
+        final addressChanged = previous?.singleAddress?.id !=
+                next.singleAddress?.id ||
+            previous?.temporaryAddress != next.temporaryAddress;
+        if (categoryChanged || addressChanged) {
+          fetchPreview(next);
+        }
+        previous = next;
+      },
+      fireImmediately: true, // Fetch initially if there are already items
+    );
+
+    return notifier;
+  },
 );
 
 class CheckoutFees {
@@ -198,51 +234,43 @@ class CheckoutFees {
     required this.subtotal,
     required this.deliveryFee,
     required this.priorityFee,
+    required this.basePriorityFee,
     required this.extraDropFee,
     required this.serviceFee,
   });
   final double subtotal;
   final double deliveryFee;
   final double priorityFee;
+  final double basePriorityFee;
   final double extraDropFee;
   final double serviceFee;
   double get total =>
       subtotal + deliveryFee + priorityFee + extraDropFee + serviceFee;
 }
 
-const _kStandardDeliveryFee = 25.0;
-const _kPriorityFee = 50.0;
-const _kExtraDropFee = 30.0;
-const _kServiceFee = 2.0;
-
-double _deliveryFeeForTier(DeliverySpeedTier tier) {
-  switch (tier) {
-    case DeliverySpeedTier.priority:
-    case DeliverySpeedTier.standard:
-    case DeliverySpeedTier.scheduled:
-      return _kStandardDeliveryFee;
-    case DeliverySpeedTier.saver:
-      // Retired tier — fall back to standard fee if any old state slips in.
-      return _kStandardDeliveryFee;
-  }
-}
-
 final checkoutFeesProvider = Provider<CheckoutFees>((ref) {
   final state = ref.watch(checkoutProvider);
   final matched = ref.watch(matchingPreviewProvider);
+  final settings =
+      ref.watch(deliveryFeeSettingsProvider).asData?.value ??
+      DeliveryFeeSettings.fallback;
   final extraDrops = state.drops.length > 1 ? state.drops.length - 1 : 0;
   final isPickup = state.mode == DeliveryMode.pickup;
-  final quotedDelivery = matched?.deliveryFeePesos;
+  final baseDeliveryFee = settings.deliveryFeePerKm;
+  final dynamicPriorityFee =
+      matched?.priorityFee ?? settings.priorityFeeAmount;
+  final dynamicExtraDropFee =
+      matched?.extraDropFee ?? settings.extraDestinationSurcharge;
+
   return CheckoutFees(
     subtotal: state.subtotal,
-    deliveryFee: isPickup
-        ? 0
-        : (quotedDelivery ?? _deliveryFeeForTier(state.speedTier)),
+    deliveryFee: isPickup ? 0 : baseDeliveryFee,
     priorityFee:
         !isPickup && state.speedTier == DeliverySpeedTier.priority
-        ? _kPriorityFee
+        ? dynamicPriorityFee
         : 0,
-    extraDropFee: isPickup ? 0 : extraDrops * _kExtraDropFee,
-    serviceFee: _kServiceFee,
+    basePriorityFee: dynamicPriorityFee,
+    extraDropFee: isPickup ? 0 : extraDrops * dynamicExtraDropFee,
+    serviceFee: settings.serviceFeeOn(state.subtotal),
   );
 });

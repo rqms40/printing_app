@@ -10,6 +10,10 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 describe('DeliverySlotsController', () => {
   let controller: DeliverySlotsController;
   const slotsService = { getAvailability: jest.fn() };
+  const settingsService = {
+    getSettings: jest.fn(),
+    updateSettings: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -17,7 +21,7 @@ describe('DeliverySlotsController', () => {
       controllers: [DeliverySlotsController],
       providers: [
         { provide: DeliverySlotsService, useValue: slotsService },
-        { provide: DeliverySettingsService, useValue: {} },
+        { provide: DeliverySettingsService, useValue: settingsService },
         {
           provide: getRepositoryToken(DeliverySlotTemplate),
           useValue: { find: jest.fn(), save: jest.fn(), create: jest.fn() },
@@ -37,6 +41,22 @@ describe('DeliverySlotsController', () => {
       pickupOnly: false,
     });
     expect(out).toEqual([{ templateId: 1 }]);
+  });
+
+  it('GET /delivery-settings returns client fee fields from admin settings', async () => {
+    settingsService.getSettings.mockResolvedValue({
+      deliveryFeePerKm: '100.00',
+      priorityFeeAmount: '50.00',
+      extraDestinationSurcharge: '30.00',
+      serviceFeePercent: '10.00',
+    });
+    const out = await controller.getClientFeeSettings();
+    expect(out).toEqual({
+      deliveryFeePerKm: 100,
+      priorityFeeAmount: 50,
+      extraDestinationSurcharge: 30,
+      serviceFeePercent: 10,
+    });
   });
 
   describe('admin endpoints', () => {

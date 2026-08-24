@@ -23,6 +23,7 @@ import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
 import 'package:printing_app/features/customer/orders/widgets/marketplace_order_actions.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_claims_section.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
 import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
 import 'package:printing_app/utils/formatters.dart';
 
@@ -423,7 +424,7 @@ class OrderDetailScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.md),
 
             // --- Price Breakdown ---
-            _buildPriceSection(order, colors)
+            _buildPriceSection(order, colors, ref)
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 320.ms, curve: Curves.easeOut)
                 .slideY(
@@ -616,7 +617,7 @@ class OrderDetailScreen extends ConsumerWidget {
             colors,
             multiline: true,
           ),
-        _specRow('Item Subtotal', formatCurrency(item.totalPrice), colors),
+        // _specRow('Item Subtotal', formatCurrency(item.totalPrice), colors),
       ],
     );
   }
@@ -754,9 +755,19 @@ class OrderDetailScreen extends ConsumerWidget {
     }
   }
 
-  Widget _buildPriceSection(Order order, AppColorSet colors) {
-    final printingCost = order.totalPrice;
-    final total = order.totalPrice + order.deliveryFee;
+  Widget _buildPriceSection(
+    Order order,
+    AppColorSet colors,
+    WidgetRef ref,
+  ) {
+    final settings =
+        ref.watch(deliveryFeeSettingsProvider).asData?.value ??
+        DeliveryFeeSettings.fallback;
+    final printingCost = settings.printingCostOf(order);
+    final deliveryFee = order.deliveryFee + order.priorityFee;
+    final extraDropFee = order.extraDestinationFee;
+    final estimate = settings.customerFacingTotalOf(order);
+    final hasFinalPrice = order.assignedSupplier?.hasQuotedPrice == true;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -767,7 +778,9 @@ class OrderDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           _specRow('Printing Cost', formatCurrency(printingCost), colors),
-          _specRow('Delivery Fee', formatCurrency(order.deliveryFee), colors),
+          _specRow('Delivery Fee', formatCurrency(deliveryFee), colors),
+          if (extraDropFee > 0)
+            _specRow('Extra drop', formatCurrency(extraDropFee), colors),
           const Divider(),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
@@ -775,13 +788,13 @@ class OrderDetailScreen extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Total',
+                  hasFinalPrice ? 'Final Price' : 'Initial Estimate',
                   style: AppTypography.bodyBold.copyWith(
                     color: colors.onBackground,
                   ),
                 ),
                 Text(
-                  formatCurrency(total),
+                  formatCurrency(estimate),
                   style: AppTypography.bodyBold.copyWith(
                     color: colors.onBackground,
                   ),

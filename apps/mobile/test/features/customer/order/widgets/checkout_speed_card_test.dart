@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/customer/order/models/delivery_slot.dart';
 import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_speed_card.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
@@ -25,6 +26,14 @@ ProviderContainer _makeContainer({bool seedBookable = true}) {
     overrides: [
       dioProvider.overrideWithValue(MockDio()),
       webSocketServiceProvider.overrideWithValue(MockWebSocketService()),
+      deliveryFeeSettingsProvider.overrideWith(
+        (ref) async => const DeliveryFeeSettings(
+          deliveryFeePerKm: 100,
+          priorityFeeAmount: 50,
+          extraDestinationSurcharge: 30,
+          serviceFeePercent: 10,
+        ),
+      ),
     ],
   );
   if (seedBookable) {
@@ -65,11 +74,14 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: CheckoutSpeedCard())),
       ),
     );
+    await container.read(deliveryFeeSettingsProvider.future);
     await tester.pumpAndSettle();
     expect(find.text('Express'), findsOneWidget);
     expect(find.text('Standard'), findsOneWidget);
     expect(find.text('Scheduled'), findsOneWidget);
     expect(find.text('Saver'), findsNothing);
+    expect(find.text('₱100.00'), findsNWidgets(2));
+    expect(find.text('₱150.00'), findsOneWidget);
     expect(
       container.read(checkoutProvider).speedTier,
       DeliverySpeedTier.standard,

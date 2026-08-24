@@ -33,6 +33,7 @@ class CheckoutItemsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(checkoutProvider);
+    final fees = ref.watch(checkoutFeesProvider);
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
@@ -65,6 +66,11 @@ class CheckoutItemsCard extends ConsumerWidget {
               onDismissed: (_) => notifier.removeItem(state.items[i].id),
               child: _ItemRow(
                 item: state.items[i],
+                displayPrice: _itemDisplayPrice(
+                  items: state.items,
+                  index: i,
+                  serviceFee: fees.serviceFee,
+                ),
                 colors: colors,
                 onEdit: () async {
                   final updated = await EditItemSheet.show(
@@ -129,9 +135,29 @@ class _SwipeRemoveBg extends StatelessWidget {
   }
 }
 
+double _itemDisplayPrice({
+  required List<CartItem> items,
+  required int index,
+  required double serviceFee,
+}) {
+  final item = items[index];
+  if (items.length == 1) return item.printSubtotal + serviceFee;
+  final subtotal = items.fold<double>(0, (sum, i) => sum + i.printSubtotal);
+  if (subtotal <= 0) return item.printSubtotal;
+  if (index == items.length - 1) {
+    final priorShare = items.take(index).fold<double>(
+      0,
+      (sum, i) => sum + i.printSubtotal / subtotal * serviceFee,
+    );
+    return item.printSubtotal + (serviceFee - priorShare);
+  }
+  return item.printSubtotal + (item.printSubtotal / subtotal * serviceFee);
+}
+
 class _ItemRow extends StatelessWidget {
   const _ItemRow({
     required this.item,
+    required this.displayPrice,
     required this.colors,
     required this.onEdit,
     required this.onView,
@@ -140,6 +166,7 @@ class _ItemRow extends StatelessWidget {
   });
 
   final CartItem item;
+  final double displayPrice;
   final AppColorSet colors;
   final VoidCallback onEdit;
   final VoidCallback? onView;
@@ -257,7 +284,7 @@ class _ItemRow extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
-                      formatCurrency(item.printSubtotal),
+                      formatCurrency(displayPrice),
                       style: AppTypography.bodyBold.copyWith(
                         color: colors.brand,
                         fontSize: 13,

@@ -8,6 +8,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_concern_helpers.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_post_delivery_actions.dart';
@@ -400,8 +401,11 @@ class _MarketplaceOrderActionsState
       return const SizedBox.shrink();
     }
 
-    final quotedPesos = (order.assignedSupplier?.quotedPriceMinor ?? 0) / 100.0;
-    final totalDue = quotedPesos + order.deliveryFee;
+    final settings =
+        ref.watch(deliveryFeeSettingsProvider).asData?.value ??
+        DeliveryFeeSettings.fallback;
+    final printCost = settings.printingCostOf(order);
+    final totalDue = settings.customerFacingTotalOf(order);
     final needsQrReceipt = order.paymentMethod.requiresPaymentReceipt;
     final title = showCorrection
         ? 'Artwork correction needed'
@@ -419,7 +423,7 @@ class _MarketplaceOrderActionsState
         : showProof
             ? 'Review the proof notes, then approve for matching or request changes.'
             : showQuoteConfirm
-                ? 'The supplier quoted ${formatCurrency(quotedPesos)}'
+                ? 'The supplier quoted ${formatCurrency(printCost)}'
                     '${order.deliveryFee > 0 ? ' plus ${formatCurrency(order.deliveryFee)} delivery' : ''}. '
                     'Pay ${formatCurrency(totalDue)} now so they can accept the job.'
                 : showQuoteWait

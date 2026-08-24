@@ -62,6 +62,16 @@ export class DeliverySettings {
   })
   extraDestinationSurcharge: number;
 
+  /** Customer service fee as a percent of print subtotal (10 = 10%). */
+  @Column({
+    name: 'service_fee_percent',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    default: 0,
+  })
+  serviceFeePercent: number;
+
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

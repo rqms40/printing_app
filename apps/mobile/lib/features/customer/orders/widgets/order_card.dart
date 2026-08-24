@@ -1,27 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_shadows.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Professional order card with status-tinted icon, clean layout,
 /// and a chevron indicating it's tappable.
-class OrderCard extends StatefulWidget {
+class OrderCard extends ConsumerStatefulWidget {
   const OrderCard({super.key, required this.order, this.onTap});
 
   final Order order;
   final VoidCallback? onTap;
 
   @override
-  State<OrderCard> createState() => _OrderCardState();
+  ConsumerState<OrderCard> createState() => _OrderCardState();
 }
 
-class _OrderCardState extends State<OrderCard> {
+class _OrderCardState extends ConsumerState<OrderCard> {
   bool _pressed = false;
 
   AppColorSet _colors(BuildContext context) {
@@ -121,13 +123,17 @@ class _OrderCardState extends State<OrderCard> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isBatch = widget.order.isBatchOrder;
     final typeLabel = widget.order.orderTypeShortLabel.toUpperCase();
+    final settings =
+        ref.watch(deliveryFeeSettingsProvider).asData?.value ??
+        DeliveryFeeSettings.fallback;
+    final displayTotal = settings.customerFacingTotalOf(widget.order);
 
     return Semantics(
       container: true,
       button: widget.onTap != null,
       label:
           'Order ${widget.order.orderId}. $typeLabel. '
-          '${visual.statusLabel}. ${formatCurrency(widget.order.totalPrice)}. '
+          '${visual.statusLabel}. ${formatCurrency(displayTotal)}. '
           '${formatDate(widget.order.createdAt)}.',
       onTap: widget.onTap,
       child: ExcludeSemantics(
@@ -286,7 +292,7 @@ class _OrderCardState extends State<OrderCard> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          formatCurrency(widget.order.totalPrice),
+                          formatCurrency(displayTotal),
                           style: AppTypography.bodyBold.copyWith(
                             color: colors.onBackground,
                           ),

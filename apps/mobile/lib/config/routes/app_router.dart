@@ -85,6 +85,7 @@ import 'package:printing_app/features/supplier/screens/supplier_profile_edit_scr
 import 'package:printing_app/features/supplier/screens/supplier_profile_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_service_focus_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_support_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_catalog_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Admin screens
@@ -948,6 +949,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/supplier/profile/edit',
         pageBuilder: (_, state) =>
             slideTransition(const SupplierProfileEditScreen(), state),
+      ),
+      GoRoute(
+        path: '/supplier/catalog',
+        pageBuilder: (_, state) =>
+            slideTransition(const SupplierCatalogScreen(), state),
       ),
       GoRoute(
         path: '/supplier/service-focus',

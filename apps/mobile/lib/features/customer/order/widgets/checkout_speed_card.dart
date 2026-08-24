@@ -113,9 +113,8 @@ class CheckoutSpeedCard extends ConsumerWidget {
     final hasLiveTodaySlot = _hasLiveTodaySlot(now, today, todaySlots);
     final nextBatchLabel = _nextBatchLabel(now: now, days: previewDays);
 
-    // Preview values mirror the server's default delivery settings.
-    const expressFeePreview = 75.0;
-    const standardFeePreview = 25.0;
+    final expressFeePreview = fees.deliveryFee + fees.basePriorityFee;
+    final standardFeePreview = fees.deliveryFee;
 
     final tiers = <_TierSpec>[
       _TierSpec(

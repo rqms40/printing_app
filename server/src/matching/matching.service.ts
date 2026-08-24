@@ -23,6 +23,8 @@ import {
 } from '../orders/order-status-transition';
 import { AuditService } from '../audit/audit.service';
 import { SupplierProfile } from '../suppliers/entities/supplier-profile.entity';
+import { SupplierCatalogOffering } from '../suppliers/entities/supplier-catalog-offering.entity';
+import { evaluateSupplierCatalogFit } from '../suppliers/supplier-catalog.match';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import {
@@ -40,6 +42,7 @@ import {
   resolveMatchingPreference,
   sortByMatchingPreference,
   SupplierAcceptanceStats,
+  haversineMeters,
   type GeoPoint,
   type MatchingPreference,
 } from './matching.ranking';
@@ -88,6 +91,8 @@ export type CandidatesResult = {
     excludeReason: string | null;
     serviceZones: string[];
     capabilities: string[];
+    catalogMatch: boolean | null;
+    catalogMissing: string[];
   }>;
 };
 
@@ -124,7 +129,12 @@ export class MatchingService {
     @Optional()
     @Inject(ROUTING_PROVIDER)
     private readonly routingProvider?: RoutingProvider,
-    @Optional() private readonly deliverySettingsService?: DeliverySettingsService,
+    @Optional() 
+    @Inject(DeliverySettingsService)
+    private readonly deliverySettingsService?: DeliverySettingsService,
+    @Optional()
+    @InjectRepository(SupplierCatalogOffering)
+    private readonly catalogOfferingRepo?: Repository<SupplierCatalogOffering>,
   ) {}
 
   acceptanceSlaHours(): number {
@@ -152,6 +162,12 @@ export class MatchingService {
       candidates,
       excluded,
     );
+    const catalogEligible = verifiedSuppliers
+      .filter((row) => row.catalogMatch !== false)
+      .map((row) => row.supplierId);
+    const filteredCandidates = candidates.filter((row) =>
+      catalogEligible.includes(row.supplierId),
+    );
 
     return {
       order: {
@@ -162,7 +178,7 @@ export class MatchingService {
         quantity: order.quantity,
         zoneTokens: ctx.zoneTokens,
       },
-      candidates,
+      candidates: filteredCandidates,
       excludedCount: excluded.length,
       verifiedSuppliers,
     };
@@ -249,6 +265,10 @@ export class MatchingService {
     deliveryFeePesos: number;
     deliveryFeeMinor: string;
     feeIsEstimate: boolean;
+    settings: {
+      priorityFee: number;
+      extraDropFee: number;
+    };
   }> {
     const category = String(input.category ?? '').trim();
     if (!category) {
@@ -298,7 +318,7 @@ export class MatchingService {
       where: { id: top.supplierId },
     });
 
-    return {
+    const result = {
       preference,
       supplier: {
         supplierId: top.supplierId,
@@ -313,7 +333,28 @@ export class MatchingService {
       deliveryFeePesos: quoted.deliveryFeePesos,
       deliveryFeeMinor: String(Math.round(quoted.deliveryFeePesos * 100)),
       feeIsEstimate: quoted.feeIsEstimate,
+      settings: {
+        priorityFee: 50, // default fallback
+        extraDropFee: 30, // default fallback
+      },
     };
+
+    const ds = this.deliverySettingsService;
+    if (ds) {
+      try {
+        const s = await ds.getSettings();
+        if (Number(s.priorityFeeAmount) >= 0) {
+          result.settings.priorityFee = Number(s.priorityFeeAmount);
+        }
+        if (Number(s.extraDestinationSurcharge) >= 0) {
+          result.settings.extraDropFee = Number(s.extraDestinationSurcharge);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return result;
   }
 
   async quoteShopDelivery(
@@ -328,29 +369,49 @@ export class MatchingService {
     if (isPickup) {
       return { distanceMeters: null, deliveryFeePesos: 0, feeIsEstimate: false };
     }
-    if (!destination) {
-      return { distanceMeters: null, deliveryFeePesos: 25, feeIsEstimate: true };
-    }
-    if (!this.routingProvider) {
-      return { distanceMeters: null, deliveryFeePesos: 25, feeIsEstimate: true };
-    }
-    try {
-      const legs = await this.routingProvider.getRoute([shop, destination]);
-      const meters = legs[0]?.distanceMeters;
-      if (!Number.isFinite(meters) || (meters as number) < 0) {
-        return {
-          distanceMeters: null,
-          deliveryFeePesos: 25,
-          feeIsEstimate: true,
-        };
+    let perKm = 15;
+    if (this.deliverySettingsService) {
+      try {
+        const settings = await this.deliverySettingsService.getSettings();
+        if (Number(settings.deliveryFeePerKm) > 0) {
+          perKm = Number(settings.deliveryFeePerKm);
+        }
+      } catch (e) {
+        // ignore
       }
+    }
+
+    if (!destination) {
+      return { distanceMeters: null, deliveryFeePesos: perKm, feeIsEstimate: true };
+    }
+
+    try {
+      let meters: number | null = null;
+      if (this.routingProvider) {
+        try {
+          const legs = await this.routingProvider.getRoute([shop, destination]);
+          meters = legs[0]?.distanceMeters ?? null;
+        } catch {
+          // ignore routing provider errors
+        }
+      }
+
+      if (meters == null || !Number.isFinite(meters) || meters < 0) {
+        meters = haversineMeters(shop, destination);
+      }
+      
+      const calculatedFee = quoteDistanceFeePesos(meters, perKm);
+      console.log(`quoteShopDelivery -> distance: ${meters}m, perKm: ${perKm}, fee: ${calculatedFee}`);
+
       return {
-        distanceMeters: meters as number,
-        deliveryFeePesos: quoteDistanceFeePesos(meters as number),
+        distanceMeters: meters,
+        deliveryFeePesos: calculatedFee,
         feeIsEstimate: false,
       };
-    } catch {
-      return { distanceMeters: null, deliveryFeePesos: 25, feeIsEstimate: true };
+    } catch (e) {
+      console.error('quoteShopDelivery error:', e);
+      // In case haversineMeters itself fails
+      return { distanceMeters: null, deliveryFeePesos: perKm, feeIsEstimate: true };
     }
   }
 
@@ -583,16 +644,35 @@ export class MatchingService {
         ? { latitude: candidate.rankingInputs.shopLatitude as number, longitude: candidate.rankingInputs.shopLongitude as number } 
         : null;
 
-      if (destPoint && shopPoint && this.routingProvider && this.deliverySettingsService) {
-        const legs = await this.routingProvider.getRoute([shopPoint, destPoint]);
-        const meters = legs[0]?.distanceMeters;
-        if (meters != null && meters >= 0) {
-          const settings = await this.deliverySettingsService.getSettings();
-          const perKm = Number(settings.deliveryFeePerKm);
-          if (perKm > 0) {
-             const pesos = Math.round((meters / 1000) * perKm);
-             extraFeeMinor = BigInt(pesos * 100);
+      if (destPoint && shopPoint) {
+        let meters: number | null = null;
+        if (this.routingProvider) {
+          try {
+            const legs = await this.routingProvider.getRoute([shopPoint, destPoint]);
+            meters = legs[0]?.distanceMeters ?? null;
+          } catch {
+            // ignore
           }
+        }
+        
+        if (meters == null || !Number.isFinite(meters) || meters < 0) {
+          meters = haversineMeters(shopPoint, destPoint);
+        }
+
+        if (meters != null && meters >= 0) {
+          let perKm = 15;
+          if (this.deliverySettingsService) {
+            try {
+              const settings = await this.deliverySettingsService.getSettings();
+              if (Number(settings.deliveryFeePerKm) > 0) {
+                perKm = Number(settings.deliveryFeePerKm);
+              }
+            } catch {
+              // ignore
+            }
+          }
+          const pesos = quoteDistanceFeePesos(meters, perKm);
+          extraFeeMinor = BigInt(Math.round(pesos * 100));
         }
       }
     } catch (err) {
@@ -652,7 +732,9 @@ export class MatchingService {
       });
       const savedAssignment = await assignmentRepo.save(assignment);
 
-      const newDeliveryFeeMinor = ((locked.deliveryFeeMinor ? BigInt(locked.deliveryFeeMinor) : 0n) + extraFeeMinor).toString();
+      const newDeliveryFeeMinor = extraFeeMinor > 0n 
+        ? extraFeeMinor.toString() 
+        : (locked.deliveryFeeMinor || '0');
       const newDeliveryFee = Number(newDeliveryFeeMinor) / 100;
 
       const fromStatus = locked.orderStatus;
@@ -779,7 +861,11 @@ export class MatchingService {
   private async loadOrderForMatching(orderId: number): Promise<Order> {
     const order = await this.ordersRepo.findOne({
       where: { id: orderId },
-      relations: { deliveryAddress: true, destination: true },
+      relations: {
+        deliveryAddress: true,
+        destination: true,
+        items: { specValues: true },
+      },
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;
@@ -800,6 +886,17 @@ export class MatchingService {
     });
     const candidateById = new Map(candidates.map((c) => [c.supplierId, c]));
     const excludeById = new Map(excluded.map((e) => [e.supplierId, e.reason]));
+    const offerings = this.catalogOfferingRepo
+      ? await this.catalogOfferingRepo.find({
+          where: { isActive: true },
+        })
+      : [];
+    const offeringsBySupplier = new Map<number, SupplierCatalogOffering[]>();
+    for (const offering of offerings) {
+      const list = offeringsBySupplier.get(offering.supplierId) ?? [];
+      list.push(offering);
+      offeringsBySupplier.set(offering.supplierId, list);
+    }
 
     const rows: CandidatesResult['verifiedSuppliers'] = [];
     for (const profile of profiles) {
@@ -808,16 +905,28 @@ export class MatchingService {
       if (status !== SupplierVerificationStatus.VERIFIED) continue;
 
       const ranked = candidateById.get(profile.id);
+      const fit = evaluateSupplierCatalogFit(
+        offeringsBySupplier.get(profile.id) ?? [],
+        ctx.category,
+        ctx.selectedSpecs ?? [],
+      );
+      const catalogBlocks = fit.catalogMatch === false;
       rows.push({
         supplierId: profile.id,
         businessName: profile.businessName,
         userId: profile.userId,
-        isEligibleCandidate: ranked != null,
+        isEligibleCandidate: ranked != null && !catalogBlocks,
         score: ranked?.score ?? null,
         rankPosition: ranked?.rankPosition ?? null,
-        excludeReason: ranked ? null : (excludeById.get(profile.id) ?? null),
+        excludeReason: catalogBlocks
+          ? 'catalog_mismatch'
+          : ranked
+            ? null
+            : (excludeById.get(profile.id) ?? null),
         serviceZones: profile.serviceZones ?? [],
         capabilities: (profile.capabilities ?? []).map((c) => c.productFamily),
+        catalogMatch: fit.catalogMatch,
+        catalogMissing: fit.missing,
       });
     }
 
@@ -982,11 +1091,20 @@ export class MatchingService {
   }
 
   private toMatchContext(order: Order): OrderMatchContext {
+    const items = order.items ?? [];
+    const first = items[0];
+    const selectedSpecs = items.flatMap((item) =>
+      (item.specValues ?? []).map((spec) => ({
+        key: spec.specKey,
+        value: spec.value,
+      })),
+    );
     return {
       orderId: order.id,
-      category: order.category ?? '',
+      category: first?.categorySlug || order.category || '',
       quantity: order.quantity ?? 1,
       zoneTokens: this.extractZoneTokens(order),
+      selectedSpecs,
     };
   }
 

@@ -317,9 +317,10 @@ describe('rankSupplierCandidates', () => {
     expect(ranked[0].supplierId).toBe(2);
   });
 
-  it('quotes delivery fee as max 25 pesos or 15 per km', () => {
-    expect(quoteDistanceFeePesos(0)).toBe(25);
-    expect(quoteDistanceFeePesos(1000)).toBe(25);
-    expect(quoteDistanceFeePesos(4200)).toBe(63);
+  it('quotes delivery fee using perKm base and distance multiplication', () => {
+    expect(quoteDistanceFeePesos(0, 50)).toBe(50);
+    expect(quoteDistanceFeePesos(1000, 100)).toBe(100);
+    expect(quoteDistanceFeePesos(4200, 0)).toBe(0);
+    expect(quoteDistanceFeePesos(4000, 25)).toBe(100);
   });
 });

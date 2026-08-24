@@ -25,6 +25,7 @@ export interface DeliverySettings {
   priorityFeeAmount: number;
   deliveryFeePerKm: number;
   extraDestinationSurcharge: number;
+  serviceFeePercent: number;
 }
 
 export interface ExternalDelivery {

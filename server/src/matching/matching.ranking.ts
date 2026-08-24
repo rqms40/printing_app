@@ -48,6 +48,8 @@ export type OrderMatchContext = {
   quantity: number;
   /** Zone tokens derived from delivery address (city, barangay, etc.). */
   zoneTokens: string[];
+  /** Customer-selected catalog spec values used for supplier catalog fit. */
+  selectedSpecs?: Array<{ key: string; value: string }>;
 };
 
 export type SupplierOpenLoad = {
@@ -154,11 +156,11 @@ export function haversineMeters(from: GeoPoint, to: GeoPoint): number {
   return 2 * 6_371_000 * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-/** Checkout distance fee in pesos: max(₱25, ₱15 × km). */
-export function quoteDistanceFeePesos(distanceMeters: number): number {
-  if (!Number.isFinite(distanceMeters) || distanceMeters < 0) return 25;
+/** Checkout distance fee in pesos: max(₱25, rate × km). */
+export function quoteDistanceFeePesos(distanceMeters: number, perKm: number = 15): number {
+  if (!Number.isFinite(distanceMeters) || distanceMeters < 0) return perKm;
   const km = distanceMeters / 1000;
-  return Math.max(25, Math.round(15 * km * 100) / 100);
+  return Math.max(perKm, Math.round(perKm * km * 100) / 100);
 }
 
 function normalizeToken(value: string): string {

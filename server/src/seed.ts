@@ -22,6 +22,11 @@ import {
   ProfileField,
 } from './users/profile.constants';
 import { seedBusinessCatalog } from './products/seed-business-catalog';
+import { applyParsedCatalogProducts } from './suppliers/supplier-catalog.apply';
+import {
+  parseCatalogText,
+  POLYMEDIA_CATALOG_TEXT,
+} from './suppliers/supplier-catalog.parser';
 
 interface CountRow {
   count: string;
@@ -407,8 +412,8 @@ async function seed() {
      ) RETURNING id`,
     [
       supplierUserId,
-      'Davao Print Co',
-      'Demo supplier for GRIDGO marketplace pilot.',
+      'Polymedia Printing Services',
+      'Demo supplier catalog from the Polymedia Printing Services product list.',
       '+639193234567',
       'supplier@gridgo.ph',
       'Quimpo Blvd, Ecoland, Davao City',
@@ -963,6 +968,17 @@ async function seed() {
   const business = await seedBusinessCatalog(ds);
   console.log(
     `✅ Business catalog: ${business.categories} categories, ${business.subgroups} subgroups, ${business.variants} variants (with temp specs)`,
+  );
+
+  const polymedia = parseCatalogText(POLYMEDIA_CATALOG_TEXT);
+  const applied = await applyParsedCatalogProducts(
+    ds,
+    supplierProfileId,
+    polymedia.products,
+    { kind: 'import', fileName: 'Polymedia Printing Services Catalog.docx' },
+  );
+  console.log(
+    `✅ Polymedia catalog: ${applied.offerings} offerings across ${applied.categories.length} categories`,
   );
 
   // ─── Service Addons ─────────────────────────────────────────────────

@@ -432,6 +432,9 @@ export class RidersService {
         if (order.orderStatus !== OrderStatus.READY_FOR_DISPATCH) {
           throw new BadRequestException('Order is not ready for dispatch');
         }
+        if (order.deliveryOption !== 'delivery') {
+          throw new BadRequestException('Rider assignment requires a delivery order');
+        }
 
         const riderProfile = await manager.getRepository(RiderProfile).findOne({
           where: { id: riderId },

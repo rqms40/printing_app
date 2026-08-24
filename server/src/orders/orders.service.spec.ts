@@ -13,6 +13,7 @@ import {
   applyMarketplacePaymentDefaults,
   calculateChargeTotal,
   OrdersService,
+  serviceFeeFromPercent,
 } from './orders.service';
 import {
   Order,
@@ -161,6 +162,17 @@ describe('calculateChargeTotal', () => {
         deliveryFee: '20.00',
       }),
     ).toThrow('Invalid totalPrice charge component');
+  });
+});
+
+describe('serviceFeeFromPercent', () => {
+  it('charges 10% of a 200 peso print subtotal', () => {
+    expect(serviceFeeFromPercent(200, 10)).toBe(20);
+  });
+
+  it('returns 0 when percent is missing or zero', () => {
+    expect(serviceFeeFromPercent(200, 0)).toBe(0);
+    expect(serviceFeeFromPercent(200, undefined)).toBe(0);
   });
 });
 
@@ -1241,6 +1253,40 @@ describe('OrdersService', () => {
       expect(quotedOrder.finalTotalMinor).toBe('152500');
     });
 
+    it('adds the admin percent service fee on supplier quote confirm', async () => {
+      const quotedOrder = {
+        id: 42,
+        orderId: 'ORD-10042',
+        userId: 1,
+        orderStatus: OrderStatus.SUPPLIER_ASSIGNED,
+        paymentMethod: 'gridCredits',
+        paymentStatus: 'pending',
+        deliveryFeeMinor: '2500',
+      } as Order;
+      repo.findOne.mockResolvedValue(quotedOrder);
+      supplierAssignmentQb.getOne.mockResolvedValue({
+        id: 7,
+        orderId: 42,
+        decision: SupplierAssignmentDecision.PENDING,
+        quotedPriceMinor: '20000',
+        quotedPromisedDate: new Date(),
+        customerConfirmedQuoteAt: null,
+      });
+      (
+        service as unknown as {
+          settingsService: { getSettings: jest.Mock };
+        }
+      ).settingsService.getSettings.mockResolvedValue({
+        priorityFeeAmount: 50,
+        extraDestinationSurcharge: 30,
+        serviceFeePercent: 10,
+      });
+
+      await service.confirmSupplierQuote(42, 1);
+
+      expect(quotedOrder.finalTotalMinor).toBe('24500');
+    });
+
     it('requires a QR receipt when paying a quoted Instapay order', async () => {
       repo.findOne.mockResolvedValue({
         id: 42,
@@ -1547,8 +1593,8 @@ describe('OrdersService', () => {
         expect.objectContaining({
           userId: 1,
           subtotal: 420,
-          deliveryFee: 27,
-          totalPrice: 447,
+          deliveryFee: 25,
+          totalPrice: 445,
           paymentMethod: 'gridCredits',
           paymentStatus: 'pending',
           deliveryOption: 'delivery',
@@ -1562,7 +1608,7 @@ describe('OrdersService', () => {
           category: 'batch',
           userId: 1,
           totalPrice: 420,
-          deliveryFee: 27,
+          deliveryFee: 25,
         }),
       );
       expect(orderItemsRepo.save).toHaveBeenCalledTimes(2);
@@ -1596,8 +1642,54 @@ describe('OrdersService', () => {
 
       expect(repo.create).toHaveBeenNthCalledWith(
         1,
-        expect.objectContaining({ deliveryFee: 27 }),
+        expect.objectContaining({ deliveryFee: 25 }),
       );
+    });
+
+    it('persists admin deliveryFeePerKm even when zone or matching quote ₱25', async () => {
+      (
+        service as unknown as {
+          settingsService: { getSettings: jest.Mock };
+        }
+      ).settingsService.getSettings.mockResolvedValueOnce({
+        priorityFeeAmount: 50,
+        extraDestinationSurcharge: 30,
+        deliveryFeePerKm: 50,
+        serviceFeePercent: 0,
+      });
+      const previousGeo = (service as any).geoZonesService;
+      const previousMatching = (service as any).matchingService;
+      (service as any).geoZonesService = {
+        matchPoint: jest.fn().mockResolvedValue({
+          inside: true,
+          zone: { id: 1 },
+          deliveryFeeMinor: '2500',
+        }),
+        hasActiveZones: jest.fn().mockResolvedValue(true),
+        getCommerceSettings: jest
+          .fn()
+          .mockResolvedValue({ rejectOutsideZones: false }),
+      };
+      (service as any).matchingService = {
+        previewForClient: jest.fn().mockResolvedValue({
+          supplier: { supplierId: 9 },
+          deliveryFeePesos: 25,
+        }),
+      };
+
+      try {
+        await (service as any).createBatch(1, batchDto);
+
+        expect(batchRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({ deliveryFee: 50 }),
+        );
+        expect(repo.create).toHaveBeenCalledWith(
+          expect.objectContaining({ deliveryFee: 50 }),
+        );
+      } finally {
+        (service as any).geoZonesService = previousGeo;
+        (service as any).matchingService = previousMatching;
+      }
     });
 
     it('does not deduct GRIDGO Credits at place-order for subtotal plus deliveryFee', async () => {
@@ -1790,7 +1882,7 @@ describe('OrdersService', () => {
         expect.objectContaining({
           quantity: 2,
           totalPrice: 300,
-          deliveryFee: 27,
+          deliveryFee: 25,
           deliveryAddressId: 9,
         }),
       );
@@ -1832,6 +1924,7 @@ describe('OrdersService', () => {
           'items',
           'items.destination',
           'items.specValues',
+          'statusHistory',
         ],
         order: { createdAt: 'DESC' },
       });
@@ -2113,6 +2206,7 @@ describe('OrdersService', () => {
           'items',
           'items.destination',
           'items.specValues',
+          'statusHistory',
         ],
       });
       expect(result).toEqual(mockOrder);
@@ -3282,7 +3376,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         orderId: arrived.id,
         fromStatus: OrderStatus.DELIVERED,
         toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
-        changedByUserId: 0,
+        changedByUserId: 51,
       }),
     );
     expect(

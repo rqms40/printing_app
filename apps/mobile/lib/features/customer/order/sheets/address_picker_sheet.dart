@@ -9,6 +9,7 @@ import 'package:printing_app/features/customer/address/providers/address_provide
 import 'package:printing_app/features/customer/address/widgets/map_pin_picker.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/shared/models/address.dart';
+import 'package:printing_app/shared/services/api_client.dart';
 
 class AddressPickerSheet {
   static Future<Address?> show(BuildContext context) async {
@@ -278,16 +279,95 @@ class _AddressPickerBodyState extends ConsumerState<_AddressPickerBody> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            TextFormField(
-              controller: _fullAddressController,
-              decoration: const InputDecoration(
-                labelText: 'Full Address *',
-                hintText: 'Street, building, unit',
-              ),
-              maxLines: 2,
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Enter the delivery address'
-                  : null,
+            Autocomplete<Map<String, dynamic>>(
+              initialValue: TextEditingValue(text: _fullAddressController.text),
+              optionsBuilder: (TextEditingValue textEditingValue) async {
+                final query = textEditingValue.text.trim();
+                if (query.length < 3) {
+                  return const Iterable<Map<String, dynamic>>.empty();
+                }
+                try {
+                  final res = await ApiClient.instance.get(
+                    '/addresses/geocode',
+                    queryParameters: {'q': query},
+                  );
+                  final data = res.data;
+                  if (data != null && data['suggestions'] != null) {
+                    final suggestions = (data['suggestions'] as List)
+                        .cast<Map<String, dynamic>>();
+                    return suggestions;
+                  }
+                  return const Iterable<Map<String, dynamic>>.empty();
+                } catch (_) {
+                  return const Iterable<Map<String, dynamic>>.empty();
+                }
+              },
+              displayStringForOption: (option) =>
+                  option['displayName'] as String? ?? '',
+              onSelected: (option) {
+                final lat =
+                    double.tryParse(option['latitude']?.toString() ?? '');
+                final lng =
+                    double.tryParse(option['longitude']?.toString() ?? '');
+                if (lat != null && lng != null) {
+                  setState(() {
+                    _selectedPoint = LatLng(lat, lng);
+                  });
+                }
+              },
+              fieldViewBuilder:
+                  (context, controller, focusNode, onEditingComplete) {
+                // Keep the external controller in sync so validation/submit works
+                controller.addListener(() {
+                  _fullAddressController.text = controller.text;
+                });
+                return TextFormField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  onEditingComplete: onEditingComplete,
+                  decoration: const InputDecoration(
+                    labelText: 'Physical Address *',
+                    hintText: 'Type to search a street or place',
+                  ),
+                  maxLines: null, // allow wrapping
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Enter the delivery address'
+                      : null,
+                );
+              },
+              optionsViewBuilder: (context, onSelected, options) {
+                // Ensure dropdown appears above other fields in the bottom sheet
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4.0,
+                    borderRadius: BorderRadius.circular(8),
+                    color: colors.surface,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxHeight: 200.0,
+                        maxWidth: 300.0, // Or use LayoutBuilder to match width
+                      ),
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        itemBuilder: (BuildContext context, int index) {
+                          final option = options.elementAt(index);
+                          return ListTile(
+                            leading: Icon(Icons.location_on_outlined, color: colors.onSurfaceDim),
+                            title: Text(
+                              option['displayName'] as String? ?? '',
+                              style: AppTypography.body.copyWith(color: colors.onSurface),
+                            ),
+                            onTap: () => onSelected(option),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(

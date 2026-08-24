@@ -11,6 +11,7 @@ import {
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { SupplierProfile } from '../suppliers/entities/supplier-profile.entity';
+import { SupplierCatalogOffering } from '../suppliers/entities/supplier-catalog-offering.entity';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SupplierVerificationStatus } from '../suppliers/entities/supplier-verification.entity';
@@ -126,6 +127,10 @@ describe('MatchingService', () => {
         {
           provide: getRepositoryToken(SupplierProfile),
           useValue: supplierRepo,
+        },
+        {
+          provide: getRepositoryToken(SupplierCatalogOffering),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         {
           provide: DataSource,
