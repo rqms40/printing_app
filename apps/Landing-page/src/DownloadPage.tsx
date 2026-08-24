@@ -8,7 +8,7 @@ import {
 } from './utils/landingLinks';
 
 const latestApkAssetName = 'GRIDGO-latest.apk';
-const versionedApkAssetName = 'GRIDGO-v1.12.5.apk';
+const versionedApkAssetName = 'GRIDGO-v1.12.6.apk';
 
 export default function DownloadPage() {
   const latestApkUrl = getLatestApkDownloadUrl(latestApkAssetName);
