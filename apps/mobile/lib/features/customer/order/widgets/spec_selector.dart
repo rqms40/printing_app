@@ -16,6 +16,8 @@ class SpecSelector<T> extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     required this.displayName,
+    this.isOptionEnabled,
+    this.helperText,
   });
 
   /// Section label displayed above the chips.
@@ -32,6 +34,12 @@ class SpecSelector<T> extends StatelessWidget {
 
   /// Returns the display label for each option.
   final String Function(T) displayName;
+
+  /// When false, the chip is grayed out and not tappable.
+  final bool Function(T value)? isOptionEnabled;
+
+  /// Optional caption under the chips (size policy, printer hint).
+  final String? helperText;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -56,25 +64,43 @@ class SpecSelector<T> extends StatelessWidget {
           runSpacing: AppSpacing.sm,
           children: options.map((option) {
             final isSelected = option == selected;
-            return ChoiceChip(
-              label: Text(displayName(option)),
-              selected: isSelected,
-              onSelected: (_) => onChanged(option),
-              selectedColor: colors.accent,
-              backgroundColor: colors.surfaceVariant,
-              labelStyle: AppTypography.body.copyWith(
-                color: isSelected ? colors.background : colors.onSurface,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(
-                  color: isSelected ? colors.accent : colors.outline,
+            final enabled = isOptionEnabled?.call(option) ?? true;
+            return Opacity(
+              opacity: enabled ? 1 : 0.42,
+              child: ChoiceChip(
+                label: Text(displayName(option)),
+                selected: isSelected && enabled,
+                onSelected: enabled ? (_) => onChanged(option) : null,
+                selectedColor: colors.accent,
+                backgroundColor: colors.surfaceVariant,
+                disabledColor: colors.surfaceVariant,
+                labelStyle: AppTypography.body.copyWith(
+                  color: !enabled
+                      ? colors.onSurfaceDim
+                      : isSelected
+                      ? colors.background
+                      : colors.onSurface,
                 ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: isSelected && enabled
+                        ? colors.accent
+                        : colors.outline,
+                  ),
+                ),
+                showCheckmark: false,
               ),
-              showCheckmark: false,
             );
           }).toList(),
         ),
+        if (helperText != null && helperText!.trim().isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            helperText!,
+            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+          ),
+        ],
       ],
     );
   }

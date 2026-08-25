@@ -5,12 +5,20 @@ export type ParsedCatalogOption = {
   value: string;
   unitCost?: number;
   fixedFee?: number;
+  estimatedQuantity?: number;
+  /** Printer values this option can be used with (eco_solvent, uv_printer). */
+  compatiblePrinters?: string[];
+  /** Size exceeds in-house max and cannot be selected. */
+  outsourced?: boolean;
 };
 
 export type ParsedCatalogSpec = {
   key: string;
   label: string;
+  /** How this spec should price: unit_cost, estimated_quantity, or none. */
+  pricingRole?: 'none' | 'unit_cost' | 'estimated_quantity' | 'multiplier' | 'fixed_fee';
   options: ParsedCatalogOption[];
+  metadata?: Record<string, unknown>;
 };
 
 export type ParsedCatalogAddon = {
@@ -27,6 +35,10 @@ export type ParsedCatalogProduct = {
   notes: string[];
   baseRatePesos: number | null;
   pricingUnit: string | null;
+  /** Smallest billed area in sq.ft (tarp minimum charge, e.g. 2x4 = 8). */
+  minChargeArea?: number | null;
+  /** In-house max of the longer side in feet (tarp/sticker max size). */
+  maxDimensionFt?: number | null;
 };
 
 export type ParsedCatalog = {
@@ -48,6 +60,8 @@ const STICKER_SLUGS = [
   'stickers-vinyl',
   'stickers-sheet',
 ];
+
+const SINTRA_SLUGS = ['stickers-sintra-boards'];
 
 export function slugifyValue(raw: string): string {
   return raw
@@ -80,7 +94,7 @@ function splitList(line: string): string[] {
 
 function mapCategorySlugs(title: string): string[] {
   const t = title.toLowerCase();
-  if (/sintra/.test(t)) return [...STICKER_SLUGS];
+  if (/sintra/.test(t)) return [...SINTRA_SLUGS];
   if (/sticker/.test(t)) return [...STICKER_SLUGS];
   if (/tarp|signage/.test(t)) return [...TARP_SLUGS];
   return [];
@@ -92,14 +106,47 @@ function sectionHeading(line: string): string | null {
   return null;
 }
 
+function printersMentioned(line: string): string[] {
+  const printers: string[] = [];
+  if (/eco-?solvent/i.test(line)) printers.push('eco_solvent');
+  if (/\buv\b/i.test(line)) printers.push('uv_printer');
+  return printers;
+}
+
 function pushUniqueOption(
   spec: ParsedCatalogSpec,
   label: string,
-  extra?: { unitCost?: number; fixedFee?: number },
+  extra?: {
+    unitCost?: number;
+    fixedFee?: number;
+    estimatedQuantity?: number;
+    compatiblePrinters?: string[];
+    outsourced?: boolean;
+  },
 ) {
   const value = slugifyValue(label);
   if (!value) return;
-  if (spec.options.some((o) => o.value === value)) return;
+  const existing = spec.options.find((o) => o.value === value);
+  if (existing) {
+    if (extra?.unitCost != null && extra.unitCost > 0) {
+      existing.unitCost = extra.unitCost;
+    }
+    if (extra?.fixedFee != null && extra.fixedFee > 0) {
+      existing.fixedFee = extra.fixedFee;
+    }
+    if (extra?.estimatedQuantity != null && extra.estimatedQuantity > 0) {
+      existing.estimatedQuantity = extra.estimatedQuantity;
+    }
+    if (extra?.compatiblePrinters?.length) {
+      const merged = new Set([
+        ...(existing.compatiblePrinters ?? []),
+        ...extra.compatiblePrinters,
+      ]);
+      existing.compatiblePrinters = [...merged];
+    }
+    if (extra?.outsourced) existing.outsourced = true;
+    return;
+  }
   spec.options.push({
     label: label.trim(),
     value,
@@ -129,6 +176,7 @@ function ingestLine(product: ParsedCatalogProduct, line: string) {
 
   if (/eco-?solvent/i.test(line) || /\buv printer\b/i.test(line) || /^uv\b/i.test(line)) {
     const spec = ensureSpec(product, 'printer', 'Printer');
+    spec.pricingRole = 'unit_cost';
     if (/eco-?solvent/i.test(line)) {
       pushUniqueOption(spec, 'Eco-solvent', {
         unitCost: pesos ?? undefined,
@@ -149,7 +197,13 @@ function ingestLine(product: ParsedCatalogProduct, line: string) {
     const oz = line.match(/(\d+\s*oz)/gi) ?? [];
     if (oz.length) {
       const thick = ensureSpec(product, 'thickness', 'Thickness');
-      for (const token of oz) pushUniqueOption(thick, token.replace(/\s+/g, '').toLowerCase());
+      for (const token of oz) {
+        const normalized = token.replace(/\s+/g, '').toLowerCase();
+        if (/not compatible/i.test(line) && /8oz/i.test(normalized)) {
+          continue;
+        }
+        pushUniqueOption(thick, normalized);
+      }
     }
   }
 
@@ -164,6 +218,7 @@ function ingestLine(product: ParsedCatalogProduct, line: string) {
     !/tarpaulin/i.test(line)
   ) {
     const finish = ensureSpec(product, 'finish', 'Finish');
+    const printers = printersMentioned(line);
     for (const token of [
       'Matte',
       'Glossy',
@@ -171,8 +226,13 @@ function ingestLine(product: ParsedCatalogProduct, line: string) {
       'White',
       'Embossed & Debossed',
     ]) {
-      if (new RegExp(token.replace(/&/g, '&'), 'i').test(line) || line.toLowerCase().includes(token.toLowerCase())) {
-        pushUniqueOption(finish, token);
+      if (
+        new RegExp(token.replace(/&/g, '&'), 'i').test(line) ||
+        line.toLowerCase().includes(token.toLowerCase())
+      ) {
+        pushUniqueOption(finish, token, {
+          compatiblePrinters: printers.length ? printers : undefined,
+        });
       }
     }
     if (/white \(uv/i.test(line) || /^white\b/i.test(line)) {
@@ -180,11 +240,38 @@ function ingestLine(product: ParsedCatalogProduct, line: string) {
     }
   }
 
-  if (/standard sizes/i.test(line) || /^\d+x\d+\b/i.test(line)) {
+  if (/minimum charge/i.test(line)) {
+    const charged = line.match(/(\d+)\s*x\s*(\d+)/i);
+    if (charged) {
+      product.minChargeArea = Number(charged[1]) * Number(charged[2]);
+    }
+  }
+  if (/maximum size/i.test(line)) {
+    const above = line.match(/above\s+(\d+)\s*(?:feet|ft)/i);
+    if (above) product.maxDimensionFt = Number(above[1]);
+  }
+
+  if (
+    /standard sizes/i.test(line) ||
+    /minimum size/i.test(line) ||
+    /maximum size/i.test(line) ||
+    /^\d+x\d+\b/i.test(line)
+  ) {
     const size = ensureSpec(product, 'size', 'Size');
-    const sizes = line.match(/\d+\s*x\s*\d+/gi) ?? [];
+    size.pricingRole = 'estimated_quantity';
+    const withoutParens = line.replace(/\([^)]*\)/g, ' ');
+    const sizes = withoutParens.match(/\d+\s*x\s*\d+/gi) ?? [];
     for (const token of sizes) {
-      pushUniqueOption(size, token.replace(/\s+/g, '').toLowerCase());
+      const parts = token.toLowerCase().replace(/\s+/g, '').split('x');
+      const width = Number(parts[0]);
+      const height = Number(parts[1]);
+      const area =
+        Number.isFinite(width) && Number.isFinite(height)
+          ? width * height
+          : undefined;
+      pushUniqueOption(size, `${parts[0]}x${parts[1]}`, {
+        estimatedQuantity: area,
+      });
     }
   }
 
@@ -252,6 +339,8 @@ export function parseCatalogText(raw: string): ParsedCatalog {
       notes: [],
       baseRatePesos: null,
       pricingUnit: null,
+      minChargeArea: null,
+      maxDimensionFt: null,
     };
     if (current.categorySlugs.length === 0) {
       warnings.push(`No GRIDGO category mapping for "${title}"`);
@@ -284,9 +373,42 @@ export function parseCatalogText(raw: string): ParsedCatalog {
       seen.add(key);
       return true;
     });
+    finalizeSizePolicy(product);
+    product.specs.sort((a, b) => {
+      if (a.key === 'printer') return -1;
+      if (b.key === 'printer') return 1;
+      return 0;
+    });
   }
 
   return { products, warnings };
+}
+
+function finalizeSizePolicy(product: ParsedCatalogProduct) {
+  const size = product.specs.find((spec) => spec.key === 'size');
+  if (!size) return;
+  const minCharge = product.minChargeArea ?? 0;
+  const maxDim = product.maxDimensionFt ?? 0;
+  size.metadata = {
+    ...(size.metadata ?? {}),
+    ...(minCharge > 0 ? { minChargeArea: minCharge } : {}),
+    ...(maxDim > 0 ? { maxDimensionFt: maxDim } : {}),
+  };
+  for (const option of size.options) {
+    const parts = option.value.toLowerCase().split('x');
+    const width = Number(parts[0]);
+    const height = Number(parts[1]);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) continue;
+    const rawArea = width * height;
+    if (maxDim > 0 && Math.max(width, height) > maxDim) {
+      option.outsourced = true;
+    }
+    if (minCharge > 0 && rawArea < minCharge) {
+      option.estimatedQuantity = minCharge;
+    } else if (option.estimatedQuantity == null) {
+      option.estimatedQuantity = rawArea;
+    }
+  }
 }
 
 export async function extractCatalogText(

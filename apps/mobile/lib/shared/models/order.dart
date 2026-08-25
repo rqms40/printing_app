@@ -128,6 +128,41 @@ class AssignedSupplierContact {
       quotedPriceMinor != null && quotedPriceMinor! > 0;
   bool get isQuoteConfirmed => customerConfirmedQuoteAt != null;
 
+  AssignedSupplierContact copyWith({
+    int? supplierId,
+    String? businessName,
+    String? decision,
+    DateTime? acceptanceDeadline,
+    int? assignmentId,
+    String? logoUrl,
+    String? address,
+    String? broadAddress,
+    List<String>? selfQcEvidenceUrls,
+    List<int>? selfQcEvidenceFileIds,
+    int? quotedPriceMinor,
+    DateTime? quotedPromisedDate,
+    DateTime? customerConfirmedQuoteAt,
+    bool clearQuoteConfirmation = false,
+  }) {
+    return AssignedSupplierContact(
+      supplierId: supplierId ?? this.supplierId,
+      businessName: businessName ?? this.businessName,
+      decision: decision ?? this.decision,
+      acceptanceDeadline: acceptanceDeadline ?? this.acceptanceDeadline,
+      assignmentId: assignmentId ?? this.assignmentId,
+      logoUrl: logoUrl ?? this.logoUrl,
+      address: address ?? this.address,
+      broadAddress: broadAddress ?? this.broadAddress,
+      selfQcEvidenceUrls: selfQcEvidenceUrls ?? this.selfQcEvidenceUrls,
+      selfQcEvidenceFileIds: selfQcEvidenceFileIds ?? this.selfQcEvidenceFileIds,
+      quotedPriceMinor: quotedPriceMinor ?? this.quotedPriceMinor,
+      quotedPromisedDate: quotedPromisedDate ?? this.quotedPromisedDate,
+      customerConfirmedQuoteAt: clearQuoteConfirmation
+          ? null
+          : customerConfirmedQuoteAt ?? this.customerConfirmedQuoteAt,
+    );
+  }
+
   factory AssignedSupplierContact.fromJson(Map<String, dynamic> json) {
     Object? read(String camel, String snake) => json[camel] ?? json[snake];
 
@@ -460,6 +495,14 @@ class Order {
 
   bool get isBatchOrder => lineItems.length > 1;
   int get itemCount => lineItems.length;
+
+  /// Supplier has sent a final price and the customer still needs to pay.
+  bool get awaitingSupplierQuotePayment {
+    if (orderStatus != OrderStatus.supplierAssigned) return false;
+    final supplier = assignedSupplier;
+    if (supplier == null) return false;
+    return supplier.hasQuotedPrice && !supplier.isQuoteConfirmed;
+  }
   bool get hasMixedItemTypes {
     final categories = lineItems.map((item) => item.category).toSet();
     return categories.contains('paper') && categories.contains('3d');

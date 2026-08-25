@@ -398,6 +398,7 @@ class ProductCategory {
     required this.isActive,
     required this.sortOrder,
     this.specs = const [],
+    this.addons = const [],
   });
 
   final int id;
@@ -419,11 +420,13 @@ class ProductCategory {
   final bool isActive;
   final int sortOrder;
   final List<ProductSpecDefinition> specs;
+  final List<ProductAddon> addons;
 
   bool get isBrowseGroup => !isOrderable;
 
   factory ProductCategory.fromJson(Map<String, dynamic> json) {
     final rawSpecs = json['specs'];
+    final rawAddons = json['addons'];
     final parentRaw = json['parentId'] ?? json['parent_id'];
     return ProductCategory(
       id: _readInt(json['id'], 0),
@@ -473,6 +476,16 @@ class ProductCategory {
                 )
                 .toList()
           : const [],
+      addons: rawAddons is List
+          ? rawAddons
+                .whereType<Map>()
+                .map(
+                  (entry) =>
+                      ProductAddon.fromJson(Map<String, dynamic>.from(entry)),
+                )
+                .where((addon) => addon.isActive)
+                .toList()
+          : const [],
     );
   }
 
@@ -482,6 +495,20 @@ class ProductCategory {
 
   List<ProductSpecDefinition> get visibleSpecs =>
       activeSpecs.where((spec) => !spec.isHidden).toList();
+
+  /// Visible specs with printer first so customers pick it before finishes.
+  List<ProductSpecDefinition> get checkoutSpecs {
+    final specs = [...visibleSpecs];
+    specs.sort((a, b) {
+      final ap = a.key == 'printer' ? 0 : 1;
+      final bp = b.key == 'printer' ? 0 : 1;
+      if (ap != bp) return ap - bp;
+      return a.sortOrder.compareTo(b.sortOrder);
+    });
+    return specs;
+  }
+
+  bool get requiresPrinter => specByKey('printer') != null;
 
   ProductSpecDefinition? specByKey(String key) {
     for (final spec in specs) {
@@ -510,11 +537,41 @@ class ProductCategory {
     return display;
   }
 
-  double estimatePrice(Map<String, dynamic> values, int quantity) {
-    if (pricingModel == 'base_plus_material_estimate') {
-      return _estimateBasePlusMaterial(values, quantity);
+  double estimatePrice(
+    Map<String, dynamic> values,
+    int quantity, {
+    List<int> addonIds = const [],
+  }) {
+    final printTotal = pricingModel == 'base_plus_material_estimate'
+        ? _estimateBasePlusMaterial(values, quantity)
+        : _estimatePerPage(values, quantity);
+    return _roundMoney(printTotal + _addonTotal(values, quantity, addonIds));
+  }
+
+  double billedArea(Map<String, dynamic> values) {
+    var area = 1.0;
+    var minCharge = 0.0;
+    for (final spec in activeSpecs) {
+      if (spec.key == 'size') {
+        minCharge = _readDouble(spec.metadata['minChargeArea'], 0);
+      }
+      final option = spec.optionForValue(values[spec.key]);
+      if (option != null &&
+          option.estimatedQuantity != null &&
+          option.estimatedQuantity! > 0) {
+        area = option.estimatedQuantity!;
+      }
     }
-    return _estimatePerPage(values, quantity);
+    if (minCharge > area) return minCharge;
+    return area;
+  }
+
+  bool optionEnabledForPrinter(ProductSpecOption option, String? printer) {
+    if (option.outsourced) return false;
+    final printers = option.compatiblePrinters;
+    if (printers.isEmpty) return true;
+    if (printer == null || printer.isEmpty) return false;
+    return printers.contains(printer);
   }
 
   double _estimatePerPage(Map<String, dynamic> values, int quantity) {
@@ -524,15 +581,46 @@ class ProductCategory {
     ).clamp(1, double.infinity).toDouble();
     var multiplier = 1.0;
     var fixedFees = 0.0;
+    var unitRate = baseRate;
     for (final spec in activeSpecs) {
       final option = spec.optionForValue(values[spec.key]);
       if (option == null) continue;
       if (spec.pricingRole == 'multiplier') multiplier *= option.multiplier;
       if (spec.pricingRole == 'fixed_fee') fixedFees += option.fixedFee;
+      if (spec.pricingRole == 'unit_cost' && option.unitCost > 0) {
+        unitRate = option.unitCost;
+      }
     }
+    final area = billedArea(values);
     return _roundMoney(
-      (baseRate * pageCount * multiplier + fixedFees) * quantity,
+      (unitRate * pageCount * area * multiplier + fixedFees) * quantity,
     );
+  }
+
+  double _addonTotal(
+    Map<String, dynamic> values,
+    int quantity,
+    List<int> addonIds,
+  ) {
+    if (addonIds.isEmpty || addons.isEmpty) return 0;
+    final area = billedArea(values);
+    var sum = 0.0;
+    for (final id in addonIds) {
+      ProductAddon? match;
+      for (final addon in addons) {
+        if (addon.id == id) {
+          match = addon;
+          break;
+        }
+      }
+      if (match == null) continue;
+      if (match.priceType == 'per_unit') {
+        sum += match.price * area * quantity;
+      } else {
+        sum += match.price * quantity;
+      }
+    }
+    return sum;
   }
 
   double _estimateBasePlusMaterial(Map<String, dynamic> values, int quantity) {
@@ -671,10 +759,9 @@ class ProductSpecDefinition {
       final defaultOption = options
           .where((option) => option.isDefault)
           .firstOrNull;
-      return defaultOption?.value ??
-          options.firstOrNull?.value ??
-          defaultValue ??
-          '';
+      if (defaultOption != null) return defaultOption.value;
+      if (key == 'printer') return '';
+      return options.firstOrNull?.value ?? defaultValue ?? '';
     }
     if (valueType == 'number') {
       return _readDouble(defaultValue, minValue ?? 0);
@@ -718,6 +805,7 @@ class ProductSpecOption {
     this.isDefault = false,
     this.isActive = true,
     this.sortOrder = 0,
+    this.metadata = const {},
   });
 
   final int? id;
@@ -731,6 +819,18 @@ class ProductSpecOption {
   final bool isDefault;
   final bool isActive;
   final int sortOrder;
+  final Map<String, dynamic> metadata;
+
+  List<String> get compatiblePrinters {
+    final raw =
+        metadata['compatiblePrinters'] ?? metadata['compatible_printers'];
+    if (raw is List) {
+      return raw.map((entry) => entry.toString()).toList();
+    }
+    return const [];
+  }
+
+  bool get outsourced => metadata['outsourced'] == true;
 
   factory ProductSpecOption.fromJson(Map<String, dynamic> json) {
     return ProductSpecOption(
@@ -749,6 +849,36 @@ class ProductSpecOption {
       isDefault: _readBool(json['isDefault'] ?? json['is_default'], false),
       isActive: _readBool(json['isActive'] ?? json['is_active'], true),
       sortOrder: _readInt(json['sortOrder'] ?? json['sort_order'], 0),
+      metadata: _readMap(json['metadata']),
+    );
+  }
+}
+
+class ProductAddon {
+  const ProductAddon({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.priceType = 'flat',
+    this.isActive = true,
+    this.description,
+  });
+
+  final int id;
+  final String name;
+  final double price;
+  final String priceType;
+  final bool isActive;
+  final String? description;
+
+  factory ProductAddon.fromJson(Map<String, dynamic> json) {
+    return ProductAddon(
+      id: _readInt(json['id'], 0),
+      name: json['name']?.toString() ?? '',
+      price: _readDouble(json['price'], 0),
+      priceType: (json['priceType'] ?? json['price_type'])?.toString() ?? 'flat',
+      isActive: _readBool(json['isActive'] ?? json['is_active'], true),
+      description: json['description']?.toString(),
     );
   }
 }

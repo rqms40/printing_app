@@ -3,6 +3,7 @@ import type { ForwardRefExoticComponent, HTMLAttributes, RefAttributes } from 'r
 import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneScene } from './components/PhoneScene';
 import { EcosystemSection } from './components/EcosystemSection';
+import { HowItWorksVideos } from './components/HowItWorksVideos';
 import { Menu, X, MessageCircle, Zap, ShieldCheck, ChevronUp, Moon, Sun } from 'lucide-react';
 import { HardDriveUploadIcon, TruckIcon, ListIcon, TimerIcon, MessageCircleIcon } from 'lucide-animated';
 import { Link } from 'react-router-dom';
@@ -299,7 +300,7 @@ function HowItWorksSection() {
             className="flex flex-col items-center"
           >
             <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">03</div>
-            <h3 className="text-2xl font-bold mb-4">Receive</h3>
+            <h3 className="text-2xl font-bold mb-4">Deliver</h3>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-w-sm mx-auto">
               Watch your project move from the printer to the delivery rider in real-time. You'll know exactly when your package is arriving at your door.
             </p>
@@ -307,22 +308,7 @@ function HowItWorksSection() {
 
         </div>
 
-        {/* Full Wide Screen Video Container */}
-        <motion.div
-          initial={{ opacity: 0, y: 50, filter: 'blur(20px)' }}
-          whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 1, delay: 0.6, ease: 'easeOut' }}
-          viewport={{ once: true, margin: '-50px' }}
-          className="mt-32 w-full relative rounded-3xl overflow-hidden border border-black/10 dark:border-white/10 shadow-[0_0_50px_rgba(255,222,88,0.05)] aspect-[16/9] bg-black/5 dark:bg-white/5"
-        >
-          <iframe
-            src="https://www.youtube.com/embed/67Jrr34StKg?autoplay=1&mute=1&loop=1&playlist=67Jrr34StKg&controls=1&rel=0"
-            title="GRIDGO App Demo Walkthrough"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            className="w-full h-full border-0"
-          />
-        </motion.div>
+        <HowItWorksVideos />
       </div>
     </section>
   );

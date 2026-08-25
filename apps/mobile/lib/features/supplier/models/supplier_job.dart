@@ -247,6 +247,7 @@ class SupplierJobItemSpecs {
     required this.quantity,
     required this.specs,
     this.categoryName,
+    this.totalPrice = 0,
     this.specialInstructions,
     this.fileName,
     this.fileMetadataId,
@@ -256,6 +257,7 @@ class SupplierJobItemSpecs {
   final String category;
   final String? categoryName;
   final int quantity;
+  final double totalPrice;
   final String? specialInstructions;
   final String? fileName;
   final int? fileMetadataId;
@@ -273,6 +275,7 @@ class SupplierJobItemSpecs {
       category: _asString(json['category'], 'print'),
       categoryName: json['categoryName']?.toString(),
       quantity: _asInt(json['quantity'], 1),
+      totalPrice: _asDouble(json['totalPrice'] ?? json['total_price']),
       specialInstructions: json['specialInstructions']?.toString(),
       fileName: json['fileName']?.toString(),
       fileMetadataId: json['fileMetadataId'] == null
@@ -302,6 +305,7 @@ class SupplierJobDetail {
     required this.category,
     required this.quantity,
     required this.totalPrice,
+    this.suggestedPrintPesos = 0,
     required this.deliveryFee,
     required this.paymentMethod,
     required this.paymentAuthorizationStatus,
@@ -345,6 +349,7 @@ class SupplierJobDetail {
   final String category;
   final int quantity;
   final double totalPrice;
+  final double suggestedPrintPesos;
   final double deliveryFee;
   final String? finalTotalMinor;
   final String? deliveryFeeMinor;
@@ -470,6 +475,9 @@ class SupplierJobDetail {
       category: _asString(order['category'] ?? specs['category'], 'print'),
       quantity: _asInt(order['quantity'] ?? specs['quantity'], 1),
       totalPrice: _asDouble(order['totalPrice']),
+      suggestedPrintPesos: _asDouble(
+        json['suggestedPrintPesos'] ?? json['suggested_print_pesos'],
+      ),
       deliveryFee: _asDouble(order['deliveryFee']),
       finalTotalMinor: order['finalTotalMinor']?.toString(),
       deliveryFeeMinor: order['deliveryFeeMinor']?.toString(),

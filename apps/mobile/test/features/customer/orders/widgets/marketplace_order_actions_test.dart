@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
+import 'package:printing_app/features/customer/order/widgets/payment_qr_code.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/orders/widgets/marketplace_order_actions.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -10,6 +12,8 @@ Order _order({
   required OrderStatus status,
   String? adminNotes,
   String? adminStatusNote,
+  PaymentMethod paymentMethod = PaymentMethod.gridCredits,
+  AssignedSupplierContact? assignedSupplier,
 }) {
   return Order(
     id: '42',
@@ -20,10 +24,11 @@ Order _order({
     quantity: 1,
     totalPrice: 200,
     deliveryFee: 0,
-    paymentMethod: PaymentMethod.gridCredits,
+    paymentMethod: paymentMethod,
     paymentStatus: PaymentStatus.pending,
     orderStatus: status,
     deliveryOption: 'delivery',
+    assignedSupplier: assignedSupplier,
     adminNotes: adminNotes,
     adminStatusNote: adminStatusNote,
     createdAt: DateTime(2026, 5, 2),
@@ -36,6 +41,9 @@ Widget _wrap(Order order) {
     overrides: [
       ordersProvider.overrideWith(
         (_) => OrdersNotifier(initialState: [order], skipBootstrap: true),
+      ),
+      deliveryFeeSettingsProvider.overrideWith(
+        (ref) async => DeliveryFeeSettings.fallback,
       ),
     ],
     child: MaterialApp(
@@ -139,5 +147,44 @@ void main() {
 
     expect(find.text('Report a Concern'), findsOneWidget);
     expect(find.text('Print quality defect'), findsOneWidget);
+  });
+
+  testWidgets('quoted Pilot Credits order shows the pay action', (tester) async {
+    final order = _order(
+      status: OrderStatus.supplierAssigned,
+      paymentMethod: PaymentMethod.gridCredits,
+      assignedSupplier: const AssignedSupplierContact(
+        supplierId: 1,
+        businessName: 'Polymedia Printing Services',
+        quotedPriceMinor: 28000,
+      ),
+    );
+    await tester.pumpWidget(_wrap(order));
+    await tester.pumpAndSettle();
+
+    expect(order.awaitingSupplierQuotePayment, isTrue);
+    expect(find.text('Pay the final print price'), findsOneWidget);
+    expect(find.text('Pay ₱280.00'), findsOneWidget);
+  });
+
+  testWidgets('quoted QR order shows Payment_QR.jpg for the customer to scan', (
+    tester,
+  ) async {
+    final order = _order(
+      status: OrderStatus.supplierAssigned,
+      paymentMethod: PaymentMethod.qrPhInstapay,
+      assignedSupplier: const AssignedSupplierContact(
+        supplierId: 1,
+        businessName: 'Polymedia Printing Services',
+        quotedPriceMinor: 15000,
+      ),
+    );
+    await tester.pumpWidget(_wrap(order));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pay the final print price'), findsOneWidget);
+    expect(find.byType(PaymentQrCode), findsOneWidget);
+    expect(find.text('Download / Share QR'), findsOneWidget);
+    expect(find.text('Upload payment receipt'), findsOneWidget);
   });
 }

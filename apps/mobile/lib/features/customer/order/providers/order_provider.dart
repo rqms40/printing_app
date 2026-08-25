@@ -43,6 +43,7 @@ class OrderFlowState {
     this.categoryName,
     this.specs = const {},
     this.specDisplayValues = const {},
+    this.addonIds = const [],
     this.paperSpecs,
     this.threeDSpecs,
     this.fileName,
@@ -72,6 +73,9 @@ class OrderFlowState {
 
   /// Human-readable selected spec labels keyed by spec key.
   final Map<String, String> specDisplayValues;
+
+  /// Selected catalog add-on ids for this print job.
+  final List<int> addonIds;
 
   final PaperSpecs? paperSpecs;
   final ThreeDSpecs? threeDSpecs;
@@ -107,6 +111,7 @@ class OrderFlowState {
     String? categoryName,
     Map<String, dynamic>? specs,
     Map<String, String>? specDisplayValues,
+    List<int>? addonIds,
     PaperSpecs? paperSpecs,
     ThreeDSpecs? threeDSpecs,
     String? fileName,
@@ -139,6 +144,7 @@ class OrderFlowState {
       specDisplayValues: clearSpecs
           ? const {}
           : (specDisplayValues ?? this.specDisplayValues),
+      addonIds: clearSpecs ? const [] : (addonIds ?? this.addonIds),
       paperSpecs: clearPaperSpecs ? null : (paperSpecs ?? this.paperSpecs),
       threeDSpecs: clearThreeDSpecs ? null : (threeDSpecs ?? this.threeDSpecs),
       fileName: clearFile ? null : (fileName ?? this.fileName),
@@ -173,6 +179,7 @@ class OrderFlowState {
       'categoryName': categoryName,
       'specs': specs,
       'specDisplayValues': specDisplayValues,
+      'addonIds': addonIds,
       'paperSpecs': paperSpecs != null
           ? {
               'paperSize': paperSpecs!.paperSize.name,
@@ -298,6 +305,12 @@ class OrderFlowState {
       categoryName: map['categoryName'] as String?,
       specs: _readStringKeyedMap(map['specs']),
       specDisplayValues: _readStringMap(map['specDisplayValues']),
+      addonIds: (map['addonIds'] is List)
+          ? (map['addonIds'] as List)
+                .map((entry) => _readInt(entry, 0))
+                .where((id) => id > 0)
+                .toList()
+          : const [],
       paperSpecs: paperSpecs,
       threeDSpecs: threeDSpecs,
       fileName: map['fileName'] as String?,
@@ -369,11 +382,13 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
     required Map<String, dynamic> specs,
     required Map<String, String> displayValues,
     double? totalPrice,
+    List<int>? addonIds,
   }) {
     state = state.copyWith(
       specs: Map<String, dynamic>.unmodifiable(specs),
       specDisplayValues: Map<String, String>.unmodifiable(displayValues),
       totalPrice: totalPrice,
+      addonIds: addonIds,
     );
     _saveDraft();
   }

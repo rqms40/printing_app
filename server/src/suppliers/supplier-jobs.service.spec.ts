@@ -7,7 +7,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
-import { SupplierJobsService } from './supplier-jobs.service';
+import {
+  resolveSuggestedPrintPesos,
+  SupplierJobsService,
+} from './supplier-jobs.service';
 import { SupplierProfile } from './entities/supplier-profile.entity';
 import {
   SupplierAssignment,
@@ -29,6 +32,44 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { ProductionMilestone } from './dto/production-status.dto';
 import { QualityService } from '../quality/quality.service';
 import { AuditEvent } from '../audit/entities/audit-event.entity';
+
+describe('resolveSuggestedPrintPesos', () => {
+  it('uses order-item print totals even when order.totalPrice differs', () => {
+    expect(
+      resolveSuggestedPrintPesos({
+        itemTotals: [280],
+        orderTotalPrice: 195,
+      }),
+    ).toBe(280);
+  });
+
+  it('sums multiple order-item print totals', () => {
+    expect(
+      resolveSuggestedPrintPesos({
+        itemTotals: [280, 90],
+        orderTotalPrice: 195,
+      }),
+    ).toBe(370);
+  });
+
+  it('falls back to order.totalPrice when items have no print totals', () => {
+    expect(
+      resolveSuggestedPrintPesos({
+        itemTotals: [0],
+        orderTotalPrice: 195,
+      }),
+    ).toBe(195);
+  });
+
+  it('returns 0 when nothing is priced', () => {
+    expect(
+      resolveSuggestedPrintPesos({
+        itemTotals: [],
+        orderTotalPrice: 0,
+      }),
+    ).toBe(0);
+  });
+});
 
 describe('SupplierJobsService', () => {
   let service: SupplierJobsService;
@@ -1050,6 +1091,7 @@ describe('SupplierJobsService', () => {
           category: 'paper',
           categoryName: 'Paper Prints',
           quantity: 50,
+          totalPrice: 280,
           specialInstructions: 'Trim to crop marks',
           fileName: 'flyer.pdf',
           fileMetadataId: 99,
@@ -1090,8 +1132,10 @@ describe('SupplierJobsService', () => {
         id: 501,
         category: 'paper',
         quantity: 50,
+        totalPrice: 280,
         specialInstructions: 'Trim to crop marks',
       });
+      expect(detail.suggestedPrintPesos).toBe(280);
       expect(detail.specs.items[0].specs).toEqual([
         {
           key: 'paper_size',

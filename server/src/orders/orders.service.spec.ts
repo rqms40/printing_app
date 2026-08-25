@@ -13,6 +13,7 @@ import {
   applyMarketplacePaymentDefaults,
   calculateChargeTotal,
   OrdersService,
+  resolvePersistedPrintPesos,
   serviceFeeFromPercent,
 } from './orders.service';
 import {
@@ -173,6 +174,17 @@ describe('serviceFeeFromPercent', () => {
   it('returns 0 when percent is missing or zero', () => {
     expect(serviceFeeFromPercent(200, 0)).toBe(0);
     expect(serviceFeeFromPercent(200, undefined)).toBe(0);
+  });
+});
+
+describe('resolvePersistedPrintPesos', () => {
+  it('keeps the customer order-item print total when the catalog quote differs', () => {
+    expect(resolvePersistedPrintPesos(280, 195)).toBe(280);
+  });
+
+  it('falls back to the catalog quote when the client sent no print total', () => {
+    expect(resolvePersistedPrintPesos(undefined, 195)).toBe(195);
+    expect(resolvePersistedPrintPesos(0, 195)).toBe(195);
   });
 });
 
@@ -1858,6 +1870,34 @@ describe('OrdersService', () => {
       expect(batchRepo.save).not.toHaveBeenCalled();
     });
 
+    it('persists the customer order-item print total when the catalog quote differs', async () => {
+      await (service as any).createBatch(1, {
+        ...batchDto,
+        items: [
+          {
+            category: 'stickers-sintra-boards',
+            quantity: 1,
+            totalPrice: 280,
+            fileName: 'sintra.png',
+            fileUrl: 'https://files/sintra.png',
+            fileMetadataId: 11,
+          },
+        ],
+      });
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          totalPrice: 280,
+        }),
+      );
+      expect(orderItemsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: 'stickers-sintra-boards',
+          totalPrice: 280,
+        }),
+      );
+    });
+
     it('normalizes numeric strings before creating batch order rows', async () => {
       await (service as any).createBatch(1, {
         ...batchDto,
@@ -1881,7 +1921,7 @@ describe('OrdersService', () => {
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           quantity: 2,
-          totalPrice: 300,
+          totalPrice: 300.5,
           deliveryFee: 25,
           deliveryAddressId: 9,
         }),
@@ -1889,7 +1929,7 @@ describe('OrdersService', () => {
       expect(orderItemsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           quantity: 2,
-          totalPrice: 300,
+          totalPrice: 300.5,
           fileMetadataId: 12,
         }),
       );

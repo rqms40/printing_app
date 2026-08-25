@@ -14,6 +14,7 @@ class CartItem {
     required this.fileMetadataId,
     Map<String, dynamic> specs = const {},
     Map<String, String> specDisplayValues = const {},
+    List<int> addonIds = const [],
     this.paperSpecs,
     this.threeDSpecs,
     required int quantity,
@@ -29,6 +30,7 @@ class CartItem {
        quantity = _normalizeQuantity(quantity),
        specs = Map<String, dynamic>.unmodifiable(specs),
        specDisplayValues = Map<String, String>.unmodifiable(specDisplayValues),
+       addonIds = List<int>.unmodifiable(addonIds),
        unitPrice = unitPrice ?? printSubtotal! / _normalizeQuantity(quantity);
 
   final String id;
@@ -40,6 +42,7 @@ class CartItem {
   final int fileMetadataId;
   final Map<String, dynamic> specs;
   final Map<String, String> specDisplayValues;
+  final List<int> addonIds;
   final PaperSpecs? paperSpecs;
   final ThreeDSpecs? threeDSpecs;
   final int quantity;
@@ -63,6 +66,7 @@ class CartItem {
       fileMetadataId: flow.fileMetadataId!,
       specs: flow.specs,
       specDisplayValues: flow.specDisplayValues,
+      addonIds: flow.addonIds,
       paperSpecs: flow.category == 'paper' ? flow.paperSpecs : null,
       threeDSpecs: flow.category == '3d' ? flow.threeDSpecs : null,
       quantity: flow.quantity,
@@ -87,6 +91,12 @@ class CartItem {
       fileMetadataId: (map['fileMetadataId'] as num?)?.toInt() ?? 0,
       specs: _readStringKeyedMap(map['specs']),
       specDisplayValues: _readStringMap(map['specDisplayValues']),
+      addonIds: (map['addonIds'] is List)
+          ? (map['addonIds'] as List)
+                .map((entry) => _readInt(entry, 0))
+                .where((id) => id > 0)
+                .toList()
+          : const [],
       paperSpecs: _paperSpecsFromMap(map['paperSpecs']),
       threeDSpecs: _threeDSpecsFromMap(map['threeDSpecs']),
       quantity: quantity,
@@ -113,6 +123,7 @@ class CartItem {
       'fileMetadataId': fileMetadataId,
       'specs': specs,
       'specDisplayValues': specDisplayValues,
+      'addonIds': addonIds,
       'paperSpecs': paperSpecs == null
           ? null
           : {
@@ -149,6 +160,7 @@ class CartItem {
     String? categoryName,
     Map<String, dynamic>? specs,
     Map<String, String>? specDisplayValues,
+    List<int>? addonIds,
     PaperSpecs? paperSpecs,
     ThreeDSpecs? threeDSpecs,
     String? fileName,
@@ -168,6 +180,7 @@ class CartItem {
       fileMetadataId: fileMetadataId ?? this.fileMetadataId,
       specs: specs ?? this.specs,
       specDisplayValues: specDisplayValues ?? this.specDisplayValues,
+      addonIds: addonIds ?? this.addonIds,
       paperSpecs: paperSpecs ?? this.paperSpecs,
       threeDSpecs: threeDSpecs ?? this.threeDSpecs,
       quantity: quantity ?? this.quantity,

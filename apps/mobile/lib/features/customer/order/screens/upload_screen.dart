@@ -812,6 +812,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       fileMetadataId: flow.fileMetadataId!,
       specs: flow.specs,
       specDisplayValues: flow.specDisplayValues,
+      addonIds: flow.addonIds,
       paperSpecs: flow.category == 'paper' ? flow.paperSpecs : null,
       threeDSpecs: flow.category == '3d' ? flow.threeDSpecs : null,
       quantity: flow.quantity,

@@ -104,9 +104,12 @@ export interface SupplierJobDetail {
       specialInstructions: string | null;
       fileName: string | null;
       fileMetadataId: number | null;
+      totalPrice?: number;
       specs: SupplierJobSpecValue[];
     }>;
   };
+  /** Sum of order-item print totals — default for the final-price field. */
+  suggestedPrintPesos?: number;
   allowedActions: SupplierJobAction[] | string[];
   /** Milestones already recorded (omit from selectable list). */
   productionMilestones?: Array<{

@@ -177,6 +177,7 @@ export type SupplierJobDetail = {
       category: string;
       categoryName: string | null;
       quantity: number;
+      totalPrice: number;
       /** Customer item notes only — never order.adminNotes. */
       specialInstructions: string | null;
       fileName: string | null;
@@ -184,6 +185,8 @@ export type SupplierJobDetail = {
       specs: SupplierJobSpecValue[];
     }>;
   };
+  /** Sum of order-item print totals — default for the supplier final-price field. */
+  suggestedPrintPesos: number;
   /** Pickup OTP for rider handoff at the shop (null until a rider is assigned). */
   pickupOtp: string | null;
   deliveryAssignmentStatus: string | null;
@@ -214,6 +217,24 @@ export type SupplierJobActionResult = {
   milestone?: string | null;
   evidenceFileIds?: number[];
 };
+
+export function resolveSuggestedPrintPesos(input: {
+  itemTotals: number[];
+  orderTotalPrice: number;
+}): number {
+  const fromItems = input.itemTotals.reduce((sum, value) => {
+    const n = Number(value);
+    return sum + (Number.isFinite(n) && n > 0 ? n : 0);
+  }, 0);
+  if (fromItems > 0) {
+    return Math.round((fromItems + Number.EPSILON) * 100) / 100;
+  }
+  const orderTotal = Number(input.orderTotalPrice);
+  if (Number.isFinite(orderTotal) && orderTotal > 0) {
+    return Math.round((orderTotal + Number.EPSILON) * 100) / 100;
+  }
+  return 0;
+}
 
 function assertSupplierActor(actor: SupplierJobActor): void {
   if (actor.role !== 'supplier') {
@@ -387,6 +408,11 @@ export class SupplierJobsService {
       // non-fatal — older envs without delivery assignment still return job
     }
 
+    const suggestedPrintPesos = resolveSuggestedPrintPesos({
+      itemTotals: items.map((item) => Number(item.totalPrice ?? 0)),
+      orderTotalPrice: Number(order.totalPrice ?? 0),
+    });
+
     return {
       assignment: {
         id: assignment.id,
@@ -435,12 +461,14 @@ export class SupplierJobsService {
           category: item.category,
           categoryName: item.categoryName,
           quantity: item.quantity,
+          totalPrice: Number(item.totalPrice ?? 0),
           specialInstructions: item.specialInstructions,
           fileName: item.fileName ?? null,
           fileMetadataId: item.fileMetadataId ?? null,
           specs: this.mapItemSpecValues(item.specValues),
         })),
       },
+      suggestedPrintPesos,
       /** Ops/supplier handoff code the rider must enter at pickup. */
       pickupOtp,
       deliveryAssignmentStatus,

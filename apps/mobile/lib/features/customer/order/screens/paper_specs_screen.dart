@@ -16,6 +16,7 @@ import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart'
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
+import 'package:printing_app/utils/formatters.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 /// Step 2/6 -- Paper specification selection.
@@ -33,6 +34,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   final _specialInstructionsController = TextEditingController();
   final _textControllers = <String, TextEditingController>{};
   final _values = <String, dynamic>{};
+  final _selectedAddonIds = <int>{};
   String? _initializedSlug;
 
   final _primarySpecKey = GlobalKey();
@@ -166,6 +168,9 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
       ..addAll(
         category.defaultSpecValues(overrides: {...flow.specs, 'page_count': 1}),
       );
+    _selectedAddonIds
+      ..clear()
+      ..addAll(flow.addonIds);
     _initializedSlug = category.slug;
   }
 
@@ -231,12 +236,17 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: _specWidgets(category),
                       ),
+                      if (category.addons.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.lg),
+                        _addonSection(category, colors),
+                      ],
                       const SizedBox(height: AppSpacing.lg),
                       AppTextField(
                         label: 'Quantity',
                         controller: _quantityController,
                         keyboardType: TextInputType.number,
                         hintText: 'Enter quantity',
+                        onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       AppTextField(
@@ -250,6 +260,13 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
                         onChanged: ref
                             .read(orderFlowProvider.notifier)
                             .setSpecialInstructions,
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        'Estimated print: ${formatCurrency(_currentEstimate(category))}',
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onBackground,
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.xxl),
                     ],
@@ -304,9 +321,9 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
 
   List<Widget> _specWidgets(ProductCategory category) {
     final widgets = <Widget>[];
-    for (final entry in category.visibleSpecs.indexed) {
+    for (final entry in category.checkoutSpecs.indexed) {
       final spec = entry.$2;
-      final specWidget = _specWidget(spec);
+      final specWidget = _specWidget(category, spec);
       widgets.add(
         entry.$1 == 0
             ? KeyedSubtree(key: _primarySpecKey, child: specWidget)
@@ -318,15 +335,62 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     return widgets;
   }
 
-  Widget _specWidget(ProductSpecDefinition spec) {
+  String? _selectedPrinter() {
+    final value = _values['printer']?.toString() ?? '';
+    return value.isEmpty ? null : value;
+  }
+
+  String _optionLabel(ProductCategory category, ProductSpecDefinition spec, String value) {
+    final option = spec.optionForValue(value);
+    if (option == null) return value;
+    final parts = <String>[option.label];
+    if (spec.key == 'printer' && option.unitCost > 0) {
+      parts.add('₱${option.unitCost.toStringAsFixed(2)}/sq.ft');
+    }
+    if (option.outsourced) parts.add('outsourced');
+    return parts.join(' · ');
+  }
+
+  String? _specHelper(ProductCategory category, ProductSpecDefinition spec) {
+    if (spec.key == 'printer') {
+      return 'Select a printer first. Finishes and other printer-specific options unlock after that.';
+    }
+    if (spec.key == 'size') {
+      final minCharge = spec.metadata['minChargeArea'];
+      final maxDim = spec.metadata['maxDimensionFt'];
+      final bits = <String>[];
+      if (minCharge is num && minCharge > 0) {
+        bits.add('Minimum charge is ${minCharge.toStringAsFixed(0)} sq.ft.');
+      }
+      if (maxDim is num && maxDim > 0) {
+        bits.add('Sizes above ${maxDim.toStringAsFixed(0)} ft are outsourced and cannot be selected.');
+      }
+      return bits.isEmpty ? null : bits.join(' ');
+    }
+    return null;
+  }
+
+  Widget _specWidget(ProductCategory category, ProductSpecDefinition spec) {
     if (spec.inputType == 'select') {
+      final printer = _selectedPrinter();
       return SpecSelector<String>(
         label: spec.label.toUpperCase(),
         options: spec.options.map((option) => option.value).toList(),
         selected:
             _values[spec.key]?.toString() ?? spec.defaultSelection.toString(),
-        onChanged: (value) => setState(() => _values[spec.key] = value),
-        displayName: (value) => spec.optionForValue(value)?.label ?? value,
+        onChanged: (value) => setState(() {
+          _values[spec.key] = value;
+          if (spec.key == 'printer') _clearIncompatible(category, value);
+        }),
+        displayName: (value) => _optionLabel(category, spec, value),
+        isOptionEnabled: spec.key == 'printer'
+            ? null
+            : (value) {
+                final option = spec.optionForValue(value);
+                if (option == null) return true;
+                return category.optionEnabledForPrinter(option, printer);
+              },
+        helperText: _specHelper(category, spec),
       );
     }
 
@@ -358,8 +422,81 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     );
   }
 
+  void _clearIncompatible(ProductCategory category, String printer) {
+    for (final spec in category.checkoutSpecs) {
+      if (spec.key == 'printer') continue;
+      final current = _values[spec.key]?.toString();
+      if (current == null || current.isEmpty) continue;
+      final option = spec.optionForValue(current);
+      if (option == null) continue;
+      if (category.optionEnabledForPrinter(option, printer)) continue;
+      final next = spec.options.where(
+        (candidate) => category.optionEnabledForPrinter(candidate, printer),
+      );
+      _values[spec.key] = next.isEmpty ? '' : next.first.value;
+    }
+  }
+
+  Widget _addonSection(ProductCategory category, AppColorSet colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ADD-ONS',
+          style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [
+            for (final addon in category.addons)
+              FilterChip(
+                label: Text(
+                  '${addon.name} · ${formatCurrency(addon.price)}'
+                  '${addon.priceType == 'per_unit' ? '/sq.ft' : ''}',
+                ),
+                selected: _selectedAddonIds.contains(addon.id),
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected) {
+                      _selectedAddonIds.add(addon.id);
+                    } else {
+                      _selectedAddonIds.remove(addon.id);
+                    }
+                  });
+                },
+                selectedColor: colors.accent.withValues(alpha: 0.22),
+                checkmarkColor: colors.accent,
+                labelStyle: AppTypography.body.copyWith(
+                  color: colors.onSurface,
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  double _currentEstimate(ProductCategory category) {
+    final quantity = int.tryParse(_quantityController.text) ?? 1;
+    final selected = Map<String, dynamic>.from(_values)
+      ..['page_count'] = 1;
+    return category.estimatePrice(
+      selected,
+      quantity,
+      addonIds: _selectedAddonIds.toList(),
+    );
+  }
+
   void _onContinue() {
     final category = _category();
+    if (category.requiresPrinter && _selectedPrinter() == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a printer before continuing')),
+      );
+      return;
+    }
     final quantity = int.tryParse(_quantityController.text) ?? 1;
     const pageCount = 1;
     final selected = Map<String, dynamic>.from(_values)
@@ -368,7 +505,12 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
 
     final specs = paperSpecsFromCatalogValues(selected);
     final displayValues = category.displayValues(selected);
-    final printSubtotal = category.estimatePrice(selected, quantity);
+    final addonIds = _selectedAddonIds.toList();
+    final printSubtotal = category.estimatePrice(
+      selected,
+      quantity,
+      addonIds: addonIds,
+    );
 
     final notifier = ref.read(orderFlowProvider.notifier);
     notifier.setPaperSpecs(specs);
@@ -380,6 +522,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
       specs: selected,
       displayValues: displayValues,
       totalPrice: printSubtotal,
+      addonIds: addonIds,
     );
     notifier.nextStep();
 

@@ -23,6 +23,7 @@ import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
 import 'package:printing_app/features/customer/orders/widgets/marketplace_order_actions.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_claims_section.dart';
+import 'package:printing_app/features/customer/orders/widgets/supplier_quote_payment_panel.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
 import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
 import 'package:printing_app/utils/formatters.dart';
@@ -321,6 +322,7 @@ class OrderDetailScreen extends ConsumerWidget {
               const SizedBox(height: 16),
             ],
 
+            _QuotePaymentRefresher(orderId: orderId),
             // --- Marketplace QA / payment actions (Phases 3–4) ---
             MarketplaceOrderActions(order: order)
                 .animate()
@@ -830,6 +832,10 @@ class OrderDetailScreen extends ConsumerWidget {
               ),
             ],
           ),
+          if (order.awaitingSupplierQuotePayment) ...[
+            const SizedBox(height: AppSpacing.md),
+            SupplierQuotePaymentPanel(order: order),
+          ],
         ],
       ),
     );
@@ -1192,4 +1198,29 @@ class _SelfQcEvidenceSection extends StatelessWidget {
       ),
     );
   }
+}
+
+class _QuotePaymentRefresher extends ConsumerStatefulWidget {
+  const _QuotePaymentRefresher({required this.orderId});
+
+  final String orderId;
+
+  @override
+  ConsumerState<_QuotePaymentRefresher> createState() =>
+      _QuotePaymentRefresherState();
+}
+
+class _QuotePaymentRefresherState
+    extends ConsumerState<_QuotePaymentRefresher> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(ordersProvider.notifier).refreshOrderByRouteId(widget.orderId);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

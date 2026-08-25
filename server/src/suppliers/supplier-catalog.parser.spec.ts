@@ -19,24 +19,55 @@ describe('supplier catalog parser', () => {
     expect(tarp.baseRatePesos).toBe(40);
     expect(tarp.pricingUnit).toBe('sq_ft');
     const printer = tarp.specs.find((s) => s.key === 'printer');
+    expect(printer?.pricingRole).toBe('unit_cost');
     expect(printer?.options.map((o) => o.value)).toEqual(
       expect.arrayContaining(['eco_solvent', 'uv_printer']),
     );
+    expect(
+      printer?.options.find((o) => o.value === 'eco_solvent')?.unitCost,
+    ).toBe(40);
+    expect(
+      printer?.options.find((o) => o.value === 'uv_printer')?.unitCost,
+    ).toBe(90);
     const size = tarp.specs.find((s) => s.key === 'size');
     expect(size?.options.map((o) => o.value)).toEqual(
       expect.arrayContaining(['2x4', '4x3', '5x5']),
     );
+    expect(size?.options.find((o) => o.value === '2x4')?.estimatedQuantity).toBe(
+      8,
+    );
+    expect(tarp.minChargeArea).toBe(8);
+    expect(tarp.maxDimensionFt).toBe(5);
+    expect(size?.options.find((o) => o.value === '1x4')?.estimatedQuantity).toBe(
+      8,
+    );
+    expect(size?.options.find((o) => o.value === '6x3')?.outsourced).toBe(true);
+    expect(tarp.specs[0].key).toBe('printer');
 
     const stickers = parsed.products[1];
     expect(stickers.addons.map((a) => a.name)).toEqual(
       expect.arrayContaining(['Lamination', 'Contour cutting']),
     );
+    const stickerPrinter = stickers.specs.find((s) => s.key === 'printer');
+    expect(
+      stickerPrinter?.options.find((o) => o.value === 'eco_solvent')?.unitCost,
+    ).toBe(63.5);
+    expect(
+      stickerPrinter?.options.find((o) => o.value === 'uv_printer')?.unitCost,
+    ).toBe(162);
     const finish = stickers.specs.find((s) => s.key === 'finish');
     expect(finish?.options.map((o) => o.value)).toEqual(
       expect.arrayContaining(['matte', 'glossy', 'frosted']),
     );
+    expect(
+      finish?.options.find((o) => o.value === 'matte')?.compatiblePrinters,
+    ).toEqual(['eco_solvent']);
+    expect(
+      finish?.options.find((o) => o.value === 'glossy')?.compatiblePrinters,
+    ).toEqual(['uv_printer']);
 
     const sintra = parsed.products[2];
+    expect(sintra.categorySlugs).toEqual(['stickers-sintra-boards']);
     expect(sintra.baseRatePesos).toBe(280);
     expect(
       sintra.specs.find((s) => s.key === 'board_thickness')?.options.map(

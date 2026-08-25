@@ -384,6 +384,14 @@ AssignedRiderContact? _parseAssignedRider(Map<String, dynamic> json) {
   return AssignedRiderContact.fromJson(map);
 }
 
+int? _parseMinorUnits(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.round();
+  return int.tryParse(value.toString()) ??
+      double.tryParse(value.toString())?.round();
+}
+
 AssignedSupplierContact? _parseAssignedSupplier(Map<String, dynamic> json) {
   final value =
       _readJsonValue(
@@ -393,8 +401,37 @@ AssignedSupplierContact? _parseAssignedSupplier(Map<String, dynamic> json) {
       ) ??
       _readJsonValue(json, 'assignedSupplier', 'assigned_supplier');
   final map = _asStringKeyMap(value);
-  if (map == null) return null;
-  return AssignedSupplierContact.fromJson(map);
+  var contact = map == null ? null : AssignedSupplierContact.fromJson(map);
+  final topQuoted = _parseMinorUnits(
+    _readJsonValue(json, 'quotedPriceMinor', 'quoted_price_minor'),
+  );
+  if (topQuoted != null && topQuoted > 0) {
+    if (contact == null) {
+      contact = AssignedSupplierContact(
+        supplierId: 0,
+        businessName: 'Supplier',
+        quotedPriceMinor: topQuoted,
+      );
+    } else if (!contact.hasQuotedPrice) {
+      contact = contact.copyWith(quotedPriceMinor: topQuoted);
+    }
+  }
+  return contact;
+}
+
+AssignedSupplierContact? _mergeAssignedSupplier(
+  AssignedSupplierContact? previous,
+  AssignedSupplierContact? incoming,
+) {
+  if (incoming == null) return previous;
+  if (incoming.hasQuotedPrice) return incoming;
+  if (previous != null && previous.hasQuotedPrice) {
+    return incoming.copyWith(
+      quotedPriceMinor: previous.quotedPriceMinor,
+      quotedPromisedDate: previous.quotedPromisedDate ?? incoming.quotedPromisedDate,
+    );
+  }
+  return incoming.supplierId > 0 ? incoming : previous;
 }
 
 Order _parseOrder(Map<String, dynamic> json) {
@@ -829,6 +866,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   String? errorMessage;
   VoidCallback? _removeOrderUpdateListener;
   VoidCallback? _removeDeliveryQueueListener;
+  VoidCallback? _removeQuoteNotificationListener;
   bool _initialLoadReported = false;
   bool _sessionNeedsStart = false;
   int _sessionGeneration = 0;
@@ -843,12 +881,87 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
           .listenForOrderUpdates(_handleOrderUpdate);
       _removeDeliveryQueueListener ??= WebSocketService.instance
           .listenForDeliveryQueueUpdates(_handleDeliveryQueueUpdate);
+      _removeQuoteNotificationListener ??= WebSocketService.instance
+          .listenForNewNotifications(_handleQuoteNotification);
       await WebSocketService.instance.connectOrders(
         onConnect: _subscribeToAllOrders,
       );
     } catch (e) {
       debugPrint('WebSocket connection failed: $e');
     }
+  }
+
+  void _handleQuoteNotification(dynamic data) {
+    final map = _asStringKeyMap(data);
+    if (map == null) return;
+    final type = map['type']?.toString() ?? '';
+    if (type != 'supplier_quoted' && type != 'customer_confirmed_quote') {
+      return;
+    }
+    final metadata = _asStringKeyMap(map['metadata']);
+    final orderRef =
+        map['orderRef']?.toString() ??
+        map['order_ref']?.toString() ??
+        metadata?['orderRef']?.toString() ??
+        metadata?['orderId']?.toString();
+    final quoted = _parseMinorUnits(
+      metadata?['quotedPriceMinor'] ?? metadata?['quoted_price_minor'],
+    );
+    _applySupplierQuoted(orderRef, quoted);
+  }
+
+  void _applySupplierQuoted(String? orderRef, int? quotedPriceMinor) {
+    if (orderRef == null || orderRef.trim().isEmpty) {
+      unawaited(_fetchOrders());
+      return;
+    }
+    final index = state.indexWhere(
+      (order) =>
+          order.id == orderRef ||
+          order.orderId == orderRef ||
+          order.batchId == orderRef ||
+          order.batchOrderId == orderRef,
+    );
+    if (index < 0) {
+      unawaited(_fetchOrders());
+      return;
+    }
+    final order = state[index];
+    if (quotedPriceMinor != null && quotedPriceMinor > 0) {
+      final existing = order.assignedSupplier;
+      final patched = (existing ??
+              const AssignedSupplierContact(
+                supplierId: 0,
+                businessName: 'Supplier',
+              ))
+          .copyWith(
+            quotedPriceMinor: quotedPriceMinor,
+            clearQuoteConfirmation: true,
+          );
+      final next = [...state];
+      next[index] = order.copyWith(assignedSupplier: patched);
+      state = next;
+    }
+    unawaited(_refreshOrderById(order.id));
+  }
+
+  /// Refresh one order after opening details or receiving a supplier quote.
+  Future<void> refreshOrderByRouteId(String routeId) async {
+    Order? existing;
+    for (final order in state) {
+      if (order.id == routeId ||
+          order.orderId == routeId ||
+          order.batchId == routeId ||
+          order.batchOrderId == routeId) {
+        existing = order;
+        break;
+      }
+    }
+    if (existing != null) {
+      await _refreshOrderById(existing.id);
+      return;
+    }
+    await _fetchOrders();
   }
 
   void _handleDeliveryQueueUpdate(Map<String, dynamic> data) {
@@ -904,8 +1017,18 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
             previous.deliveryOtp!.trim().isNotEmpty) {
           updated = updated.copyWith(deliveryOtp: previous.deliveryOtp);
         }
+        // Realtime payloads are often partial and omit supplier quote fields.
+        updated = updated.copyWith(
+          assignedSupplier: _mergeAssignedSupplier(
+            previous.assignedSupplier,
+            updated.assignedSupplier,
+          ),
+        );
         final next = [...state];
         next[index] = updated;
+        if (updated.orderStatus == OrderStatus.supplierAssigned) {
+          unawaited(_refreshOrderById(updated.id));
+        }
         state = next;
         if (updated.orderStatus == OrderStatus.delivered ||
             updated.orderStatus == OrderStatus.collectedByCustomer) {
@@ -957,6 +1080,8 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     _removeOrderUpdateListener = null;
     _removeDeliveryQueueListener?.call();
     _removeDeliveryQueueListener = null;
+    _removeQuoteNotificationListener?.call();
+    _removeQuoteNotificationListener = null;
   }
 
   /// Emits a `subscribe` event for every order currently in state.
@@ -1446,6 +1571,7 @@ Map<String, dynamic> _cartItemPayload(CartItem item) {
     'fileMetadataId': item.fileMetadataId,
     'specialInstructions': item.specialInstructions,
     'specs': item.specs.isEmpty ? null : item.specs,
+    'addonIds': item.addonIds.isEmpty ? null : item.addonIds,
     'paperSpecs': item.paperSpecs != null
         ? {
             'paperSize': item.paperSpecs!.paperSize.name,

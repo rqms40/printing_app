@@ -312,6 +312,18 @@ const BUSINESS_CATALOG: CategorySeed[] = [
             specTemplate: 'sticker',
             sortOrder: 30,
           },
+          {
+            name: 'Stickers with Sintra Boards',
+            slug: 'stickers-sintra-boards',
+            description:
+              'Sticker prints mounted on Sintra board for rigid displays.',
+            mobileDescription: 'Sticker on 3mm or 5mm Sintra board.',
+            baseRate: 280,
+            quantityUnit: 'sq_ft',
+            allowedExtensions: IMAGE_EXTS,
+            specTemplate: 'sticker',
+            sortOrder: 40,
+          },
         ],
       },
       {

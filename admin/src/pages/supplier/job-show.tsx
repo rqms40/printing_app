@@ -186,6 +186,8 @@ export function SupplierJobShowPage() {
         setPricePesos(Number(data.assignment.quotedPriceMinor) / 100);
       } else if (data.assignment.finalPriceMinor != null) {
         setPricePesos(Number(data.assignment.finalPriceMinor) / 100);
+      } else if (Number(data.suggestedPrintPesos) > 0) {
+        setPricePesos(Number(data.suggestedPrintPesos));
       } else if (data.order.totalPrice) {
         setPricePesos(Number(data.order.totalPrice));
       }
@@ -732,6 +734,11 @@ export function SupplierJobShowPage() {
                         {item.categoryName || item.category}
                       </Text>
                       <Tag>qty {item.quantity}</Tag>
+                      {Number(item.totalPrice) > 0 ? (
+                        <Tag>
+                          ₱{Number(item.totalPrice).toFixed(2)}
+                        </Tag>
+                      ) : null}
                     </Space>
                   }
                   style={{ marginBottom: 12 }}
@@ -802,7 +809,11 @@ export function SupplierJobShowPage() {
                         addonBefore="₱"
                       />
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        Catalog prices are estimates. Send your final price first.
+                        Defaults to the customer order-item print total
+                        {detail?.suggestedPrintPesos
+                          ? ` (₱${Number(detail.suggestedPrintPesos).toFixed(2)})`
+                          : ''}
+                        . You can still change it before sending.
                       </Text>
                     </div>
                     <div>

@@ -12,6 +12,7 @@ import 'package:printing_app/features/customer/order/providers/delivery_fee_sett
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_concern_helpers.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_post_delivery_actions.dart';
+import 'package:printing_app/features/customer/orders/widgets/supplier_quote_payment_panel.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/services/api_client.dart';
@@ -56,7 +57,6 @@ class MarketplaceOrderActions extends ConsumerStatefulWidget {
 class _MarketplaceOrderActionsState
     extends ConsumerState<MarketplaceOrderActions> {
   bool _busy = false;
-  int? _qrReceiptFileId;
   final _rejectReasonController = TextEditingController();
   final _correctionNotesController = TextEditingController();
   final _concernNotesController = TextEditingController();
@@ -127,41 +127,6 @@ class _MarketplaceOrderActionsState
     }
     final formData = FormData.fromMap({'file': multipart});
     // Do not set Content-Type manually — Dio must attach multipart boundary.
-    final response = await ApiClient.instance.post(
-      '/files/upload',
-      data: formData,
-    );
-    final data = response.data;
-    if (data is Map) {
-      final id = data['id'] ?? data['fileMetadataId'] ?? data['file_metadata_id'];
-      if (id is num) return id.toInt();
-      if (id is String) return int.tryParse(id);
-    }
-    throw StateError('Upload response missing file id');
-  }
-
-  Future<int?> _uploadPaymentReceipt() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: kIsWeb,
-    );
-    if (result == null || result.files.isEmpty) return null;
-    final file = result.files.single;
-    final MultipartFile multipart;
-    if (kIsWeb || file.path == null) {
-      final bytes = file.bytes;
-      if (bytes == null) return null;
-      multipart = MultipartFile.fromBytes(bytes, filename: file.name);
-    } else {
-      multipart = await MultipartFile.fromFile(
-        file.path!,
-        filename: file.name,
-      );
-    }
-    final formData = FormData.fromMap({
-      'file': multipart,
-      'purpose': 'payment_receipt',
-    });
     final response = await ApiClient.instance.post(
       '/files/upload',
       data: formData,
@@ -386,11 +351,9 @@ class _MarketplaceOrderActionsState
         status == OrderStatus.supplierAccepted;
     final showReportConcern = canReportConcern(status);
     final quoted = order.assignedSupplier?.hasQuotedPrice == true;
-    final quoteConfirmed = order.assignedSupplier?.isQuoteConfirmed == true;
     final showQuoteWait =
         status == OrderStatus.supplierAssigned && !quoted;
-    final showQuoteConfirm =
-        status == OrderStatus.supplierAssigned && quoted && !quoteConfirmed;
+    final showQuoteConfirm = order.awaitingSupplierQuotePayment;
 
     if (!showCorrection &&
         !showProof &&
@@ -406,7 +369,6 @@ class _MarketplaceOrderActionsState
         DeliveryFeeSettings.fallback;
     final printCost = settings.printingCostOf(order);
     final totalDue = settings.customerFacingTotalOf(order);
-    final needsQrReceipt = order.paymentMethod.requiresPaymentReceipt;
     final title = showCorrection
         ? 'Artwork correction needed'
         : showProof
@@ -600,54 +562,8 @@ class _MarketplaceOrderActionsState
                     );
               }, 'Resubmitted to Ops QA'),
             )
-          else if (showQuoteConfirm) ...[
-            if (needsQrReceipt) ...[
-              AppButton(
-                label: _qrReceiptFileId == null
-                    ? 'Upload payment receipt'
-                    : 'Receipt uploaded',
-                variant: AppButtonVariant.secondary,
-                isFullWidth: true,
-                icon: HugeIcons.strokeRoundedUpload03,
-                onTap: () async {
-                  if (_busy) return;
-                  setState(() => _busy = true);
-                  try {
-                    final fileId = await _uploadPaymentReceipt();
-                    if (fileId == null) return;
-                    if (!mounted) return;
-                    setState(() => _qrReceiptFileId = fileId);
-                    await _snack('Payment receipt uploaded');
-                  } catch (e) {
-                    await _snack('Action failed: $e', error: true);
-                  } finally {
-                    if (mounted) setState(() => _busy = false);
-                  }
-                },
-              ),
-              const SizedBox(height: AppSpacing.sm),
-            ],
-            AppButton(
-              label: order.paymentMethod == PaymentMethod.cod
-                  ? 'Confirm ${formatCurrency(totalDue)} COD'
-                  : 'Pay ${formatCurrency(totalDue)}',
-              isFullWidth: true,
-              icon: HugeIcons.strokeRoundedCheckmarkCircle02,
-              onTap: () {
-                if (needsQrReceipt && _qrReceiptFileId == null) {
-                  _snack('Upload your QR payment receipt first', error: true);
-                  return;
-                }
-                _run(
-                  () => ref.read(ordersProvider.notifier).confirmSupplierQuote(
-                        order.id,
-                        qrReceiptFileId: _qrReceiptFileId,
-                      ),
-                  'Payment received. The supplier can now accept.',
-                );
-              },
-            ),
-          ]
+          else if (showQuoteConfirm)
+            SupplierQuotePaymentPanel(order: order, showIntro: false)
           else if (showProof) ...[
             AppButton(
               label: 'Approve proof',

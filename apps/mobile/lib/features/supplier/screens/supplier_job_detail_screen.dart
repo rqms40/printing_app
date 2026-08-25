@@ -71,6 +71,8 @@ class _SupplierJobDetailScreenState
     } else if (detail.finalPriceMinor != null) {
       _priceController.text =
           (detail.finalPriceMinor! / 100.0).toStringAsFixed(2);
+    } else if (detail.suggestedPrintPesos > 0) {
+      _priceController.text = detail.suggestedPrintPesos.toStringAsFixed(2);
     } else if (detail.totalPrice > 0) {
       _priceController.text = detail.totalPrice.toStringAsFixed(2);
     }
@@ -732,7 +734,9 @@ class _SpecsSection extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${item.title} · qty ${item.quantity}',
+                      item.totalPrice > 0
+                          ? '${item.title} · qty ${item.quantity} · ${formatCurrency(item.totalPrice)}'
+                          : '${item.title} · qty ${item.quantity}',
                       style: AppTypography.caption.copyWith(
                         color: colors.onBackground,
                         fontWeight: FontWeight.w700,
@@ -888,8 +892,9 @@ class _AcceptDeclineSection extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Send your final price first. You can accept only after the '
-            'customer places the order again.',
+            'Defaults to the order-item print total. You can still change '
+            'it before sending. Accept is available after the customer '
+            'confirms.',
             style: AppTypography.caption.copyWith(
               color: colors.onSurfaceDim,
             ),

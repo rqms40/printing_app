@@ -266,6 +266,27 @@ export function calculateChargeTotal(components: ChargeComponents): number {
  * Marketplace money/authorization defaults for new orders.
  * Snapshot stays null until freezeAuthorizationSnapshot (payment module).
  */
+/**
+ * Print subtotal stored on the order/items.
+ * Prefer the customer-facing item total (checkout order items) so the
+ * supplier final-price default matches what was stated at place-order.
+ * Fall back to the catalog quote when the client did not send a total.
+ */
+export function resolvePersistedPrintPesos(
+  clientTotal: unknown,
+  quotedTotal: unknown,
+): number {
+  const client = Number(clientTotal);
+  if (Number.isFinite(client) && client > 0) {
+    return Math.round((client + Number.EPSILON) * 100) / 100;
+  }
+  const quoted = Number(quotedTotal);
+  if (Number.isFinite(quoted) && quoted > 0) {
+    return Math.round((quoted + Number.EPSILON) * 100) / 100;
+  }
+  return 0;
+}
+
 export function applyMarketplacePaymentDefaults(
   order: Partial<Order>,
 ): Partial<Order> {
@@ -656,6 +677,10 @@ export class OrdersService {
             await this.assignedSupplierContactFromAssignment(
               supplierAssignment,
             ),
+          quotedPriceMinor: supplierAssignment?.quotedPriceMinor ?? null,
+          quotedPromisedDate: supplierAssignment?.quotedPromisedDate ?? null,
+          customerConfirmedQuoteAt:
+            supplierAssignment?.customerConfirmedQuoteAt ?? null,
           assignedSlot:
             order.batchOrderId == null
               ? undefined
@@ -984,7 +1009,10 @@ export class OrdersService {
       deliveryOption: orderData.deliveryOption,
     });
     const quoteItem = quote.items[0];
-    orderData.totalPrice = quote.subtotal;
+    orderData.totalPrice = resolvePersistedPrintPesos(
+      orderData.totalPrice,
+      quote.subtotal,
+    );
     orderData.category = quoteItem.categorySlug;
 
     // Catalog totals are estimates. The customer pays after the supplier quotes.
@@ -1123,9 +1151,22 @@ export class OrdersService {
       deliveryOption: dto.deliveryOption,
       speedTier: dto.speedTier,
     });
-    const subtotal = quote.subtotal;
-    // Client totals are display hints only. Persist the admin Delivery-options
-    // fee (deliveryFeePerKm); do not replace it with a zone or matching quote.
+    const itemPrintTotals = normalizedItems.map((item, index) =>
+      resolvePersistedPrintPesos(
+        item.totalPrice,
+        quote.items[index]?.printSubtotal,
+      ),
+    );
+    const subtotal =
+      Math.round(
+        (itemPrintTotals.reduce((sum, amount) => sum + amount, 0) +
+          Number.EPSILON) *
+          100,
+      ) / 100;
+    // Print totals: keep the checkout order-item amounts so supplier quote
+    // defaults match what the customer was shown. Delivery fee still comes
+    // from admin Delivery-options (deliveryFeePerKm); do not replace it with
+    // a zone or matching quote.
     const settings = await this.settingsService.getSettings();
     const perKmFee = Number(settings.deliveryFeePerKm);
     const deliveryFee =
@@ -1541,7 +1582,7 @@ export class OrdersService {
             categoryName: quoteItem.categoryName,
             pricingModel: quoteItem.pricingModel,
             quantity: item.quantity,
-            totalPrice: quoteItem.printSubtotal,
+            totalPrice: itemPrintTotals[index],
             fileName: item.fileName,
             fileUrl: item.fileUrl,
             fileMetadataId: item.fileMetadataId,

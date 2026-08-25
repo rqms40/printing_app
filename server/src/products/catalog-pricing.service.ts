@@ -65,7 +65,12 @@ export class CatalogPricingService {
         category,
         item.specs,
       );
-      return this.priceItem(category, selected, item.quantity);
+      return this.priceItem(
+        category,
+        selected,
+        item.quantity,
+        item.addonIds ?? [],
+      );
     });
     const subtotal = this.roundMoney(
       items.reduce((sum, item) => sum + item.printSubtotal, 0),
@@ -83,12 +88,13 @@ export class CatalogPricingService {
     category: CatalogCategory,
     selected: SelectedSpec[],
     quantity: number,
+    addonIds: number[],
   ): QuoteItemResult {
     if (category.pricingModel === PricingModel.PER_PAGE_MODIFIERS) {
-      return this.pricePerPage(category, selected, quantity);
+      return this.pricePerPage(category, selected, quantity, addonIds);
     }
     if (category.pricingModel === PricingModel.BASE_PLUS_MATERIAL_ESTIMATE) {
-      return this.priceBasePlusEstimate(category, selected, quantity);
+      return this.priceBasePlusEstimate(category, selected, quantity, addonIds);
     }
     throw new BadRequestException(
       `Unsupported pricing model ${String(category.pricingModel)}`,
@@ -99,12 +105,14 @@ export class CatalogPricingService {
     category: CatalogCategory,
     selected: SelectedSpec[],
     quantity: number,
+    addonIds: number[],
   ): QuoteItemResult {
     const pageCount = Number(
       selected.find((entry) => entry.spec.key === 'page_count')?.value ?? 1,
     );
     let multiplier = 1;
     let fixedFees = 0;
+    let unitRate = Number(category.baseRate) || 0;
     for (const entry of selected) {
       if (entry.option && entry.spec.pricingRole === PricingRole.MULTIPLIER) {
         multiplier *= entry.option.multiplier;
@@ -112,9 +120,22 @@ export class CatalogPricingService {
       if (entry.option && entry.spec.pricingRole === PricingRole.FIXED_FEE) {
         fixedFees += entry.option.fixedFee;
       }
+      if (
+        entry.option &&
+        entry.spec.pricingRole === PricingRole.UNIT_COST &&
+        Number(entry.option.unitCost) > 0
+      ) {
+        unitRate = Number(entry.option.unitCost);
+      }
     }
-    const base = category.baseRate * pageCount * multiplier;
-    const printSubtotal = this.roundMoney((base + fixedFees) * quantity);
+    const area = this.billedArea(selected);
+    const units =
+      (Number.isFinite(pageCount) && pageCount > 0 ? pageCount : 1) * area;
+    const base = unitRate * units * multiplier;
+    const addonTotal = this.addonTotal(category, addonIds, quantity, area);
+    const printSubtotal = this.roundMoney(
+      (base + fixedFees) * quantity + addonTotal,
+    );
     return {
       categoryId: category.id,
       categorySlug: category.slug,
@@ -126,6 +147,7 @@ export class CatalogPricingService {
       pricingBreakdown: [
         { label: 'Base', amount: this.roundMoney(base) },
         { label: 'Fixed fees', amount: this.roundMoney(fixedFees) },
+        { label: 'Add-ons', amount: addonTotal },
       ],
     };
   }
@@ -134,6 +156,7 @@ export class CatalogPricingService {
     category: CatalogCategory,
     selected: SelectedSpec[],
     quantity: number,
+    addonIds: number[],
   ): QuoteItemResult {
     const material = selected.find(
       (entry) =>
@@ -153,8 +176,15 @@ export class CatalogPricingService {
       return sum;
     }, 0);
     const materialEstimate = estimatedQuantity * unitCost;
+    const addonTotal = this.addonTotal(
+      category,
+      addonIds,
+      quantity,
+      estimatedQuantity || 1,
+    );
     const printSubtotal = this.roundMoney(
-      (category.baseRate + materialEstimate + fixedFees) * quantity,
+      (category.baseRate + materialEstimate + fixedFees) * quantity +
+        addonTotal,
     );
     return {
       categoryId: category.id,
@@ -171,8 +201,59 @@ export class CatalogPricingService {
           amount: this.roundMoney(materialEstimate),
         },
         { label: 'Fixed fees', amount: this.roundMoney(fixedFees) },
+        { label: 'Add-ons', amount: addonTotal },
       ],
     };
+  }
+
+  private billedArea(selected: SelectedSpec[]): number {
+    let area = 1;
+    let minCharge = 0;
+    for (const entry of selected) {
+      const specMeta = (entry.spec.metadata ?? {}) as {
+        minChargeArea?: number;
+      };
+      if (entry.spec.key === 'size' && Number(specMeta.minChargeArea) > 0) {
+        minCharge = Number(specMeta.minChargeArea);
+      }
+      const optionMeta = (entry.option?.metadata ?? {}) as {
+        outsourced?: boolean;
+      };
+      if (optionMeta.outsourced) {
+        throw new BadRequestException({
+          code: 'SIZE_OUTSOURCED',
+          message:
+            'This size exceeds in-house maximum and must be quoted separately',
+        });
+      }
+      if (entry.option && Number(entry.option.estimatedQuantity) > 0) {
+        area = Number(entry.option.estimatedQuantity);
+      }
+    }
+    if (minCharge > area) return minCharge;
+    return area;
+  }
+
+  private addonTotal(
+    category: CatalogCategory,
+    addonIds: number[],
+    quantity: number,
+    billedArea: number,
+  ): number {
+    if (!addonIds.length) return 0;
+    const addons = category.addons ?? [];
+    let sum = 0;
+    for (const id of addonIds) {
+      const addon = addons.find((entry) => entry.id === id && entry.isActive);
+      if (!addon) continue;
+      const price = Number(addon.price) || 0;
+      if (String(addon.priceType) === 'per_unit') {
+        sum += price * billedArea * quantity;
+      } else {
+        sum += price * quantity;
+      }
+    }
+    return this.roundMoney(sum);
   }
 
   private toSnapshot(entry: SelectedSpec): SpecSnapshotDraft {

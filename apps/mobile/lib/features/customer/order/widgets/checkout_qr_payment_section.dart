@@ -1,27 +1,19 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/widgets/payment_qr_code.dart';
 import 'package:printing_app/shared/services/api_client.dart';
-import 'package:share_plus/share_plus.dart';
 
-/// GRIDGO Maya InstaPay QR.
-///
-/// Key is `images/…` (file at `apps/mobile/images/Payment_QR.jpg`) so Flutter
-/// web fetches `assets/images/Payment_QR.jpg` — not the doubled
-/// `assets/assets/images/…` path that 404s when the key starts with `assets/`.
-const kPaymentQrAsset = 'images/Payment_QR.jpg';
+export 'package:printing_app/features/customer/order/widgets/payment_qr_code.dart'
+    show kPaymentQrAsset, PaymentQrCode;
 
 /// QR code + download/share + digital receipt upload for QR Ph (Instapay).
 class CheckoutQrPaymentSection extends ConsumerStatefulWidget {
@@ -35,41 +27,6 @@ class CheckoutQrPaymentSection extends ConsumerStatefulWidget {
 class _CheckoutQrPaymentSectionState
     extends ConsumerState<CheckoutQrPaymentSection> {
   bool _uploading = false;
-  bool _sharing = false;
-
-  Future<void> _shareOrDownloadQr() async {
-    if (_sharing) return;
-    setState(() => _sharing = true);
-    try {
-      final data = await rootBundle.load(kPaymentQrAsset);
-      final bytes = data.buffer.asUint8List();
-      if (kIsWeb) {
-        // Web: open share sheet with bytes when supported.
-        await Share.shareXFiles([
-          XFile.fromData(
-            bytes,
-            name: 'GRIDGO_QR_Ph_Instapay.jpg',
-            mimeType: 'image/jpeg',
-          ),
-        ], text: 'GRIDGO QR Ph (Instapay) — scan to pay');
-      } else {
-        final dir = await getTemporaryDirectory();
-        final file = File('${dir.path}/GRIDGO_QR_Ph_Instapay.jpg');
-        await file.writeAsBytes(bytes, flush: true);
-        await Share.shareXFiles([
-          XFile(file.path, mimeType: 'image/jpeg'),
-        ], text: 'GRIDGO QR Ph (Instapay) — scan to pay');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not share QR: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _sharing = false);
-    }
-  }
 
   Future<void> _pickAndUploadReceipt() async {
     if (_uploading) return;
@@ -198,64 +155,7 @@ class _CheckoutQrPaymentSectionState
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          // Single asset: assets/images/Payment_QR.jpg (natural aspect, no square crop).
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280),
-              child: ClipRRect(
-                borderRadius: AppRadius.borderMd,
-                child: Image.asset(
-                  kPaymentQrAsset,
-                  fit: BoxFit.fitWidth,
-                  width: double.infinity,
-                  filterQuality: FilterQuality.medium,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: 200,
-                    color: colors.surface,
-                    alignment: Alignment.center,
-                    child: Text(
-                      'QR image missing\n($kPaymentQrAsset)',
-                      textAlign: TextAlign.center,
-                      style: AppTypography.caption.copyWith(
-                        color: colors.onSurfaceDim,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          OutlinedButton.icon(
-            onPressed: _sharing ? null : _shareOrDownloadQr,
-            icon: _sharing
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: colors.brand,
-                    ),
-                  )
-                : HugeIcon(
-                    icon: HugeIcons.strokeRoundedDownload01,
-                    size: 18,
-                    color: colors.brand,
-                  ),
-            label: Text(
-              _sharing ? 'Preparing…' : 'Download / Share QR',
-              style: AppTypography.bodyBold.copyWith(
-                color: colors.brand,
-                fontSize: 13,
-              ),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: colors.brand,
-              side: BorderSide(color: colors.brand.withValues(alpha: 0.5)),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: AppRadius.borderLg),
-            ),
-          ),
+          const PaymentQrCode(),
           const SizedBox(height: AppSpacing.sm),
           FilledButton.icon(
             onPressed: _uploading ? null : _pickAndUploadReceipt,
