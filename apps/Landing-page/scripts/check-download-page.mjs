@@ -19,8 +19,12 @@ assert(
   'The landing Download navigation should route to /download.',
 );
 assert(
-  links.includes("const currentReleaseVersion = 'v1.12.6';"),
-  'Release metadata should name the current v1.12.6 beta.',
+  links.includes("const currentReleaseVersion = 'v1.12.7';"),
+  'Release metadata should name the current v1.12.7 beta.',
+);
+assert(
+  links.includes("const currentReleaseApkAssetName = 'GRIDGO-v1.12.7.apk';"),
+  'Release metadata should pin the v1.12.7 APK asset.',
 );
 assert(
   existsSync(downloadPagePath),
@@ -29,7 +33,7 @@ assert(
 
 const page = readFileSync(downloadPagePath, 'utf8');
 assert(page.includes('GRIDGO Android Beta'), 'Download page should clearly label the beta release.');
-assert(page.includes('GRIDGO-v1.12.6.apk'), 'Download page should offer the pinned v1.12.6 APK.');
+assert(page.includes('currentReleaseApkAssetName'), 'Download page should offer the pinned current APK.');
 assert(page.includes('GRIDGO-latest.apk'), 'Download page should offer the current latest APK.');
 assert(page.includes('Android only'), 'Download page should state platform availability accurately.');
 assert(!page.includes('GitHub'), 'Download page should not display GitHub branding.');

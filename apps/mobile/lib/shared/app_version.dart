@@ -2,7 +2,7 @@
 ///
 /// Keep this in sync with `pubspec.yaml`.
 abstract final class AppVersion {
-  static const version = '1.12.2';
-  static const buildNumber = '30';
+  static const version = '1.12.7';
+  static const buildNumber = '35';
   static const display = 'Version $version';
 }

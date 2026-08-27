@@ -8,11 +8,10 @@ import {
 } from './utils/landingLinks';
 
 const latestApkAssetName = 'GRIDGO-latest.apk';
-const versionedApkAssetName = 'GRIDGO-v1.12.6.apk';
 
 export default function DownloadPage() {
   const latestApkUrl = getLatestApkDownloadUrl(latestApkAssetName);
-  const versionedApkUrl = getVersionedApkDownloadUrl(versionedApkAssetName);
+  const versionedApkUrl = getVersionedApkDownloadUrl(currentReleaseApkAssetName);
 
   return (
     <main className="min-h-screen bg-[#050505] text-white px-5 py-8 md:px-10 md:py-12">
