@@ -125,7 +125,6 @@ export function HowItWorksVideos() {
 
   const count = HOW_IT_WORKS_VIDEOS.length;
   const active = HOW_IT_WORKS_VIDEOS[activeIndex];
-  const next = HOW_IT_WORKS_VIDEOS[(activeIndex + 1) % count];
 
   const go = useCallback(
     (delta: number) => {

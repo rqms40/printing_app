@@ -19,7 +19,7 @@ on:
         description: Compile-time SERVER_URL for physical device installs
         required: false
         type: string
-        default: "http://209.159.149.164:3000"
+        default: "https://gridgo-legacy.talasora.com"
 
 permissions: {}
 

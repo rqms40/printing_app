@@ -97,26 +97,11 @@ members table doesn't render the rank the API returns, the 100-credit grant
 amount isn't admin-configurable, addresses model only `isDefault` + recency,
 and `packages/api-types` is a skeleton.
 
-## Orchestration (Claude-led sessions)
+## Orchestration
 
-When Claude Code runs the session, Claude is the main orchestrator: it owns
-requirements, decisions, final review, and integration, and delegates by the
-Model Routing table in AGENTS.md. Before delegating, invoke the repo skill
-`.claude/skills/agent-delegation`. In short:
-
-- Hard/deep work — backend (NestJS/TypeORM/migrations/dispatch/beta logic),
-  security-sensitive changes → `codex exec -m gpt-5.6-sol` at reasoning
-  `high`/`xhigh`.
-- Moderately hard, cross-surface work → `gpt-5.6-sol` at `medium`.
-- Routine/mechanical work → `gpt-5.6-terra`.
-- UI/frontend design, visual polish, UX writing → keep with Claude (use the
-  frontend-design skill) when Claude is available.
-- Second opinions, adversarial review, UX critique → `grok` CLI (Grok 4.5);
-  never treat Grok output as source of truth.
-
-Delegated agents work read-only by default, return short structured reports,
-and implement only in isolated worktrees; verify their findings locally
-before acting on them.
+Follow `AGENTS.md`. It is harness-neutral and does not depend on a named
+model, CLI, or skill. Parallel subagents are optional; verify findings
+against local code before acting.
 
 ## Guardrails
 

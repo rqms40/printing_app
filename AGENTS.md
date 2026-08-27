@@ -6,8 +6,8 @@ This file applies to the whole `printing_app` repository. Keep nested overrides 
 
 ## Primary Operating Model
 
-- The agent harness running the session — Claude Code or Codex — is the main orchestrator for this repo. The orchestrator owns requirements, decisions, issue updates, final review, and integration, and delegates work to other models by the Model Routing table below.
-- Claude Code sessions additionally load `CLAUDE.md` (Claude-specific orientation) and the `.claude/skills/agent-delegation` skill; both defer to this file as the single source of truth.
+- This file is the single source of truth for repo rules, per-surface commands, issue routing, and the beta regression harness. Any agent session in this repo follows it.
+- The session agent owns requirements, decisions, issue updates, final review, and integration. Parallel subagents are optional for read-heavy work; verify their findings against local code before acting.
 - GitHub Issues are the main tracker. Trello is mirrored only; do not manually archive or delete Trello cards.
 - Before implementation, compare the issue against the current codebase. Imported Trello issues may be fixed, partial, duplicated, stale, unclear, or assigned to the wrong surface.
 - Preserve Trello markers in issue bodies: `Trello-Card-ID` and `Trello-ShortLink`.
@@ -19,18 +19,19 @@ This file applies to the whole `printing_app` repository. Keep nested overrides 
 ## Repo Surfaces
 
 - Mobile app: `apps/mobile`
-  - Flutter app with customer, rider, and admin role surfaces.
-  - Important areas include `features/customer`, `features/rider`, `features/admin`, `features/auth`, `features/tutorial`, and `shared`.
+  - Flutter app with client, rider, supplier, and leftover admin role surfaces.
+  - Important areas include `features/customer`, `features/rider`, `features/supplier`, `features/admin`, `features/auth`, `features/tutorial`, and `shared`.
 - Admin frontend: `admin`
-  - React/Vite/Refine/Ant Design operational dashboard.
-  - Important areas include orders, riders, users, products, delivery slots, notifications, credits, daily grid, beta mode, chat, TAM surveys, and admin settings.
+  - React/Vite/Refine/Ant Design dashboard for ops_admin, super_admin, and the supplier portal.
+  - Important areas include orders, QA, matching, riders, suppliers, users, products, delivery slots, notifications, credits, daily grid, beta mode, chat, TAM surveys, payouts, issues, geo-zones, and admin settings.
 - Backend/server/API: `server`
   - NestJS API with TypeORM modules.
-  - Important modules include auth, users, admin, orders, riders, delivery slots, payments, credits, files, storage, notifications, chat, products, printer profile, daily grid, beta mode, TAM surveys, support tickets, addresses, firebase, and health.
+  - Important modules include auth, users, admin, super, orders, riders, suppliers, matching, quality, issues, payouts, geo-zones, audit, delivery slots, payments, credits, files, storage, notifications, chat, products, printer profile, daily grid, home-feed, beta mode, TAM surveys, support tickets, addresses, mockup, firebase, and health.
 - Landing page / website: `apps/Landing-page`
   - React/Vite public website with components, assets, and utility code.
 - Deployment/config/CI/docs/assets:
   - Root dev stack: `docker-compose.dev.yml`.
+  - Public-IP + domain overlays on this host: `docker-compose.public.yml`, `docker-compose.domain.yml`.
   - Dockerfiles: `docker/`.
   - GitHub Actions: `.github/workflows/`.
   - Trello attachment mirror: `docs/trello/grid-it-team-pm/<card-short-link>/`.
@@ -41,8 +42,8 @@ This file applies to the whole `printing_app` repository. Keep nested overrides 
 Use labels to make agent orchestration obvious:
 
 - `surface:mobile`, `surface:admin`, `surface:backend`, `surface:landing`, `surface:docs`
-- `role:customer`, `role:rider`, `role:admin`
-- `module:*` for backend/admin/mobile feature modules when useful, such as `module:orders`, `module:payments`, `module:riders`, `module:files`, `module:notifications`, `module:products`, `module:chat`, `module:delivery-slots`, `module:daily-grid`, `module:beta-mode`, `module:tam-surveys`
+- `role:customer`, `role:rider`, `role:admin`, `role:supplier`
+- `module:*` for backend/admin/mobile feature modules when useful, such as `module:orders`, `module:payments`, `module:riders`, `module:files`, `module:notifications`, `module:products`, `module:chat`, `module:delivery-slots`, `module:daily-grid`, `module:beta-mode`, `module:tam-surveys`, `module:matching`, `module:quality`
 - `status:*` for tracker reality, such as `status:still-needed`, `status:partial`, `status:already-fixed`, `status:duplicate`, `status:outdated`, `status:unclear`
 - `agent:*` for orchestration hints, such as `agent:needs-repo-check`, `agent:needs-mobile-check`, `agent:needs-backend-check`, `agent:needs-admin-check`, `agent:needs-qa`, `agent:good-first-implementation`
 - `priority:*` for sequencing.
@@ -60,80 +61,14 @@ Close an issue only when the current code clearly satisfies it. When closing, ad
 7. Run the smallest relevant checks first, then broader checks before marking the work ready.
 8. If review or tests fail, fix and repeat the review loop before reporting completion.
 
-## Model Routing
-
-Route delegated work by difficulty and surface. Availability wins over preference: if a preferred model is unavailable, fall back to the next row that fits.
-
-| Task type | Route to |
-| --- | --- |
-| Hard/deep work: backend (NestJS, TypeORM, migrations, dispatch planning, beta/credits logic), security-sensitive changes, tricky debugging | Codex `gpt-5.6-sol`, reasoning effort `high` or `xhigh` |
-| Moderately hard: cross-surface contract changes, refactors, non-trivial features | Codex `gpt-5.6-sol`, reasoning effort `medium` |
-| Routine/mechanical: small fixes, test scaffolding, docs, scripted or repetitive edits | Codex `gpt-5.6-terra` (default effort) |
-| UI/frontend design, visual polish, UX writing — whenever Claude is available | Claude (Claude Code session or Claude subagent) |
-| Second opinion, adversarial review, UX critique, checklist generation | Grok 4.5 via the `grok` CLI — never the source of truth |
-
-Prefer `gpt-5.6-sol` over `terra` whenever the work is backend and deep, even if it looks small.
-
-This repo is checked out at different paths on different devices — for example `/Users/admin/personal/mobile/printing_app` (macOS) and `/home/jd/projects/printing_app` (Linux, user `jd`). Commands below use `<repo-root>` for the absolute path of the current device's checkout; when already inside the repo, `--cwd "$(pwd)"` works everywhere.
-
-Non-interactive Codex delegation:
-
-```bash
-# Hard/deep (backend, security, migrations)
-codex exec -m gpt-5.6-sol -c model_reasoning_effort="xhigh" \
-  --cwd <repo-root> \
-  "<task: smallest reviewable scope, expected checks, report format>"
-
-# Moderately hard
-codex exec -m gpt-5.6-sol -c model_reasoning_effort="medium" \
-  --cwd <repo-root> "<task>"
-
-# Routine/mechanical
-codex exec -m gpt-5.6-terra \
-  --cwd <repo-root> "<task>"
-```
-
 ## Agent Orchestration
 
-- Keep the main orchestrator thread responsible for requirements, decisions, issue updates, final review, and integration.
+- Keep the main session thread responsible for requirements, decisions, issue updates, final review, and integration.
 - Use parallel subagents for read-heavy work: repo exploration, issue triage, attachment inspection, test-log analysis, security review, and independent code review.
 - Use parallel implementation only when scopes are independent and file ownership is clear. Prefer separate branches or worktrees for implementation agents.
 - A delegated agent should return a short report with inspected files, findings, confidence, and recommended next action.
 - Verify delegated findings locally before changing code, closing issues, or reporting results.
 - Do not let multiple agents edit the same files at the same time without an explicit coordination point.
-
-## Grok 4.5 Delegation
-
-Grok 4.5 is available through the local `grok` CLI. Use it as an optional second model, not as the source of truth.
-
-Best uses for Grok:
-
-- independent second opinion on plans or issue triage
-- adversarial review of a proposed implementation
-- product/UX critique and copy alternatives
-- broad checklist generation
-- comparing competing implementation approaches
-- Grok subagent exploration when the user explicitly asks for Grok agents
-
-Default read-only delegation (`<repo-root>` = this device's checkout path, per Model Routing above):
-
-```bash
-grok --cwd <repo-root> \
-  --model grok-4.5 \
-  "Read-only review. Do not edit files. Review issue #XX and list risks, missing tests, and recommended next steps."
-```
-
-Use Grok for implementation only when the user explicitly asks for it. Isolate it in a worktree and review the diff before accepting anything:
-
-```bash
-grok --cwd <repo-root> \
-  --worktree=grok-issue-XX \
-  --model grok-4.5 \
-  --max-turns 8 \
-  "Implement issue #XX in the smallest safe scope. Do not push. Run relevant tests and summarize the diff."
-```
-
-If Grok output conflicts with local code, tests, or GitHub issue evidence, trust the verified local evidence.
 
 ## Development Commands
 
@@ -181,13 +116,24 @@ cd apps/Landing-page && npm run test:support-copy
 cd apps/Landing-page && npm run build
 ```
 
-Integrated dev stack:
+Integrated dev stack (loopback):
 
 ```bash
 GRIDGO_PUBLIC_HOST=127.0.0.1 docker compose -f docker-compose.dev.yml up --build
 ```
 
-The dev stack starts Postgres, MinIO, seed, API, mobile web, admin, and landing. Keep local secrets in ignored env files or a secret manager, not in committed files.
+This host's public HTTPS stack bakes the `gridgo-legacy*.talasora.com` origins via `docker-compose.domain.yml`. `GRIDGO_PUBLIC_HOST` is only the origin IP the edge proxy binds for Cloudflare — not a client-facing URL. Keep seed passwords in ignored `server/.env` (`GRIDGO_SEED_CUSTOMER_PASSWORD`, `GRIDGO_SEED_RIDER_PASSWORD`, `GRIDGO_SEED_ADMIN_PASSWORD`):
+
+```bash
+GRIDGO_PUBLIC_HOST=<origin-ip> GRIDGO_LAN_HOST=<lan-ip> GRIDGO_BIND_ADDR=127.0.0.1 \
+  docker compose --env-file server/.env \
+  -f docker-compose.dev.yml \
+  -f docker-compose.public.yml \
+  -f docker-compose.domain.yml \
+  up --build -d
+```
+
+The stack starts Postgres, MinIO, OSRM, seed, API, mobile web, admin, landing, and the public-edge proxy. Keep local secrets in ignored env files or a secret manager, not in committed files.
 
 ## Beta Workflow Regression
 
@@ -257,7 +203,7 @@ The live preflight assumes `docker-compose.dev.yml` is already running. The dest
 
 Mobile:
 
-- Respect the customer/rider/admin role split.
+- Respect the client/rider/supplier/admin role split.
 - Keep shared models, providers, services, and widgets in `lib/shared` only when they are genuinely cross-role.
 - For API changes, update mobile DTO/model parsing and backend contracts together.
 - Prefer existing Riverpod, GoRouter, theme, and feature folder patterns.
