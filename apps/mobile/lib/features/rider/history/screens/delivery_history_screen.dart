@@ -171,7 +171,9 @@ class DeliveryHistoryScreen extends ConsumerWidget {
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Text(
-                                        formatCurrency(view.order.deliveryFee),
+                                        formatCurrency(
+                                          view.order.deliveryFeePesos,
+                                        ),
                                         style: AppTypography.bodyBold.copyWith(
                                           color: colors.onBackground,
                                         ),

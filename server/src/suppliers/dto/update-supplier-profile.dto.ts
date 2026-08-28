@@ -104,6 +104,14 @@ export class UpdateSupplierProfileDto {
   @Min(1)
   logoFileId?: number | null;
 
+  /** Instapay / wallet QR used by ops to pay this supplier. */
+  @ApiPropertyOptional({ example: 88 })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsInt()
+  @Min(1)
+  payoutQrFileId?: number | null;
+
   /**
    * Ordered service focuses (1st = index 0). Must be unique catalog keys.
    * Example: ['signages', 'document_printing', 'apparel']

@@ -88,6 +88,10 @@ export class RiderProfile {
   @Column({ name: 'last_location_update', type: 'timestamp', nullable: true })
   lastLocationUpdate: Date;
 
+  /** Instapay / wallet QR ops uses to pay this rider. */
+  @Column({ name: 'payout_qr_file_id', type: 'int', nullable: true })
+  payoutQrFileId: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

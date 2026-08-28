@@ -85,7 +85,7 @@ class _DeliveryCardState extends State<DeliveryCard> {
                   if (destination?.fullAddress != null)
                     destination!.fullAddress!,
                   visual.label,
-                  formatCurrency(order.deliveryFee),
+                  formatCurrency(order.deliveryFeePesos),
                   if (widget.showRoutePosition &&
                       widget.view.routePosition != null)
                     'Route position ${widget.view.routePosition}',
@@ -169,7 +169,7 @@ class _DeliveryCardState extends State<DeliveryCard> {
                                   ),
                                   const Spacer(),
                                   Text(
-                                    formatCurrency(order.deliveryFee),
+                                    formatCurrency(order.deliveryFeePesos),
                                     style: AppTypography.bodyBold.copyWith(
                                       color: colors.onBackground,
                                     ),

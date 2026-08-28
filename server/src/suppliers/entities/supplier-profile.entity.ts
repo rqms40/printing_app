@@ -64,6 +64,10 @@ export class SupplierProfile {
   @Column({ name: 'logo_file_id', type: 'int', nullable: true })
   logoFileId: number | null;
 
+  /** QR image ops/super scans to pay this supplier. */
+  @Column({ name: 'payout_qr_file_id', type: 'int', nullable: true })
+  payoutQrFileId: number | null;
+
   /**
    * Free-form supplier attributes (equipment, finishes, languages, etc.).
    * Map of string key → string value for simple UI editing.

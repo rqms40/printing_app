@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OrderShow } from "./show";
 
-const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
+const { mockGet, mockNavigate } = vi.hoisted(() => ({
+  mockGet: vi.fn(),
+  mockNavigate: vi.fn(),
+}));
 
 vi.mock("@/providers/api-client", () => ({
   apiClient: { get: mockGet, patch: vi.fn(), post: vi.fn() },
@@ -14,6 +17,7 @@ vi.mock("@/providers/api-client", () => ({
 vi.mock("react-router", () => ({ useParams: () => ({ id: "42" }) }));
 vi.mock("react-router-dom", () => ({
   Link: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  useNavigate: () => mockNavigate,
 }));
 vi.mock("react-leaflet", () => ({
   MapContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -196,5 +200,39 @@ describe("OrderShow", () => {
     expect(await screen.findByText("Live rider tracking")).toBeInTheDocument();
     expect(screen.getByText("Heading to customer")).toBeInTheDocument();
     expect(screen.queryByText("Heading to supplier shop")).not.toBeInTheDocument();
+  });
+
+  it("opens rider payouts after the supplier completion payment is authorized", async () => {
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data:
+          url === "/admin/riders"
+            ? riders
+            : {
+                ...baseOrder,
+                order_status: "issue_window_open",
+                allowed_next_statuses: [],
+                assigned_rider_contact: {
+                  display_name: "Juan",
+                  rider_profile_id: 10,
+                  delivery_assignment_id: 91,
+                  delivery_status: "delivered",
+                },
+                assigned_supplier_contact: {
+                  business_name: "Polymedia",
+                  payout_deposit_authorized_at: "2026-08-28T00:00:00.000Z",
+                  payout_completion_authorized_at: "2026-08-28T12:00:00.000Z",
+                },
+              },
+      }),
+    );
+
+    render(<OrderShow />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Payment for rider on ORD-MARK",
+      }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith("/riders/payouts?riderId=10");
   });
 });

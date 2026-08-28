@@ -94,7 +94,10 @@ export class FilesService {
       if (
         normalizedPurpose === FilePurpose.PROOF_OF_DELIVERY ||
         normalizedPurpose === FilePurpose.BETA_TESTIMONIAL ||
-        normalizedPurpose === FilePurpose.PAYMENT_RECEIPT
+        normalizedPurpose === FilePurpose.PAYMENT_RECEIPT ||
+        normalizedPurpose === FilePurpose.SUPPLIER_PAYOUT_QR ||
+        normalizedPurpose === FilePurpose.RIDER_PAYOUT_QR ||
+        normalizedPurpose === FilePurpose.PAYOUT_RECEIPT
       ) {
         try {
           const buffer = await this.readUploadBuffer(file);
@@ -238,6 +241,9 @@ export class FilesService {
       FilePurpose.PROOF_OF_DELIVERY,
       FilePurpose.BETA_TESTIMONIAL,
       FilePurpose.PAYMENT_RECEIPT,
+      FilePurpose.SUPPLIER_PAYOUT_QR,
+      FilePurpose.RIDER_PAYOUT_QR,
+      FilePurpose.PAYOUT_RECEIPT,
     ]);
     if (!allowed.has(normalized as FilePurpose)) {
       throw new BadRequestException('File purpose not allowed');

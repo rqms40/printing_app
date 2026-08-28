@@ -135,6 +135,7 @@ export interface AdminRiderRecord {
   last_latitude: number | null;
   last_longitude: number | null;
   last_location_update: string | null;
+  payout_qr_file_id?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -1207,6 +1208,50 @@ export function normalizeOrder(input: unknown): Order & {
             "customer_confirmed_quote_at",
             "customerConfirmedQuoteAt",
           ) ?? null,
+        payout_qr_file_id: toOptionalNumber(c, "payout_qr_file_id", "payoutQrFileId"),
+        payout_qr_url:
+          toOptionalString(c, "payout_qr_url", "payoutQrUrl") ?? null,
+        payout_gross_minor:
+          read(c, "payout_gross_minor", "payoutGrossMinor") == null
+            ? null
+            : String(read(c, "payout_gross_minor", "payoutGrossMinor")),
+        payout_deposit_amount_minor:
+          read(c, "payout_deposit_amount_minor", "payoutDepositAmountMinor") ==
+          null
+            ? null
+            : String(
+                read(
+                  c,
+                  "payout_deposit_amount_minor",
+                  "payoutDepositAmountMinor",
+                ),
+              ),
+        payout_completion_amount_minor:
+          read(
+            c,
+            "payout_completion_amount_minor",
+            "payoutCompletionAmountMinor",
+          ) == null
+            ? null
+            : String(
+                read(
+                  c,
+                  "payout_completion_amount_minor",
+                  "payoutCompletionAmountMinor",
+                ),
+              ),
+        payout_deposit_authorized_at:
+          toOptionalString(
+            c,
+            "payout_deposit_authorized_at",
+            "payoutDepositAuthorizedAt",
+          ) ?? null,
+        payout_completion_authorized_at:
+          toOptionalString(
+            c,
+            "payout_completion_authorized_at",
+            "payoutCompletionAuthorizedAt",
+          ) ?? null,
       };
     })(),
     assigned_rider_contact: normalizeAssignedRiderContact(
@@ -1594,6 +1639,11 @@ export function normalizeAdminRider(input: unknown): AdminRiderRecord {
     last_location_update:
       toOptionalString(record, "last_location_update", "lastLocationUpdate") ??
       null,
+    payout_qr_file_id: toOptionalNumber(
+      record,
+      "payout_qr_file_id",
+      "payoutQrFileId",
+    ),
     created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
     updated_at: toRequiredString(record, EMPTY_DATE, "updated_at", "updatedAt"),
   };

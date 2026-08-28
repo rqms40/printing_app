@@ -107,6 +107,61 @@ describe('PayoutsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('records ops receipt on a new payout at authorization', async () => {
+    payoutRepo.findOne.mockResolvedValue(null);
+    const saved = await service.recordOpsAuthorization(9, {
+      receiptFileId: 77,
+      actorUserId: 7,
+    });
+    expect(payoutRepo.create).toHaveBeenCalled();
+    expect(saved.adminReceiptFileId).toBe(77);
+    expect(saved.authorizedByUserId).toBe(7);
+    expect(saved.authorizedAt).toBeInstanceOf(Date);
+    expect(saved.depositAmountMinor).toBe('5000');
+    expect(saved.completionAmountMinor).toBe('5000');
+    expect(auditService.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'payout_ops_receipt_recorded' }),
+      undefined,
+    );
+  });
+
+  it('records the remaining 50% receipt after the first installment', async () => {
+    payoutRepo.findOne.mockResolvedValue({
+      id: 4,
+      orderId: 9,
+      supplierId: 3,
+      grossMinor: '10000',
+      adminReceiptFileId: 77,
+      authorizedAt: new Date('2026-08-01T00:00:00.000Z'),
+      depositAmountMinor: '5000',
+      completionAmountMinor: '5000',
+    });
+    const saved = await service.recordOpsCompletionAuthorization(9, {
+      receiptFileId: 91,
+      actorUserId: 7,
+    });
+    expect(saved.completionReceiptFileId).toBe(91);
+    expect(saved.completionAuthorizedByUserId).toBe(7);
+    expect(saved.completionAuthorizedAt).toBeInstanceOf(Date);
+    expect(saved.completionAmountMinor).toBe('5000');
+    expect(auditService.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'payout_ops_completion_receipt_recorded',
+      }),
+      undefined,
+    );
+  });
+
+  it('rejects completion receipt when the first 50% was not authorized', async () => {
+    payoutRepo.findOne.mockResolvedValue(null);
+    await expect(
+      service.recordOpsCompletionAuthorization(9, {
+        receiptFileId: 91,
+        actorUserId: 7,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('invokes COD recon gate before release', async () => {
     payoutRepo.findOne.mockResolvedValue({
       id: 2,

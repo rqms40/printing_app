@@ -30,5 +30,13 @@ describe('Payout entity metadata', () => {
     expect(columnType(Payout, 'releaseAuthorityId')).toBe('int');
     expect(columnType(Payout, 'settlementState')).toBe('enum');
     expect(columnType(Payout, 'settlementReference')).toBe('varchar');
+    expect(columnType(Payout, 'adminReceiptFileId')).toBe('int');
+    expect(columnType(Payout, 'authorizedAt')).toBe('timestamptz');
+    expect(columnType(Payout, 'authorizedByUserId')).toBe('int');
+    expect(columnType(Payout, 'depositAmountMinor')).toBe('bigint');
+    expect(columnType(Payout, 'completionAmountMinor')).toBe('bigint');
+    expect(columnType(Payout, 'completionReceiptFileId')).toBe('int');
+    expect(columnType(Payout, 'completionAuthorizedAt')).toBe('timestamptz');
+    expect(columnType(Payout, 'completionAuthorizedByUserId')).toBe('int');
   });
 });

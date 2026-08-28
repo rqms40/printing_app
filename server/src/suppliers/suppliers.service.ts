@@ -33,6 +33,7 @@ import {
 
 export type SupplierProfileView = SupplierProfile & {
   logoUrl?: string | null;
+  payoutQrUrl?: string | null;
 };
 
 /** Human labels for onboarding service-focus catalog keys. */
@@ -374,6 +375,8 @@ export class SuppliersService {
       longitude: profile.longitude != null ? Number(profile.longitude) : null,
       logo_file_id: profile.logoFileId ?? null,
       logo_url: profile.logoUrl ?? null,
+      payout_qr_file_id: profile.payoutQrFileId ?? null,
+      payout_qr_url: profile.payoutQrUrl ?? null,
       attributes: profile.attributes ?? {},
       service_zones: profile.serviceZones ?? [],
       service_focus_ranks: ranks,
@@ -534,6 +537,17 @@ export class SuppliersService {
         profile.logoFileId = dto.logoFileId;
       }
     }
+    if (dto.payoutQrFileId !== undefined) {
+      if (dto.payoutQrFileId === null) {
+        profile.payoutQrFileId = null;
+      } else {
+        await this.assertPayoutQrFileOwned(
+          dto.payoutQrFileId,
+          options?.actorUserId ?? profile.userId,
+        );
+        profile.payoutQrFileId = dto.payoutQrFileId;
+      }
+    }
     if (dto.isActive !== undefined) {
       if (!options?.allowIsActive) {
         throw new ForbiddenException(
@@ -680,23 +694,50 @@ export class SuppliersService {
   private async withLogoUrl(
     profile: SupplierProfile,
   ): Promise<SupplierProfileView> {
-    if (!profile.logoFileId || !this.filesService) {
-      return Object.assign(profile, { logoUrl: null });
-    }
+    const logoUrl = await this.signedFileUrl(profile.logoFileId);
+    const payoutQrUrl = await this.signedFileUrl(profile.payoutQrFileId);
+    return Object.assign(profile, { logoUrl, payoutQrUrl });
+  }
+
+  private async signedFileUrl(fileId: number | null): Promise<string | null> {
+    if (!fileId || !this.filesService) return null;
     try {
-      const file = await this.fileRepo.findOne({
-        where: { id: profile.logoFileId },
-      });
-      if (!file?.objectKey) {
-        return Object.assign(profile, { logoUrl: file?.url ?? null });
-      }
-      const signed = await this.filesService.getPresignedUrlForKey(
-        file.objectKey,
-        3600,
-      );
-      return Object.assign(profile, { logoUrl: signed });
+      const file = await this.fileRepo.findOne({ where: { id: fileId } });
+      if (!file) return null;
+      if (!file.objectKey) return file.url ?? null;
+      return await this.filesService.getPresignedUrlForKey(file.objectKey, 3600);
     } catch {
-      return Object.assign(profile, { logoUrl: null });
+      return null;
+    }
+  }
+
+  private async assertPayoutQrFileOwned(
+    fileId: number,
+    userId: number,
+  ): Promise<void> {
+    const file = await this.fileRepo.findOne({ where: { id: fileId } });
+    if (!file) {
+      throw new BadRequestException({
+        code: 'payout_qr_file_not_found',
+        message: `File ${fileId} not found`,
+      });
+    }
+    if (file.uploadedBy != null && file.uploadedBy !== userId) {
+      throw new ForbiddenException({
+        code: 'payout_qr_file_not_owned',
+        message: 'Payout QR must be uploaded by the supplier account',
+      });
+    }
+    if (
+      file.purpose &&
+      file.purpose !== FilePurpose.GENERAL &&
+      file.purpose !== FilePurpose.PAPER &&
+      file.purpose !== FilePurpose.SUPPLIER_PAYOUT_QR
+    ) {
+      throw new BadRequestException({
+        code: 'payout_qr_file_invalid_purpose',
+        message: 'Payout QR must be an image upload (supplier_payout_qr)',
+      });
     }
   }
 

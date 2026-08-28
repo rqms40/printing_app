@@ -292,6 +292,17 @@ Order _parseOrder(Map<String, dynamic> json) {
       'delivery_address_id',
     )?.toString(),
     deliveryAddress: _parseOrderDeliveryAddress(json),
+    assignedSupplier: () {
+      final raw = _readJsonValue(
+        json,
+        'assignedSupplierContact',
+        'assigned_supplier_contact',
+      );
+      if (raw is! Map) return null;
+      return AssignedSupplierContact.fromJson(
+        Map<String, dynamic>.from(raw),
+      );
+    }(),
     assignedRiderId: _readJsonValue(
       json,
       'assignedRiderId',
@@ -550,18 +561,37 @@ class QueueNotifier extends StateNotifier<QueueState> {
   }
 
   /// Ops/super: authorize payment so production can start.
-  /// Returns true on success.
-  Future<bool> authorizePayment(String orderId) async {
+  /// Requires a payout receipt file id uploaded by this admin.
+  Future<bool> authorizePayment(
+    String orderId, {
+    required int receiptFileId,
+    bool completion = false,
+  }) async {
     try {
-      await ApiClient.instance.post('/orders/$orderId/authorize-payment');
+      await ApiClient.instance.post(
+        completion
+            ? '/orders/$orderId/authorize-completion-payment'
+            : '/orders/$orderId/authorize-payment',
+        data: {'receiptFileId': receiptFileId},
+      );
       final updated = state.orders.map((o) {
-        if (o.id == orderId) {
+        if (o.id != orderId) return o;
+        if (completion) {
+          final supplier = o.assignedSupplier;
           return o.copyWith(
-            orderStatus: OrderStatus.paymentAuthorized,
+            assignedSupplier: supplier?.copyWith(
+              payoutCompletionAuthorizedAt: DateTime.now(),
+            ),
             updatedAt: DateTime.now(),
           );
         }
-        return o;
+        return o.copyWith(
+          orderStatus: OrderStatus.paymentAuthorized,
+          assignedSupplier: o.assignedSupplier?.copyWith(
+            payoutDepositAuthorizedAt: DateTime.now(),
+          ),
+          updatedAt: DateTime.now(),
+        );
       }).toList();
       state = state.copyWith(orders: updated);
       return true;

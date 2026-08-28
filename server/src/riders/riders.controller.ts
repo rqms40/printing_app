@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { RidersService } from './riders.service';
+import { RiderPayoutsService } from './rider-payouts.service';
 import { UpdateRiderProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
@@ -32,6 +33,7 @@ import { numericPoint } from './dispatch-plan.service';
 export class RidersController {
   constructor(
     private ridersService: RidersService,
+    private riderPayoutsService: RiderPayoutsService,
     @Inject(ROUTING_PROVIDER) private routingProvider: RoutingProvider,
   ) {}
 
@@ -109,6 +111,11 @@ export class RidersController {
   @Get('earnings')
   getEarnings(@Request() req: RequestWithUser) {
     return this.ridersService.getEarnings(req.user.sub);
+  }
+
+  @Get('payouts')
+  getPayouts(@Request() req: RequestWithUser) {
+    return this.riderPayoutsService.listForRiderUser(req.user.sub);
   }
 
   @Get('route')

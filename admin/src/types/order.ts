@@ -81,6 +81,13 @@ export interface AssignedSupplierContact {
   quoted_price_minor?: string | number | null;
   quoted_promised_date?: string | null;
   customer_confirmed_quote_at?: string | null;
+  payout_qr_file_id?: number | null;
+  payout_qr_url?: string | null;
+  payout_gross_minor?: string | number | null;
+  payout_deposit_amount_minor?: string | number | null;
+  payout_completion_amount_minor?: string | number | null;
+  payout_deposit_authorized_at?: string | null;
+  payout_completion_authorized_at?: string | null;
 }
 
 export interface DeliveryProof {

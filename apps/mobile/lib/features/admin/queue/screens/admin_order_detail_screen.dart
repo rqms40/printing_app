@@ -1,6 +1,10 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -13,12 +17,15 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/order_status_history.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/shared/widgets/section_header.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
+import 'package:printing_app/utils/file_helpers.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Admin detail screen for a single order.
 class AdminOrderDetailScreen extends ConsumerStatefulWidget {
@@ -72,6 +79,18 @@ class _AdminOrderDetailScreenState
     final showAuthorizePayment =
         order.orderStatus == OrderStatus.supplierAccepted ||
         order.orderStatus == OrderStatus.awaitingPayment;
+    final showAuthorizeCompletionPayment =
+        (order.orderStatus == OrderStatus.delivered ||
+            order.orderStatus == OrderStatus.collectedByCustomer ||
+            order.orderStatus == OrderStatus.issueWindowOpen ||
+            order.orderStatus == OrderStatus.completed) &&
+        order.assignedSupplier != null &&
+        order.assignedSupplier!.payoutDepositAuthorizedAt != null &&
+        order.assignedSupplier!.payoutCompletionAuthorizedAt == null;
+    final showPayRider =
+        order.assignedSupplier?.payoutCompletionAuthorizedAt != null &&
+        order.assignedRider != null &&
+        order.assignedRider!.riderProfileId.trim().isNotEmpty;
     final lineItems = order.lineItems;
 
     return Scaffold(
@@ -163,7 +182,36 @@ class _AdminOrderDetailScreenState
               label: 'Authorize Payment',
               icon: HugeIcons.strokeRoundedCreditCard,
               isFullWidth: true,
-              onTap: () => _confirmAuthorizePayment(context, order),
+              onTap: () => _openAuthorizePayment(
+                context,
+                order,
+                completion: false,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+          if (showAuthorizeCompletionPayment) ...[
+            AppButton(
+              label: 'Authorize Payment',
+              icon: HugeIcons.strokeRoundedCreditCard,
+              isFullWidth: true,
+              onTap: () => _openAuthorizePayment(
+                context,
+                order,
+                completion: true,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+          if (showPayRider) ...[
+            AppButton(
+              label: 'Payment for Rider',
+              icon: HugeIcons.strokeRoundedDeliveryTruck02,
+              isFullWidth: true,
+              onTap: () {
+                final riderId = order.assignedRider!.riderProfileId.trim();
+                context.push('/admin/riders/payouts?riderId=$riderId');
+              },
             ),
             const SizedBox(height: AppSpacing.sm),
           ],
@@ -580,32 +628,245 @@ class _AdminOrderDetailScreenState
     }
   }
 
-  void _confirmAuthorizePayment(BuildContext context, Order order) {
-    ConfirmationDialog.show(
-      context,
-      title: 'Authorize payment',
-      message:
-          'Authorize Pilot Credits or eligible COD for ${order.orderId}? '
-          'Production can start after authorization. Credits charge the customer.',
-      confirmLabel: 'Authorize',
-      cancelLabel: 'Cancel',
-      onConfirm: () async {
-        Navigator.of(context).pop();
-        final ok = await ref
-            .read(queueProvider.notifier)
-            .authorizePayment(order.id);
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              ok
-                  ? 'Payment authorized — production can start'
-                  : 'Could not authorize payment',
-            ),
-          ),
+  Future<void> _openAuthorizePayment(
+    BuildContext context,
+    Order order, {
+    bool completion = false,
+  }) async {
+    String? qrUrl = order.assignedSupplier?.payoutQrUrl;
+    AssignedSupplierContact? supplier = order.assignedSupplier;
+    try {
+      final res = await ApiClient.instance.get('/admin/orders/${order.id}');
+      final data = res.data;
+      if (data is Map) {
+        final raw = data['assigned_supplier_contact'] ??
+            data['assignedSupplierContact'];
+        if (raw is Map) {
+          final contact = AssignedSupplierContact.fromJson(
+            Map<String, dynamic>.from(raw),
+          );
+          supplier = contact;
+          if (contact.payoutQrUrl != null &&
+              contact.payoutQrUrl!.trim().isNotEmpty) {
+            qrUrl = contact.payoutQrUrl;
+          }
+        }
+      }
+    } catch (_) {
+      /* use list snapshot */
+    }
+    if (!context.mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        int? receiptFileId;
+        String? receiptName;
+        var uploading = false;
+        var authorizing = false;
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final colors = _colors(ctx);
+            Future<void> uploadReceipt() async {
+              final picked = await ImagePicker().pickImage(
+                source: ImageSource.gallery,
+                imageQuality: 85,
+                maxWidth: 1600,
+              );
+              if (picked == null) return;
+              setSheetState(() => uploading = true);
+              try {
+                final filename = picked.name.trim().isEmpty
+                    ? 'payout-receipt.jpg'
+                    : picked.name;
+                final mime = DioMediaType.parse(
+                  mimeTypeForExtension(getFileExtension(filename)),
+                );
+                final FormData form;
+                if (kIsWeb) {
+                  form = FormData.fromMap({
+                    'purpose': 'payout_receipt',
+                    'file': MultipartFile.fromBytes(
+                      await picked.readAsBytes(),
+                      filename: filename,
+                      contentType: mime,
+                    ),
+                  });
+                } else {
+                  form = FormData.fromMap({
+                    'purpose': 'payout_receipt',
+                    'file': await MultipartFile.fromFile(
+                      picked.path,
+                      filename: filename,
+                      contentType: mime,
+                    ),
+                  });
+                }
+                final uploadRes = await ApiClient.instance.post(
+                  '/files/upload',
+                  data: form,
+                  options: Options(contentType: 'multipart/form-data'),
+                );
+                final idRaw = uploadRes.data is Map
+                    ? (uploadRes.data as Map)['id']
+                    : null;
+                final id = idRaw is int
+                    ? idRaw
+                    : int.tryParse(idRaw?.toString() ?? '');
+                if (id == null || id <= 0) {
+                  throw StateError('Upload did not return a file id');
+                }
+                setSheetState(() {
+                  receiptFileId = id;
+                  receiptName = filename;
+                  uploading = false;
+                });
+              } catch (_) {
+                setSheetState(() => uploading = false);
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Receipt upload failed')),
+                  );
+                }
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: AppSpacing.xl,
+                right: AppSpacing.xl,
+                top: AppSpacing.lg,
+                bottom:
+                    MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Authorize payment',
+                      style: AppTypography.h3
+                          .copyWith(color: colors.onBackground),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      completion
+                          ? 'Pay the remaining 50% (${formatCurrency(((supplier?.payoutCompletionAmountMinor ?? 0) / 100).toDouble())}) to ${supplier?.businessName ?? 'the supplier'} with their QR, then upload the GRIDGO receipt.'
+                          : 'Pay 50% (${formatCurrency(((supplier?.payoutDepositAmountMinor ?? 0) / 100).toDouble())}) to ${supplier?.businessName ?? 'the supplier'} with their QR, then upload the GRIDGO receipt. This starts production.',
+                      style: AppTypography.body
+                          .copyWith(color: colors.onSurfaceDim),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    if (qrUrl != null && qrUrl.isNotEmpty) ...[
+                      ClipRRect(
+                        borderRadius: AppRadius.borderMd,
+                        child: Image.network(
+                          qrUrl,
+                          height: 220,
+                          width: double.infinity,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () async {
+                          final uri = Uri.tryParse(qrUrl!);
+                          if (uri == null) return;
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        },
+                        icon: const Icon(Icons.download_outlined),
+                        label: const Text('Download QR'),
+                      ),
+                    ] else
+                      Text(
+                        'Supplier payout QR is missing. Ask the shop to upload it on Payouts.',
+                        style: AppTypography.body
+                            .copyWith(color: colors.warning),
+                      ),
+                    const SizedBox(height: AppSpacing.md),
+                    OutlinedButton.icon(
+                      onPressed: uploading ? null : uploadReceipt,
+                      icon: uploading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.upload_file),
+                      label: Text(
+                        receiptName == null
+                            ? 'Upload receipt'
+                            : 'Replace receipt',
+                      ),
+                    ),
+                    if (receiptName != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
+                        child: Text(
+                          '$receiptName uploaded',
+                          style: AppTypography.caption
+                              .copyWith(color: colors.accent),
+                        ),
+                      ),
+                    const SizedBox(height: AppSpacing.lg),
+                    AppButton(
+                      label: 'Authorize payment',
+                      icon: HugeIcons.strokeRoundedCreditCard,
+                      isFullWidth: true,
+                      isLoading: authorizing,
+                      onTap: receiptFileId == null ||
+                              qrUrl == null ||
+                              qrUrl.isEmpty ||
+                              authorizing
+                          ? null
+                          : () async {
+                              setSheetState(() => authorizing = true);
+                              final ok = await ref
+                                  .read(queueProvider.notifier)
+                                  .authorizePayment(
+                                    order.id,
+                                    receiptFileId: receiptFileId!,
+                                    completion: completion,
+                                  );
+                              if (!ctx.mounted) return;
+                              if (ok) {
+                                Navigator.of(ctx).pop();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        completion
+                                            ? 'Final 50% authorized — supplier is fully paid'
+                                            : 'Payment authorized — production can start',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              } else {
+                                setSheetState(() => authorizing = false);
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Could not authorize payment',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
-      onCancel: () => Navigator.of(context).pop(),
     );
   }
 

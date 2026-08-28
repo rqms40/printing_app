@@ -442,6 +442,7 @@ function App() {
                 </Route>
                 <Route path="/ops/claims" element={<OpsClaimsPage />} />
                 <Route path="/riders" element={<RiderList />} />
+                <Route path="/riders/payouts" element={<RiderList />} />
                 <Route path="/suppliers">
                   <Route index element={<SupplierProfilesListPage />} />
                   <Route path="leaderboard" element={<SupplierLeaderboardPage />} />

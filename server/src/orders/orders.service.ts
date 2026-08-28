@@ -56,7 +56,10 @@ import { isCodPaymentMethod } from '../payments/cod-eligibility';
 import { isQrPhInstapayPaymentMethod } from '../payments/qr-ph-instapay';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
-import { FileMetadata } from '../files/entities/file-metadata.entity';
+import {
+  FileMetadata,
+  FilePurpose,
+} from '../files/entities/file-metadata.entity';
 import {
   CreateBatchOrderDto,
   TemporaryDeliveryAddressDto,
@@ -94,6 +97,7 @@ import {
 } from './order-status-transition';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
+import { supplierPayoutInstallmentSnapshot } from '../payouts/payout-installments';
 import { IssuesService } from '../issues/issues.service';
 import { MatchingService } from '../matching/matching.service';
 
@@ -570,6 +574,10 @@ export class OrdersService {
       }
     }
 
+    const payoutByOrderId = this.payoutsService
+      ? await this.payoutsService.findLatestByOrderIds(orderIds)
+      : new Map();
+
     const riderIds = [
       ...new Set(
         (assignments ?? [])
@@ -673,10 +681,11 @@ export class OrdersService {
             assignment,
             canTrackDelivery,
           ),
-          assignedSupplierContact:
-            await this.assignedSupplierContactFromAssignment(
-              supplierAssignment,
-            ),
+          assignedSupplierContact: await this.assignedSupplierContactFromAssignment(
+            supplierAssignment,
+            payoutByOrderId.get(order.id) ?? null,
+            order,
+          ),
           quotedPriceMinor: supplierAssignment?.quotedPriceMinor ?? null,
           quotedPromisedDate: supplierAssignment?.quotedPromisedDate ?? null,
           customerConfirmedQuoteAt:
@@ -693,6 +702,14 @@ export class OrdersService {
 
   private assignedSupplierContactFromAssignment(
     assignment: SupplierAssignment | undefined,
+    payout?: {
+      grossMinor?: string | null;
+      depositAmountMinor?: string | null;
+      completionAmountMinor?: string | null;
+      authorizedAt?: Date | null;
+      completionAuthorizedAt?: Date | null;
+    } | null,
+    order?: Order,
   ): Promise<{
     supplierId: number;
     businessName: string;
@@ -709,12 +726,27 @@ export class OrdersService {
     quotedPriceMinor: string | null;
     quotedPromisedDate: Date | null;
     customerConfirmedQuoteAt: Date | null;
+    payoutQrFileId: number | null;
+    payoutQrUrl: string | null;
+    payoutGrossMinor: string | null;
+    payoutDepositAmountMinor: string | null;
+    payoutCompletionAmountMinor: string | null;
+    payoutDepositAuthorizedAt: Date | string | null;
+    payoutCompletionAuthorizedAt: Date | string | null;
   } | null> {
-    return this.buildAssignedSupplierContact(assignment);
+    return this.buildAssignedSupplierContact(assignment, payout, order);
   }
 
   private async buildAssignedSupplierContact(
     assignment: SupplierAssignment | undefined,
+    payout?: {
+      grossMinor?: string | null;
+      depositAmountMinor?: string | null;
+      completionAmountMinor?: string | null;
+      authorizedAt?: Date | null;
+      completionAuthorizedAt?: Date | null;
+    } | null,
+    order?: Order,
   ): Promise<{
     supplierId: number;
     businessName: string;
@@ -731,6 +763,13 @@ export class OrdersService {
     quotedPriceMinor: string | null;
     quotedPromisedDate: Date | null;
     customerConfirmedQuoteAt: Date | null;
+    payoutQrFileId: number | null;
+    payoutQrUrl: string | null;
+    payoutGrossMinor: string | null;
+    payoutDepositAmountMinor: string | null;
+    payoutCompletionAmountMinor: string | null;
+    payoutDepositAuthorizedAt: Date | string | null;
+    payoutCompletionAuthorizedAt: Date | string | null;
   } | null> {
     if (!assignment) return null;
     const supplier = assignment.supplier;
@@ -740,6 +779,8 @@ export class OrdersService {
       supplier?.serviceZones ?? [],
     );
     const logoUrl = await this.signFileId(supplier?.logoFileId ?? null);
+    const payoutQrFileId = supplier?.payoutQrFileId ?? null;
+    const payoutQrUrl = await this.signFileId(payoutQrFileId);
     let evidenceIds = this.normalizeFileIdList(
       assignment.selfQcEvidenceFileIds,
     );
@@ -764,14 +805,23 @@ export class OrdersService {
       address,
       latitude:
         supplier?.latitude != null ? Number(supplier.latitude) : null,
-      longitude:
-        supplier?.longitude != null ? Number(supplier.longitude) : null,
+      longitude: supplier?.longitude != null ? Number(supplier.longitude) : null,
       broadAddress,
       selfQcEvidenceUrls,
       selfQcEvidenceFileIds: evidenceIds,
       quotedPriceMinor: assignment.quotedPriceMinor ?? null,
       quotedPromisedDate: assignment.quotedPromisedDate ?? null,
       customerConfirmedQuoteAt: assignment.customerConfirmedQuoteAt ?? null,
+      payoutQrFileId,
+      payoutQrUrl,
+      ...supplierPayoutInstallmentSnapshot(
+        payout?.grossMinor ??
+          assignment.finalPriceMinor ??
+          assignment.quotedPriceMinor ??
+          order?.finalTotalMinor ??
+          '0',
+        payout,
+      ),
     };
   }
 
@@ -1761,6 +1811,15 @@ export class OrdersService {
   /** Default ops payment-authorization window after supplier accept (PRD §6.3). */
   static readonly PAYMENT_AUTH_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
+  /** Remaining 50% supplier payment is allowed once the job is in the customer's hands. */
+  static readonly SUPPLIER_COMPLETION_PAYMENT_STATUSES: readonly OrderStatus[] =
+    [
+      OrderStatus.DELIVERED,
+      OrderStatus.COLLECTED_BY_CUSTOMER,
+      OrderStatus.ISSUE_WINDOW_OPEN,
+      OrderStatus.COMPLETED,
+    ];
+
   static creditReserveIdempotencyKey(orderId: number): string {
     return `payment-auth:reserve:order:${orderId}`;
   }
@@ -1782,6 +1841,7 @@ export class OrdersService {
   async authorizePayment(
     orderId: number,
     context: OrderStatusChangeContext,
+    dto: { receiptFileId?: number } = {},
   ): Promise<Order> {
     if (!Number.isInteger(context?.actorUserId) || context.actorUserId <= 0) {
       throw new BadRequestException('Status change actor is required');
@@ -1824,6 +1884,12 @@ export class OrdersService {
         message: `Cannot authorize payment from status ${precheck.orderStatus}`,
       });
     }
+
+    const receiptFileId = await this.assertOpsPayoutReceiptFile(
+      dto.receiptFileId,
+      context.actorUserId,
+    );
+    await this.assertSupplierHasPayoutQr(orderId);
 
     let creditMutation: CreditMutationResult | null = null;
 
@@ -1929,6 +1995,18 @@ export class OrdersService {
         manager,
       );
 
+      if (this.payoutsService) {
+        await this.payoutsService.recordOpsAuthorization(orderId, {
+          receiptFileId,
+          actorUserId: context.actorUserId,
+          manager,
+        });
+      } else {
+        this.logger.warn(
+          `PayoutsService missing; ops receipt ${receiptFileId} not recorded for order ${orderId}`,
+        );
+      }
+
       return {
         previous: { ...locked, orderStatus: fromStatus } as Order,
         order: saved,
@@ -1954,6 +2032,69 @@ export class OrdersService {
       );
       return (await this.findById(orderId)) ?? result.order;
     }
+  }
+
+  /**
+   * Authorize the remaining 50% supplier payment after delivery/collection.
+   * Same QR + receipt gate as the first installment; does not change order status.
+   */
+  async authorizeCompletionPayment(
+    orderId: number,
+    context: OrderStatusChangeContext,
+    dto: { receiptFileId?: number } = {},
+  ): Promise<Order> {
+    if (!Number.isInteger(context?.actorUserId) || context.actorUserId <= 0) {
+      throw new BadRequestException('Status change actor is required');
+    }
+
+    const order = await this.ordersRepo.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+
+    const actorRole = (context.actorRole ?? '').toLowerCase();
+    const isOps =
+      actorRole === 'ops_admin' ||
+      actorRole === 'super_admin' ||
+      actorRole === 'system';
+    if (!isOps) {
+      throw new ForbiddenException({
+        code: 'ops_only_payment_authorization',
+        message:
+          'Only ops or super admin can authorize the supplier completion payment',
+      });
+    }
+
+    if (
+      !OrdersService.SUPPLIER_COMPLETION_PAYMENT_STATUSES.includes(
+        order.orderStatus,
+      )
+    ) {
+      throw new BadRequestException({
+        code: 'invalid_status_for_completion_payment',
+        message: `Cannot authorize the remaining supplier payment from status ${order.orderStatus}`,
+      });
+    }
+
+    const receiptFileId = await this.assertOpsPayoutReceiptFile(
+      dto.receiptFileId,
+      context.actorUserId,
+    );
+    await this.assertSupplierHasPayoutQr(orderId);
+
+    if (!this.payoutsService) {
+      throw new BadRequestException({
+        code: 'payouts_unavailable',
+        message: 'Supplier payouts are not available',
+      });
+    }
+
+    await this.payoutsService.recordOpsCompletionAuthorization(orderId, {
+      receiptFileId,
+      actorUserId: context.actorUserId,
+    });
+
+    return (await this.findById(orderId)) ?? order;
   }
 
   /** Charge the customer for the supplier quote (credits / COD / QR receipt). */
@@ -2523,6 +2664,54 @@ export class OrdersService {
     }
 
     return address;
+  }
+
+  private async assertOpsPayoutReceiptFile(
+    fileId: number | undefined,
+    actorUserId: number,
+  ): Promise<number> {
+    if (!Number.isInteger(fileId) || !fileId || fileId <= 0) {
+      throw new BadRequestException({
+        code: 'payout_receipt_required',
+        message:
+          'Upload a payment receipt before authorizing payment to the supplier',
+      });
+    }
+    const file = await this.fileMetadataRepo.findOne({ where: { id: fileId } });
+    if (!file || file.uploadedBy !== actorUserId) {
+      throw new BadRequestException({
+        code: 'payout_receipt_invalid',
+        message: 'Payout receipt is invalid or was not uploaded by you',
+      });
+    }
+    if (file.purpose !== FilePurpose.PAYOUT_RECEIPT) {
+      throw new BadRequestException({
+        code: 'payout_receipt_invalid',
+        message: 'Uploaded file is not a payout receipt',
+      });
+    }
+    return fileId;
+  }
+
+  private async assertSupplierHasPayoutQr(orderId: number): Promise<void> {
+    const assignment = await this.supplierAssignmentRepo.findOne({
+      where: {
+        orderId,
+        decision: In([
+          SupplierAssignmentDecision.ACCEPTED,
+          SupplierAssignmentDecision.PENDING,
+        ]),
+      },
+      relations: { supplier: true },
+      order: { id: 'DESC' },
+    });
+    if (!assignment?.supplier?.payoutQrFileId) {
+      throw new BadRequestException({
+        code: 'supplier_payout_qr_required',
+        message:
+          'The assigned supplier must upload a payout QR before payment can be authorized',
+      });
+    }
   }
 
   private async findOwnedFileMetadata(

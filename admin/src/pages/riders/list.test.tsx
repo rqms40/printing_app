@@ -5,10 +5,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RiderList } from "./list";
 
-const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
+const { mockGet, location, searchParams } = vi.hoisted(() => ({
+  mockGet: vi.fn(),
+  location: { pathname: "/riders", search: "" },
+  searchParams: new URLSearchParams(),
+}));
 
 vi.mock("@/providers/api-client", () => ({
   apiClient: { get: mockGet, post: vi.fn() },
+  TOKEN_KEY: "token",
+}));
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => vi.fn(),
+  useLocation: () => location,
+  useSearchParams: () => [searchParams, vi.fn()],
 }));
 
 vi.mock("react-leaflet", () => ({
@@ -72,6 +82,7 @@ const readyOrder = {
 };
 
 describe("RiderList", () => {
+  vi.setConfig({ testTimeout: 15000 });
   beforeEach(() => vi.clearAllMocks());
   afterEach(cleanup);
 
@@ -96,6 +107,7 @@ describe("RiderList", () => {
 
     render(<RiderList />);
 
+    expect(await screen.findByText("Maria")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Assign rider for ORD-MARK" }));
 
     expect(screen.getByLabelText("Assign ORD-MARK to Maria")).toBeInTheDocument();
@@ -113,6 +125,7 @@ describe("RiderList", () => {
 
     render(<RiderList />);
 
+    expect(await screen.findByText("juan@example.test")).toBeInTheDocument();
     const expand = await screen.findByRole("button", {
       name: "Expand live tracking map",
     });

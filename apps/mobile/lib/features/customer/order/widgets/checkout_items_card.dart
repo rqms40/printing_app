@@ -154,7 +154,7 @@ double _itemDisplayPrice({
   return item.printSubtotal + (item.printSubtotal / subtotal * serviceFee);
 }
 
-class _ItemRow extends StatelessWidget {
+class _ItemRow extends StatefulWidget {
   const _ItemRow({
     required this.item,
     required this.displayPrice,
@@ -173,10 +173,17 @@ class _ItemRow extends StatelessWidget {
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
 
+  @override
+  State<_ItemRow> createState() => _ItemRowState();
+}
+
+class _ItemRowState extends State<_ItemRow> {
+  bool _isExpanded = false;
+
   String _specSummary() {
-    if (item.category == 'paper') return _paperSpecSummary();
-    if (item.category == '3d') return _threeDSpecSummary();
-    return item.category == 'paper' ? 'Paper' : '3D';
+    if (widget.item.category == 'paper') return _paperSpecSummary();
+    if (widget.item.category == '3d') return _threeDSpecSummary();
+    return widget.item.category == 'paper' ? 'Paper' : '3D';
   }
 
   String _paperSpecSummary() {
@@ -187,17 +194,17 @@ class _ItemRow extends StatelessWidget {
       'print_sides',
       'binding',
     ]);
-    final pageDisplay = item.specDisplayValues['page_count']?.trim();
+    final pageDisplay = widget.item.specDisplayValues['page_count']?.trim();
     values.add(
       pageDisplay != null && pageDisplay.isNotEmpty
           ? pageDisplay
-          : '${item.pageCount} pages',
+          : '${widget.item.pageCount} pages',
     );
     if (values.isNotEmpty) return values.join(' · ');
 
-    final specs = item.paperSpecs;
+    final specs = widget.item.paperSpecs;
     if (specs != null) {
-      return '${specs.paperSize.displayName} · ${specs.colorMode.displayName} · ${specs.mediaType.displayName} · ${specs.printSides.displayName} · ${specs.binding.displayName} · ${item.pageCount} pages';
+      return '${specs.paperSize.displayName} · ${specs.colorMode.displayName} · ${specs.mediaType.displayName} · ${specs.printSides.displayName} · ${specs.binding.displayName} · ${widget.item.pageCount} pages';
     }
     return 'Paper';
   }
@@ -213,7 +220,7 @@ class _ItemRow extends StatelessWidget {
     ]);
     if (values.isNotEmpty) return values.join(' · ');
 
-    final specs = item.threeDSpecs;
+    final specs = widget.item.threeDSpecs;
     if (specs != null) {
       return '${specs.fileFormat.displayName} · ${specs.material.displayName} · ${specs.infillPercentage}% infill · ${specs.layerHeight}mm';
     }
@@ -223,87 +230,164 @@ class _ItemRow extends StatelessWidget {
   List<String> _displayValuesFor(List<String> keys) {
     return [
       for (final key in keys)
-        if ((item.specDisplayValues[key]?.trim() ?? '').isNotEmpty)
-          item.specDisplayValues[key]!.trim(),
+        if ((widget.item.specDisplayValues[key]?.trim() ?? '').isNotEmpty)
+          widget.item.specDisplayValues[key]!.trim(),
     ];
+  }
+
+  String _formatKey(String key) {
+    if (key.isEmpty) return key;
+    return key.split('_').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
   }
 
   @override
   Widget build(BuildContext context) {
+    final detailsMap = <String, String>{};
+    if (widget.item.categoryName != null && widget.item.categoryName!.isNotEmpty) {
+      detailsMap['Type'] = widget.item.categoryName!;
+    }
+    detailsMap['Quantity'] = widget.item.quantity.toString();
+    for (final entry in widget.item.specDisplayValues.entries) {
+      if (entry.value.trim().isNotEmpty) {
+        detailsMap[_formatKey(entry.key)] = entry.value.trim();
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: colors.background,
-              borderRadius: AppRadius.borderMd,
-              border: Border.all(color: colors.outline.withValues(alpha: 0.3)),
-            ),
-            child: Center(
-              child: HugeIcon(
-                icon: item.category == '3d'
-                    ? HugeIcons.strokeRoundedCube
-                    : HugeIcons.strokeRoundedFile02,
-                size: 18,
-                color: colors.onSurfaceDim,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: widget.colors.background,
+                  borderRadius: AppRadius.borderMd,
+                  border: Border.all(color: widget.colors.outline.withValues(alpha: 0.3)),
+                ),
+                child: Center(
+                  child: HugeIcon(
+                    icon: widget.item.category == '3d'
+                        ? HugeIcons.strokeRoundedCube
+                        : HugeIcons.strokeRoundedFile02,
+                    size: 18,
+                    color: widget.colors.onSurfaceDim,
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyBold.copyWith(
-                    color: colors.onBackground,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _specSummary(),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurfaceDim,
-                    fontSize: 11,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: 2,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      formatCurrency(displayPrice),
+                      widget.item.fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodyBold.copyWith(
-                        color: colors.brand,
-                        fontSize: 13,
+                        color: widget.colors.onBackground,
+                        fontSize: 14,
                       ),
                     ),
-                    _RowAction(label: 'View', onTap: onView, colors: colors),
-                    _RowAction(label: 'Edit', onTap: onEdit, colors: colors),
+                    const SizedBox(height: 2),
+                    Text(
+                      _specSummary(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption.copyWith(
+                        color: widget.colors.onSurfaceDim,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          formatCurrency(widget.displayPrice),
+                          style: AppTypography.bodyBold.copyWith(
+                            color: widget.colors.brand,
+                            fontSize: 13,
+                          ),
+                        ),
+                        _RowAction(label: 'View', onTap: widget.onView, colors: widget.colors),
+                        _RowAction(label: 'Edit', onTap: widget.onEdit, colors: widget.colors),
+                        _RowAction(
+                          label: _isExpanded ? 'Hide Details' : 'Details',
+                          onTap: () {
+                            setState(() {
+                              _isExpanded = !_isExpanded;
+                            });
+                          },
+                          colors: widget.colors,
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-              ],
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              _Stepper(
+                quantity: widget.item.quantity,
+                colors: widget.colors,
+                onDecrement: widget.onDecrement,
+                onIncrement: widget.onIncrement,
+              ),
+            ],
+          ),
+          if (_isExpanded) ...[
+            const SizedBox(height: AppSpacing.md),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: widget.colors.background,
+                borderRadius: AppRadius.borderMd,
+                border: Border.all(color: widget.colors.outline.withValues(alpha: 0.1)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < detailsMap.length; i++)
+                    Padding(
+                      padding: EdgeInsets.only(
+                          bottom: i == detailsMap.length - 1 ? 0 : AppSpacing.sm),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            detailsMap.keys.elementAt(i),
+                            style: AppTypography.body.copyWith(
+                              color: widget.colors.onSurfaceDim,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Text(
+                              detailsMap.values.elementAt(i),
+                              textAlign: TextAlign.right,
+                              style: AppTypography.body.copyWith(
+                                color: widget.colors.onBackground,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          _Stepper(
-            quantity: item.quantity,
-            colors: colors,
-            onDecrement: onDecrement,
-            onIncrement: onIncrement,
-          ),
+          ],
         ],
       ),
     );

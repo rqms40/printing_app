@@ -6,6 +6,7 @@ import { BadRequestException } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { OrdersService } from '../orders/orders.service';
 import { RidersService } from '../riders/riders.service';
+import { RiderPayoutsService } from '../riders/rider-payouts.service';
 import { OrdersGateway } from '../orders/orders.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
@@ -22,6 +23,7 @@ import {
 import { SuppliersService } from '../suppliers/suppliers.service';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 import { AuditEvent } from '../audit/entities/audit-event.entity';
+import { ChatService } from '../chat/chat.service';
 import { In } from 'typeorm';
 import * as userInsights from './user-insights';
 
@@ -44,6 +46,10 @@ describe('AdminController analytics', () => {
   let ridersService: {
     getAllRidersWithUser: jest.Mock;
     assignOrderToRider: jest.Mock;
+  };
+  let riderPayoutsService: {
+    listForAdmin: jest.Mock;
+    recordReceipt: jest.Mock;
   };
   let ordersGateway: jest.Mocked<Partial<OrdersGateway>>;
   let notificationsService: jest.Mocked<Partial<NotificationsService>>;
@@ -73,6 +79,10 @@ describe('AdminController analytics', () => {
       getAllRidersWithUser: jest.fn(),
       assignOrderToRider: jest.fn(),
     };
+    riderPayoutsService = {
+      listForAdmin: jest.fn(),
+      recordReceipt: jest.fn(),
+    };
     ordersGateway = {
       notifyOrderUpdate: jest.fn(),
       notifyRiderAssignment: jest.fn(),
@@ -93,6 +103,8 @@ describe('AdminController analytics', () => {
           provide: RidersService,
           useValue: ridersService,
         },
+        { provide: RiderPayoutsService, useValue: riderPayoutsService },
+        { provide: ChatService, useValue: { startDirectConversation: jest.fn() } },
         { provide: CreditsService, useValue: creditsService },
         { provide: PaymentsService, useValue: paymentsService },
         { provide: OrdersGateway, useValue: ordersGateway },

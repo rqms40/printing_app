@@ -19,6 +19,7 @@ import { OrdersService } from './orders.service';
 import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
 import { ConfirmSupplierQuoteDto } from './dto/confirm-supplier-quote.dto';
+import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { OrderStatus } from './entities/order.entity';
@@ -124,12 +125,36 @@ export class OrdersController {
   authorizePayment(
     @Request() req: RequestWithUser,
     @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AuthorizePaymentDto,
   ) {
-    return this.ordersService.authorizePayment(id, {
-      actorUserId: req.user.sub,
-      actorRole: req.user.role ?? null,
-      reason: 'Ops payment authorization',
-    });
+    return this.ordersService.authorizePayment(
+      id,
+      {
+        actorUserId: req.user.sub,
+        actorRole: req.user.role ?? null,
+        reason: 'Ops payment authorization',
+      },
+      dto,
+    );
+  }
+
+  @Post(':id/authorize-completion-payment')
+  @UseGuards(RolesGuard)
+  @Roles('ops_admin', 'super_admin')
+  authorizeCompletionPayment(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AuthorizePaymentDto,
+  ) {
+    return this.ordersService.authorizeCompletionPayment(
+      id,
+      {
+        actorUserId: req.user.sub,
+        actorRole: req.user.role ?? null,
+        reason: 'Ops supplier completion payment',
+      },
+      dto,
+    );
   }
 
   /**

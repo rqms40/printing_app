@@ -9,6 +9,8 @@ import { Order } from '../orders/entities/order.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 import { GeoZonesModule } from '../geo-zones/geo-zones.module';
 import { SuppliersModule } from '../suppliers/suppliers.module';
+import { FilesModule } from '../files/files.module';
+import { FileMetadata } from '../files/entities/file-metadata.entity';
 
 /**
  * Supplier payout list + approval + issue-window holds (Phase 8–9).
@@ -17,11 +19,12 @@ import { SuppliersModule } from '../suppliers/suppliers.module';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payout, Order, SupplierAssignment]),
+    TypeOrmModule.forFeature([Payout, Order, SupplierAssignment, FileMetadata]),
     forwardRef(() => PaymentsModule),
     AuditModule,
     GeoZonesModule,
     SuppliersModule,
+    FilesModule,
   ],
   controllers: [PayoutsController],
   providers: [PayoutsService],

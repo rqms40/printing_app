@@ -17,6 +17,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { OrdersService } from '../orders/orders.service';
 import { RidersService } from '../riders/riders.service';
+import { RiderPayoutsService } from '../riders/rider-payouts.service';
+import { RecordRiderPayoutDto } from '../riders/dto/record-rider-payout.dto';
 import { UpdateStatusDto } from '../orders/dto/update-status.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -49,6 +51,8 @@ import {
 import { UpdateAdminRiderDto } from './dto/update-admin-rider.dto';
 import { AuditEvent } from '../audit/entities/audit-event.entity';
 import { ChatService } from '../chat/chat.service';
+import { Payout } from '../payouts/entities/payout.entity';
+import { supplierPayoutInstallmentSnapshot } from '../payouts/payout-installments';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -80,6 +84,7 @@ export class AdminController {
   constructor(
     private ordersService: OrdersService,
     private ridersService: RidersService,
+    private riderPayoutsService: RiderPayoutsService,
     private creditsService: CreditsService,
     private paymentsService: PaymentsService,
     private ordersGateway: OrdersGateway,
@@ -497,6 +502,13 @@ export class AdminController {
           quotedPriceMinor?: string | null;
           quotedPromisedDate?: Date | string | null;
           customerConfirmedQuoteAt?: Date | string | null;
+          payoutQrFileId?: number | null;
+          payoutQrUrl?: string | null;
+          payoutGrossMinor?: string | null;
+          payoutDepositAmountMinor?: string | null;
+          payoutCompletionAmountMinor?: string | null;
+          payoutDepositAuthorizedAt?: Date | string | null;
+          payoutCompletionAuthorizedAt?: Date | string | null;
         } | null;
       }
     ).assignedSupplierContact;
@@ -517,6 +529,15 @@ export class AdminController {
       quoted_price_minor: contact.quotedPriceMinor ?? null,
       quoted_promised_date: contact.quotedPromisedDate ?? null,
       customer_confirmed_quote_at: contact.customerConfirmedQuoteAt ?? null,
+      payout_qr_file_id: contact.payoutQrFileId ?? null,
+      payout_qr_url: contact.payoutQrUrl ?? null,
+      payout_gross_minor: contact.payoutGrossMinor ?? null,
+      payout_deposit_amount_minor: contact.payoutDepositAmountMinor ?? null,
+      payout_completion_amount_minor:
+        contact.payoutCompletionAmountMinor ?? null,
+      payout_deposit_authorized_at: contact.payoutDepositAuthorizedAt ?? null,
+      payout_completion_authorized_at:
+        contact.payoutCompletionAuthorizedAt ?? null,
     };
   }
 
@@ -629,6 +650,21 @@ export class AdminController {
       }
     }
 
+    const payoutByOrderId = new Map<number, Payout>();
+    try {
+      const payouts = await this.ordersRepo.manager.getRepository(Payout).find({
+        where: { orderId: In(orderIds) },
+        order: { id: 'DESC' },
+      });
+      for (const payout of payouts) {
+        if (!payoutByOrderId.has(payout.orderId)) {
+          payoutByOrderId.set(payout.orderId, payout);
+        }
+      }
+    } catch {
+      /* unit tests may omit EntityManager */
+    }
+
     // Prefer OrdersService enrichment when available (logo + self-QC URLs).
     // Fallback: local attachment without signed media.
     return orders.map((order) => {
@@ -678,6 +714,17 @@ export class AdminController {
                   supplierAssignment.quotedPromisedDate ?? null,
                 customerConfirmedQuoteAt:
                   supplierAssignment.customerConfirmedQuoteAt ?? null,
+                payoutQrFileId:
+                  supplierAssignment.supplier?.payoutQrFileId ?? null,
+                payoutQrUrl: null,
+                ...supplierPayoutInstallmentSnapshot(
+                  payoutByOrderId.get(order.id)?.grossMinor ??
+                    supplierAssignment.finalPriceMinor ??
+                    supplierAssignment.quotedPriceMinor ??
+                    order.finalTotalMinor ??
+                    '0',
+                  payoutByOrderId.get(order.id) ?? null,
+                ),
               }
             : null),
         deliveryProof: this.deliveryProofFromAssignment(assignment),
@@ -1096,6 +1143,24 @@ export class AdminController {
   ) {
     await this.ridersService.verifyRider(id, req.user.sub);
     return { success: true };
+  }
+
+  @Get('riders/:id/payouts')
+  getRiderPayouts(@Param('id', ParseIntPipe) riderId: number) {
+    return this.riderPayoutsService.listForAdmin(riderId);
+  }
+
+  @Post('riders/:id/payouts')
+  recordRiderPayout(
+    @Param('id', ParseIntPipe) riderId: number,
+    @Body() dto: RecordRiderPayoutDto,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.riderPayoutsService.recordReceipt(
+      riderId,
+      dto,
+      req.user.sub,
+    );
   }
 
   @Post('riders/:id/dispatch-plan')

@@ -108,6 +108,13 @@ class AssignedSupplierContact {
     this.quotedPriceMinor,
     this.quotedPromisedDate,
     this.customerConfirmedQuoteAt,
+    this.payoutQrFileId,
+    this.payoutQrUrl,
+    this.payoutGrossMinor,
+    this.payoutDepositAmountMinor,
+    this.payoutCompletionAmountMinor,
+    this.payoutDepositAuthorizedAt,
+    this.payoutCompletionAuthorizedAt,
   });
 
   final int supplierId;
@@ -123,6 +130,13 @@ class AssignedSupplierContact {
   final int? quotedPriceMinor;
   final DateTime? quotedPromisedDate;
   final DateTime? customerConfirmedQuoteAt;
+  final int? payoutQrFileId;
+  final String? payoutQrUrl;
+  final int? payoutGrossMinor;
+  final int? payoutDepositAmountMinor;
+  final int? payoutCompletionAmountMinor;
+  final DateTime? payoutDepositAuthorizedAt;
+  final DateTime? payoutCompletionAuthorizedAt;
 
   bool get hasQuotedPrice =>
       quotedPriceMinor != null && quotedPriceMinor! > 0;
@@ -142,6 +156,13 @@ class AssignedSupplierContact {
     int? quotedPriceMinor,
     DateTime? quotedPromisedDate,
     DateTime? customerConfirmedQuoteAt,
+    int? payoutQrFileId,
+    String? payoutQrUrl,
+    int? payoutGrossMinor,
+    int? payoutDepositAmountMinor,
+    int? payoutCompletionAmountMinor,
+    DateTime? payoutDepositAuthorizedAt,
+    DateTime? payoutCompletionAuthorizedAt,
     bool clearQuoteConfirmation = false,
   }) {
     return AssignedSupplierContact(
@@ -160,6 +181,17 @@ class AssignedSupplierContact {
       customerConfirmedQuoteAt: clearQuoteConfirmation
           ? null
           : customerConfirmedQuoteAt ?? this.customerConfirmedQuoteAt,
+      payoutQrFileId: payoutQrFileId ?? this.payoutQrFileId,
+      payoutQrUrl: payoutQrUrl ?? this.payoutQrUrl,
+      payoutGrossMinor: payoutGrossMinor ?? this.payoutGrossMinor,
+      payoutDepositAmountMinor:
+          payoutDepositAmountMinor ?? this.payoutDepositAmountMinor,
+      payoutCompletionAmountMinor:
+          payoutCompletionAmountMinor ?? this.payoutCompletionAmountMinor,
+      payoutDepositAuthorizedAt:
+          payoutDepositAuthorizedAt ?? this.payoutDepositAuthorizedAt,
+      payoutCompletionAuthorizedAt:
+          payoutCompletionAuthorizedAt ?? this.payoutCompletionAuthorizedAt,
     );
   }
 
@@ -239,6 +271,26 @@ class AssignedSupplierContact {
       ),
       customerConfirmedQuoteAt: parseDate(
         read('customerConfirmedQuoteAt', 'customer_confirmed_quote_at'),
+      ),
+      payoutQrFileId: parseMinor(read('payoutQrFileId', 'payout_qr_file_id')),
+      payoutQrUrl: read('payoutQrUrl', 'payout_qr_url')?.toString(),
+      payoutGrossMinor: parseMinor(
+        read('payoutGrossMinor', 'payout_gross_minor'),
+      ),
+      payoutDepositAmountMinor: parseMinor(
+        read('payoutDepositAmountMinor', 'payout_deposit_amount_minor'),
+      ),
+      payoutCompletionAmountMinor: parseMinor(
+        read('payoutCompletionAmountMinor', 'payout_completion_amount_minor'),
+      ),
+      payoutDepositAuthorizedAt: parseDate(
+        read('payoutDepositAuthorizedAt', 'payout_deposit_authorized_at'),
+      ),
+      payoutCompletionAuthorizedAt: parseDate(
+        read(
+          'payoutCompletionAuthorizedAt',
+          'payout_completion_authorized_at',
+        ),
       ),
     );
   }

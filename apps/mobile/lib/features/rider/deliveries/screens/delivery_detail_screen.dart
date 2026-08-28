@@ -423,7 +423,7 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
                         ),
                         _InfoRow(
                           label: 'Delivery fee',
-                          value: formatCurrency(order.deliveryFee),
+                          value: formatCurrency(order.deliveryFeePesos),
                           colors: colors,
                         ),
                         if (order.paymentMethod != null)

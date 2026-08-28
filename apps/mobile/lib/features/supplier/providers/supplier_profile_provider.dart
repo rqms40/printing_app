@@ -14,6 +14,7 @@ class SupplierProfileState {
     this.isLoading = false,
     this.isSaving = false,
     this.isUploadingLogo = false,
+    this.isUploadingPayoutQr = false,
     this.errorMessage,
     this.successMessage,
   });
@@ -22,6 +23,7 @@ class SupplierProfileState {
   final bool isLoading;
   final bool isSaving;
   final bool isUploadingLogo;
+  final bool isUploadingPayoutQr;
   final String? errorMessage;
   final String? successMessage;
 
@@ -30,6 +32,7 @@ class SupplierProfileState {
     bool? isLoading,
     bool? isSaving,
     bool? isUploadingLogo,
+    bool? isUploadingPayoutQr,
     String? Function()? errorMessage,
     String? Function()? successMessage,
   }) {
@@ -38,6 +41,7 @@ class SupplierProfileState {
       isLoading: isLoading ?? this.isLoading,
       isSaving: isSaving ?? this.isSaving,
       isUploadingLogo: isUploadingLogo ?? this.isUploadingLogo,
+      isUploadingPayoutQr: isUploadingPayoutQr ?? this.isUploadingPayoutQr,
       errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
       successMessage:
           successMessage != null ? successMessage() : this.successMessage,
@@ -122,6 +126,7 @@ class SupplierProfileNotifier extends StateNotifier<SupplierProfileState> {
     Map<String, String>? attributes,
     int? logoFileId,
     bool clearLogo = false,
+    int? payoutQrFileId,
   }) async {
     state = state.copyWith(
       isSaving: true,
@@ -146,6 +151,9 @@ class SupplierProfileNotifier extends StateNotifier<SupplierProfileState> {
         body['logoFileId'] = null;
       } else if (logoFileId != null) {
         body['logoFileId'] = logoFileId;
+      }
+      if (payoutQrFileId != null) {
+        body['payoutQrFileId'] = payoutQrFileId;
       }
 
       final res = await _api.patch('/suppliers/me', data: body);
@@ -270,6 +278,63 @@ class SupplierProfileNotifier extends StateNotifier<SupplierProfileState> {
     } catch (e) {
       state = state.copyWith(
         isUploadingLogo: false,
+        errorMessage: () => extractSupplierApiError(e),
+      );
+      return false;
+    }
+  }
+
+  /// Picks and uploads the Instapay / wallet QR ops uses to pay this shop.
+  Future<bool> uploadAndSetPayoutQr(XFile picked) async {
+    state = state.copyWith(
+      isUploadingPayoutQr: true,
+      errorMessage: () => null,
+      successMessage: () => null,
+    );
+    try {
+      final bytes = await picked.readAsBytes();
+      if (bytes.isEmpty) {
+        throw StateError('Selected image is empty');
+      }
+      final filename = picked.name.trim().isEmpty
+          ? 'supplier-payout-qr.jpg'
+          : picked.name;
+      final extension = getFileExtension(filename);
+      final contentType = DioMediaType.parse(mimeTypeForExtension(extension));
+
+      final form = FormData.fromMap({
+        'purpose': 'supplier_payout_qr',
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: contentType,
+        ),
+      });
+
+      final uploadRes = await _api.post('/files/upload', data: form);
+      final uploadData = uploadRes.data;
+      if (uploadData is! Map) {
+        throw StateError('Upload did not return metadata');
+      }
+      final fileId = uploadData['id'];
+      final id = fileId is int
+          ? fileId
+          : int.tryParse(fileId?.toString() ?? '');
+      if (id == null) {
+        throw StateError('Upload did not return a file id');
+      }
+
+      final ok = await updateProfile(payoutQrFileId: id);
+      state = state.copyWith(isUploadingPayoutQr: false);
+      if (ok) {
+        state = state.copyWith(
+          successMessage: () => 'Payout QR updated',
+        );
+      }
+      return ok;
+    } catch (e) {
+      state = state.copyWith(
+        isUploadingPayoutQr: false,
         errorMessage: () => extractSupplierApiError(e),
       );
       return false;

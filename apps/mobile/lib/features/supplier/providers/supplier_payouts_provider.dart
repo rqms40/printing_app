@@ -14,6 +14,13 @@ class SupplierPayout {
     this.holdReason,
     this.holdExpiresAt,
     this.createdAt,
+    this.authorizedAt,
+    this.adminReceiptUrl,
+    this.depositAmountMinor,
+    this.completionAmountMinor,
+    this.completionAuthorizedAt,
+    this.completionReceiptUrl,
+    this.payoutQrUrl,
   });
 
   final int id;
@@ -26,6 +33,13 @@ class SupplierPayout {
   final String? holdReason;
   final DateTime? holdExpiresAt;
   final DateTime? createdAt;
+  final DateTime? authorizedAt;
+  final String? adminReceiptUrl;
+  final String? depositAmountMinor;
+  final String? completionAmountMinor;
+  final DateTime? completionAuthorizedAt;
+  final String? completionReceiptUrl;
+  final String? payoutQrUrl;
 
   factory SupplierPayout.fromJson(Map<String, dynamic> json) {
     final order = json['order'];
@@ -48,10 +62,52 @@ class SupplierPayout {
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
+      authorizedAt: json['authorizedAt'] != null
+          ? DateTime.tryParse(json['authorizedAt'].toString())
+          : null,
+      adminReceiptUrl: json['adminReceiptUrl']?.toString() ??
+          json['admin_receipt_url']?.toString(),
+      depositAmountMinor: json['depositAmountMinor']?.toString() ??
+          json['deposit_amount_minor']?.toString(),
+      completionAmountMinor: json['completionAmountMinor']?.toString() ??
+          json['completion_amount_minor']?.toString(),
+      completionAuthorizedAt: json['completionAuthorizedAt'] != null
+          ? DateTime.tryParse(json['completionAuthorizedAt'].toString())
+          : json['completion_authorized_at'] != null
+              ? DateTime.tryParse(
+                  json['completion_authorized_at'].toString(),
+                )
+              : null,
+      completionReceiptUrl: json['completionReceiptUrl']?.toString() ??
+          json['completion_receipt_url']?.toString(),
+      payoutQrUrl: json['payoutQrUrl']?.toString() ??
+          json['payout_qr_url']?.toString(),
     );
   }
 
-  double get netPesos => (num.tryParse(netMinor) ?? 0) / 100.0;
+  double get grossPesos => (num.tryParse(grossMinor) ?? 0) / 100.0;
+
+  double get depositPesos {
+    final stored = num.tryParse(depositAmountMinor ?? '');
+    if (stored != null) return stored / 100.0;
+    return (grossPesos / 2).floorToDouble();
+  }
+
+  double get completionPesos {
+    final stored = num.tryParse(completionAmountMinor ?? '');
+    if (stored != null) return stored / 100.0;
+    return grossPesos - depositPesos;
+  }
+
+  String get displayStatus {
+    final state = settlementState.toLowerCase();
+    if (state == 'cancelled') return 'Cancelled';
+    if (state == 'held' && authorizedAt == null) return 'Held';
+    if (authorizedAt != null && completionAuthorizedAt == null) {
+      return '50% paid';
+    }
+    return 'Paid';
+  }
 }
 
 class SupplierPayoutsState {

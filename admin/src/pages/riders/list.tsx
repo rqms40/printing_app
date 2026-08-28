@@ -42,7 +42,8 @@ import { apiClient } from "@/providers/api-client";
 import { normalizeAdminRiders, normalizeOrders } from "@/utils/api-normalizers";
 import type { Order } from "@/types/order";
 import { DispatchPlanPanel } from "./dispatch-plan-panel";
-import { useNavigate } from "react-router-dom";
+import { RiderPayoutsPanel } from "./payouts-panel";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useChatInbox } from "@/hooks/useChat";
 
 const { Text, Title } = Typography;
@@ -139,6 +140,8 @@ const S = {
 export function RiderList() {
   const { message } = App.useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { startDirectConversation } = useChatInbox();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -152,6 +155,17 @@ export function RiderList() {
   const [orderError, setOrderError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedRiderId, setSelectedRiderId] = useState<number | null>(null);
+  const payoutsFromRoute =
+    location.pathname.endsWith("/payouts") ||
+    searchParams.get("tab") === "payouts";
+  const [pageView, setPageView] = useState<"fleet" | "payouts">(
+    payoutsFromRoute ? "payouts" : "fleet",
+  );
+  const payoutRiderIdRaw = Number(searchParams.get("riderId"));
+  const payoutRiderId =
+    Number.isInteger(payoutRiderIdRaw) && payoutRiderIdRaw > 0
+      ? payoutRiderIdRaw
+      : null;
 
   // Edit Rider state
   const [editingRider, setEditingRider] = useState<ApiRider | null>(null);
@@ -202,6 +216,10 @@ export function RiderList() {
       message.error(e.response?.data?.message || "Failed to verify rider");
     }
   };
+
+  useEffect(() => {
+    setPageView(payoutsFromRoute ? "payouts" : "fleet");
+  }, [payoutsFromRoute]);
 
   useEffect(() => {
     setLoadingRiders(true);
@@ -404,8 +422,32 @@ export function RiderList() {
             />
           </Space>
         </div>
+        <Segmented
+          value={pageView}
+          onChange={(value) => {
+            const next = value as "fleet" | "payouts";
+            setPageView(next);
+            if (next === "payouts") {
+              const riderQuery =
+                payoutRiderId != null ? `?riderId=${payoutRiderId}` : "";
+              navigate(`/riders/payouts${riderQuery}`);
+            } else {
+              navigate("/riders");
+            }
+          }}
+          options={[
+            { label: "Fleet", value: "fleet" },
+            { label: "Payouts", value: "payouts" },
+          ]}
+        />
       </div>
 
+      {pageView === "payouts" ? (
+        <Card style={S.card} styles={{ body: { padding: 20 } }}>
+          <RiderPayoutsPanel riders={riders} initialRiderId={payoutRiderId} />
+        </Card>
+      ) : (
+        <>
       {/* ── Metric Strip ───────────────────────────────────────── */}
       <Row gutter={[12, 12]}>
         <Col xs={12} sm={8}>
@@ -906,6 +948,8 @@ export function RiderList() {
           assignments={selectedAssignments}
         />
       ) : null}
+        </>
+      )}
 
       <Modal
         title="Edit Rider Profile"

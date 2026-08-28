@@ -10,6 +10,7 @@ import 'package:printing_app/features/customer/order/models/catalog_spec_mappers
 import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/spec_selector.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
@@ -186,6 +187,10 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
         ProductCatalog.fallback().categoryBySlug('paper')!;
     _ensureDefaults(category);
 
+    final settings = ref.watch(deliveryFeeSettingsProvider).valueOrNull ?? DeliveryFeeSettings.fallback;
+    final baseEstimate = _currentEstimate(category);
+    final totalEstimate = baseEstimate + settings.serviceFeeOn(baseEstimate);
+
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppBar(
@@ -261,13 +266,6 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
                             .read(orderFlowProvider.notifier)
                             .setSpecialInstructions,
                       ),
-                      const SizedBox(height: AppSpacing.lg),
-                      Text(
-                        'Estimated print: ${formatCurrency(_currentEstimate(category))}',
-                        style: AppTypography.bodyBold.copyWith(
-                          color: colors.onBackground,
-                        ),
-                      ),
                       const SizedBox(height: AppSpacing.xxl),
                     ],
                   ),
@@ -291,7 +289,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
                   child: KeyedSubtree(
                     key: _specsContinueKey,
                     child: AppButton(
-                      label: 'Continue',
+                      label: totalEstimate > 0 ? 'Continue (${formatCurrency(totalEstimate)})' : 'Continue',
                       isFullWidth: true,
                       onTap: () {
                         final pipeline = ref.read(pipelineTutorialProvider);
@@ -344,9 +342,6 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     final option = spec.optionForValue(value);
     if (option == null) return value;
     final parts = <String>[option.label];
-    if (spec.key == 'printer' && option.unitCost > 0) {
-      parts.add('₱${option.unitCost.toStringAsFixed(2)}/sq.ft');
-    }
     if (option.outsourced) parts.add('outsourced');
     return parts.join(' · ');
   }
@@ -452,10 +447,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
           children: [
             for (final addon in category.addons)
               FilterChip(
-                label: Text(
-                  '${addon.name} · ${formatCurrency(addon.price)}'
-                  '${addon.priceType == 'per_unit' ? '/sq.ft' : ''}',
-                ),
+                label: Text(addon.name),
                 selected: _selectedAddonIds.contains(addon.id),
                 onSelected: (selected) {
                   setState(() {

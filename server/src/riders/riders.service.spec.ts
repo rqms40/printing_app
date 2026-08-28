@@ -7,12 +7,17 @@ import {
   ConflictException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { hashDeliveryOtp, RidersService } from './riders.service';
+import {
+  hashDeliveryOtp,
+  RidersService,
+  riderDeliveryFeeMinor,
+} from './riders.service';
 import { RiderProfile } from './entities/rider-profile.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
 } from './entities/delivery-assignment.entity';
+import { RiderPayout } from './entities/rider-payout.entity';
 import { LocationGateway } from './location.gateway';
 import { OrdersService } from '../orders/orders.service';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
@@ -271,6 +276,10 @@ describe('RidersService', () => {
         {
           provide: getRepositoryToken(DeliveryAssignment),
           useValue: assignmentRepo,
+        },
+        {
+          provide: getRepositoryToken(RiderPayout),
+          useValue: { find: jest.fn(), findOne: jest.fn(), save: jest.fn(), create: jest.fn((x) => x) },
         },
         { provide: LocationGateway, useValue: locationGateway },
         { provide: OrdersGateway, useValue: ordersGateway },
@@ -2753,6 +2762,104 @@ describe('RidersService', () => {
 
       expect(result.map((assignment) => assignment.id)).toEqual([2, 1]);
       expect((result[1] as any).dispatchPlanState).toBe('unplanned');
+    });
+  });
+
+  describe('getEarnings', () => {
+    it('prefers deliveryFeeMinor over the major-peso column', () => {
+      expect(
+        riderDeliveryFeeMinor({ deliveryFee: 40, deliveryFeeMinor: '5000' }),
+      ).toBe(5000);
+      expect(riderDeliveryFeeMinor({ deliveryFee: 25 })).toBe(2500);
+      expect(riderDeliveryFeeMinor(null)).toBe(0);
+    });
+
+    it('adds each delivered fee into today, week, month, and lifetime totals', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      const now = new Date();
+      const earlierThisMonth = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 8, 0, 0),
+      );
+      const lastMonth = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15, 8, 0, 0),
+      );
+      assignmentRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          riderId: 10,
+          status: DeliveryStatus.DELIVERED,
+          deliveredAt: now,
+          updatedAt: now,
+          order: { deliveryFee: 0, deliveryFeeMinor: '5000' },
+        },
+        {
+          id: 2,
+          riderId: 10,
+          status: DeliveryStatus.DELIVERED,
+          deliveredAt: earlierThisMonth,
+          updatedAt: earlierThisMonth,
+          order: { deliveryFee: 25 },
+        },
+        {
+          id: 3,
+          riderId: 10,
+          status: DeliveryStatus.DELIVERED,
+          deliveredAt: lastMonth,
+          updatedAt: lastMonth,
+          order: { deliveryFee: 40 },
+        },
+      ] as DeliveryAssignment[]);
+
+      const out = await service.getEarnings(1);
+
+      expect(out.deliveries).toBe(3);
+      expect(out.total).toBe(115);
+      expect(out.today).toBe(50);
+      expect(out.thisMonth).toBeGreaterThanOrEqual(50);
+      expect(out.thisMonth).toBeLessThanOrEqual(115);
+      expect(out.thisWeek).toBeGreaterThanOrEqual(50);
+    });
+
+    it('adds multiple same-day delivery fees together', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      const now = new Date();
+      assignmentRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          riderId: 10,
+          status: DeliveryStatus.DELIVERED,
+          deliveredAt: now,
+          updatedAt: now,
+          order: { deliveryFee: 50 },
+        },
+        {
+          id: 2,
+          riderId: 10,
+          status: DeliveryStatus.DELIVERED,
+          deliveredAt: now,
+          updatedAt: now,
+          order: { deliveryFeeMinor: '3000' },
+        },
+      ] as DeliveryAssignment[]);
+
+      const out = await service.getEarnings(1);
+
+      expect(out.deliveries).toBe(2);
+      expect(out.today).toBe(80);
+      expect(out.total).toBe(80);
+    });
+
+    it('returns zeros when the rider has no completed deliveries', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.find.mockResolvedValue([]);
+
+      await expect(service.getEarnings(1)).resolves.toEqual({
+        total: 0,
+        deliveries: 0,
+        today: 0,
+        thisWeek: 0,
+        thisMonth: 0,
+      });
     });
   });
 });

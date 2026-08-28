@@ -23,7 +23,6 @@ import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
 import 'package:printing_app/features/customer/orders/widgets/marketplace_order_actions.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_claims_section.dart';
-import 'package:printing_app/features/customer/orders/widgets/supplier_quote_payment_panel.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
 import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
 import 'package:printing_app/utils/formatters.dart';
@@ -832,10 +831,6 @@ class OrderDetailScreen extends ConsumerWidget {
               ),
             ],
           ),
-          if (order.awaitingSupplierQuotePayment) ...[
-            const SizedBox(height: AppSpacing.md),
-            SupplierQuotePaymentPanel(order: order),
-          ],
         ],
       ),
     );

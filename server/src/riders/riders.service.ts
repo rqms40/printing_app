@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -43,6 +44,10 @@ import {
 } from '../chat/entities/conversation.entity';
 import { ChatGateway } from '../chat/chat.gateway';
 import { FilesService } from '../files/files.service';
+import {
+  FileMetadata,
+  FilePurpose,
+} from '../files/entities/file-metadata.entity';
 import { MAX_SIGNATURE_PROOF_BYTES } from './dto/update-delivery-status.dto';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 import {
@@ -658,27 +663,107 @@ export class RidersService {
       last_latitude: p.lastLatitude ? Number(p.lastLatitude) : null,
       last_longitude: p.lastLongitude ? Number(p.lastLongitude) : null,
       last_location_update: p.lastLocationUpdate ?? null,
+      payout_qr_file_id: p.payoutQrFileId ?? null,
       created_at: p.createdAt,
       updated_at: p.updatedAt,
     }));
   }
 
-  async getProfile(userId: number): Promise<RiderProfile> {
+  async getProfile(userId: number): Promise<RiderProfile & { payoutQrUrl: string | null }> {
     const profile = await this.profileRepo.findOne({
       where: { userId },
       relations: ['user'],
     });
     if (!profile) throw new NotFoundException('Rider profile not found');
-    return profile;
+    return this.withPayoutQrUrl(profile);
   }
 
   async updateProfile(
     userId: number,
     dto: UpdateRiderProfileDto,
-  ): Promise<RiderProfile> {
-    const profile = await this.getProfile(userId);
-    Object.assign(profile, dto);
-    return this.profileRepo.save(profile);
+  ): Promise<RiderProfile & { payoutQrUrl: string | null }> {
+    const profile = await this.profileRepo.findOne({
+      where: { userId },
+      relations: ['user'],
+    });
+    if (!profile) throw new NotFoundException('Rider profile not found');
+    if (dto.vehicleType !== undefined) profile.vehicleType = dto.vehicleType;
+    if (dto.plateNumber !== undefined) profile.plateNumber = dto.plateNumber;
+    if (dto.licenseNumber !== undefined) profile.licenseNumber = dto.licenseNumber;
+    if (dto.payoutQrFileId !== undefined) {
+      if (dto.payoutQrFileId === null) {
+        profile.payoutQrFileId = null;
+      } else {
+        await this.assertPayoutQrFileOwned(dto.payoutQrFileId, userId);
+        profile.payoutQrFileId = dto.payoutQrFileId;
+      }
+    }
+    await this.profileRepo.save(profile);
+    return this.withPayoutQrUrl(
+      (await this.profileRepo.findOne({
+        where: { id: profile.id },
+        relations: ['user'],
+      })) ?? profile,
+    );
+  }
+
+  private async withPayoutQrUrl(
+    profile: RiderProfile,
+  ): Promise<RiderProfile & { payoutQrUrl: string | null }> {
+    const payoutQrUrl = await this.signedPayoutQrUrl(profile.payoutQrFileId);
+    return Object.assign(profile, { payoutQrUrl });
+  }
+
+  private async signedPayoutQrUrl(
+    fileId: number | null | undefined,
+  ): Promise<string | null> {
+    if (!fileId) return null;
+    try {
+      const file = await this.filesService.findById(fileId);
+      if (!file) return null;
+      if (!file.objectKey) return file.url ?? null;
+      return await this.filesService.getPresignedUrlForKey(
+        file.objectKey,
+        3600,
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  private async assertPayoutQrFileOwned(
+    fileId: number,
+    userId: number,
+  ): Promise<void> {
+    let file: FileMetadata | null = null;
+    try {
+      file = await this.filesService.findById(fileId);
+    } catch {
+      file = null;
+    }
+    if (!file) {
+      throw new BadRequestException({
+        code: 'payout_qr_file_not_found',
+        message: `File ${fileId} not found`,
+      });
+    }
+    if (file.uploadedBy != null && file.uploadedBy !== userId) {
+      throw new ForbiddenException({
+        code: 'payout_qr_file_not_owned',
+        message: 'Payout QR must be uploaded by the rider account',
+      });
+    }
+    if (
+      file.purpose &&
+      file.purpose !== FilePurpose.GENERAL &&
+      file.purpose !== FilePurpose.PAPER &&
+      file.purpose !== FilePurpose.RIDER_PAYOUT_QR
+    ) {
+      throw new BadRequestException({
+        code: 'payout_qr_file_invalid_purpose',
+        message: 'Payout QR must be an image upload (rider_payout_qr)',
+      });
+    }
   }
 
   async updateRiderAdmin(riderId: number, dto: UpdateAdminRiderDto) {
@@ -1790,19 +1875,110 @@ export class RidersService {
     return history.map((assignment) => sanitizeAssignmentSecrets(assignment));
   }
 
-  async getEarnings(
-    userId: number,
-  ): Promise<{ total: number; deliveries: number }> {
+  async getEarnings(userId: number): Promise<{
+    total: number;
+    deliveries: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  }> {
     const profile = await this.getProfile(userId);
     const deliveredAssignments = await this.assignmentRepo.find({
       where: { riderId: profile.id, status: DeliveryStatus.DELIVERED },
       relations: ['order'],
     });
 
-    const total = deliveredAssignments.reduce((sum, a) => {
-      return sum + Number(a.order?.deliveryFee || 0);
-    }, 0);
+    const now = new Date();
+    const startToday = manilaDayStart(now);
+    const startWeek = manilaWeekStart(now);
+    const startMonth = manilaMonthStart(now);
 
-    return { total, deliveries: deliveredAssignments.length };
+    let totalMinor = 0;
+    let todayMinor = 0;
+    let weekMinor = 0;
+    let monthMinor = 0;
+
+    for (const assignment of deliveredAssignments) {
+      const feeMinor = riderDeliveryFeeMinor(assignment.order);
+      totalMinor += feeMinor;
+      const when = assignment.deliveredAt ?? assignment.updatedAt ?? null;
+      if (!when) continue;
+      const at = when instanceof Date ? when : new Date(when);
+      if (Number.isNaN(at.getTime())) continue;
+      if (at.getTime() >= startToday.getTime()) todayMinor += feeMinor;
+      if (at.getTime() >= startWeek.getTime()) weekMinor += feeMinor;
+      if (at.getTime() >= startMonth.getTime()) monthMinor += feeMinor;
+    }
+
+    return {
+      total: minorToPesos(totalMinor),
+      deliveries: deliveredAssignments.length,
+      today: minorToPesos(todayMinor),
+      thisWeek: minorToPesos(weekMinor),
+      thisMonth: minorToPesos(monthMinor),
+    };
   }
+}
+
+const RIDER_EARNINGS_TIME_ZONE = 'Asia/Manila';
+
+/** Rider pay for a completed drop-off, in PHP centavos. */
+export function riderDeliveryFeeMinor(
+  order?: {
+    deliveryFee?: number | string | null;
+    deliveryFeeMinor?: string | number | null;
+  } | null,
+): number {
+  const minorRaw = order?.deliveryFeeMinor;
+  if (minorRaw != null && String(minorRaw).trim() !== '') {
+    const minor = Number(minorRaw);
+    if (Number.isFinite(minor) && minor >= 0) return Math.round(minor);
+  }
+  const major = Number(order?.deliveryFee ?? 0);
+  if (!Number.isFinite(major) || major < 0) return 0;
+  return Math.round(major * 100);
+}
+
+export function manilaDayStart(now = new Date()): Date {
+  const ymd = new Intl.DateTimeFormat('en-CA', {
+    timeZone: RIDER_EARNINGS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  return new Date(`${ymd}T00:00:00+08:00`);
+}
+
+export function manilaWeekStart(now = new Date()): Date {
+  const start = manilaDayStart(now);
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: RIDER_EARNINGS_TIME_ZONE,
+    weekday: 'short',
+  }).format(now);
+  const fromMonday: Record<string, number> = {
+    Mon: 0,
+    Tue: 1,
+    Wed: 2,
+    Thu: 3,
+    Fri: 4,
+    Sat: 5,
+    Sun: 6,
+  };
+  const offset = fromMonday[weekday] ?? 0;
+  return new Date(start.getTime() - offset * 24 * 60 * 60 * 1000);
+}
+
+export function manilaMonthStart(now = new Date()): Date {
+  const ymd = new Intl.DateTimeFormat('en-CA', {
+    timeZone: RIDER_EARNINGS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  const [year, month] = ymd.split('-');
+  return new Date(`${year}-${month}-01T00:00:00+08:00`);
+}
+
+function minorToPesos(minor: number): number {
+  return Math.round(minor) / 100;
 }

@@ -7,6 +7,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/config/theme/app_shadows.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/rider/profile/providers/rider_profile_provider.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_page_header.dart';
@@ -386,6 +387,12 @@ class _RiderProfileScreenState extends ConsumerState<RiderProfileScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.xxl),
+              _MenuRow(
+                icon: HugeIcons.strokeRoundedWallet01,
+                title: 'Payouts',
+                onTap: () => context.push('/rider/payouts'),
+                colors: colors,
+              ),
               _MenuRow(
                 icon: HugeIcons.strokeRoundedLogout01,
                 title: 'Sign out',

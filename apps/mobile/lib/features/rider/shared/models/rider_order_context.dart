@@ -113,6 +113,7 @@ class RiderOrderContext {
     required this.quantity,
     required this.totalPrice,
     required this.deliveryFee,
+    this.deliveryFeeMinor,
     this.customerName,
     this.customerPhone,
     this.destination,
@@ -127,6 +128,8 @@ class RiderOrderContext {
   final int quantity;
   final double totalPrice;
   final double deliveryFee;
+  /// Delivery fee in PHP centavos when the API sends marketplace money.
+  final String? deliveryFeeMinor;
   final String? customerName;
   final String? customerPhone;
   final RiderDestinationContext? destination;
@@ -146,6 +149,13 @@ class RiderOrderContext {
         method == 'cash' ||
         method == 'cash_on_delivery' ||
         method == 'cashondelivery';
+  }
+
+  /// Rider pay for this drop-off in pesos. Prefers minor units when present.
+  double get deliveryFeePesos {
+    final minor = int.tryParse(deliveryFeeMinor ?? '');
+    if (minor != null && minor > 0) return minor / 100.0;
+    return deliveryFee;
   }
 
   /// Exact COD amount in major units (pesos) for display.

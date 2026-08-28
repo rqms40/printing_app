@@ -9,10 +9,12 @@ import 'package:printing_app/features/customer/order/models/catalog_spec_mappers
 import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_fee_settings_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/spec_selector.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
+import 'package:printing_app/utils/formatters.dart';
 
 /// Step 2/6 -- 3D print specification selection.
 class ThreeDSpecsScreen extends ConsumerStatefulWidget {
@@ -74,6 +76,10 @@ class _ThreeDSpecsScreenState extends ConsumerState<ThreeDSpecsScreen> {
         catalog.categoryBySlug(slug) ??
         ProductCatalog.fallback().categoryBySlug('3d')!;
     _ensureDefaults(category);
+
+    final settings = ref.watch(deliveryFeeSettingsProvider).valueOrNull ?? DeliveryFeeSettings.fallback;
+    final baseEstimate = _currentEstimate(category);
+    final totalEstimate = baseEstimate + settings.serviceFeeOn(baseEstimate);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -150,7 +156,7 @@ class _ThreeDSpecsScreenState extends ConsumerState<ThreeDSpecsScreen> {
                     ),
                   ),
                   child: AppButton(
-                    label: 'Continue',
+                    label: totalEstimate > 0 ? 'Continue (${formatCurrency(totalEstimate)})' : 'Continue',
                     isFullWidth: true,
                     onTap: _onContinue,
                   ),
@@ -243,6 +249,15 @@ class _ThreeDSpecsScreenState extends ConsumerState<ThreeDSpecsScreen> {
     notifier.nextStep();
 
     context.push('/customer/order/upload');
+  }
+
+  double _currentEstimate(ProductCategory category) {
+    final quantity = int.tryParse(_quantityController.text) ?? 1;
+    final selected = Map<String, dynamic>.from(_values);
+    for (final entry in _textControllers.entries) {
+      selected[entry.key] = entry.value.text.trim();
+    }
+    return category.estimatePrice(selected, quantity);
   }
 }
 

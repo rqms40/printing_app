@@ -116,6 +116,7 @@ class RiderInfoCard extends StatelessWidget {
     final phoneNumber = rider.phoneNumber;
     final hasPhone = phoneNumber != null && phoneNumber.isNotEmpty;
     final statusLabel = _statusLabel(rider.deliveryStatus);
+    final isDelivered = rider.deliveryStatus == 'delivered';
 
     return AppCard(
       child: Column(
@@ -182,41 +183,43 @@ class RiderInfoCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          // Phone number
-          Row(
-            children: [
-              HugeIcon(
-                icon: HugeIcons.strokeRoundedCall,
-                size: 16,
-                color: colors.onSurfaceDim,
+          if (!isDelivered) ...[
+            const SizedBox(height: AppSpacing.md),
+            // Phone number
+            Row(
+              children: [
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedCall,
+                  size: 16,
+                  color: colors.onSurfaceDim,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  hasPhone ? phoneNumber : 'Phone unavailable',
+                  style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            if (onChat != null) ...[
+              AppButton(
+                label: 'Message Rider',
+                icon: HugeIcons.strokeRoundedMessage01,
+                variant: AppButtonVariant.primary,
+                isFullWidth: true,
+                onTap: onChat,
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                hasPhone ? phoneNumber : 'Phone unavailable',
-                style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
-              ),
+              const SizedBox(height: AppSpacing.sm),
             ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          if (onChat != null) ...[
-            AppButton(
-              label: 'Message Rider',
-              icon: HugeIcons.strokeRoundedMessage01,
-              variant: AppButtonVariant.primary,
-              isFullWidth: true,
-              onTap: onChat,
-            ),
-            const SizedBox(height: AppSpacing.sm),
+            if (hasPhone)
+              AppButton(
+                label: 'Call Rider',
+                icon: HugeIcons.strokeRoundedCall,
+                variant: AppButtonVariant.secondary,
+                isFullWidth: true,
+                onTap: _callRider,
+              ),
           ],
-          if (hasPhone)
-            AppButton(
-              label: 'Call Rider',
-              icon: HugeIcons.strokeRoundedCall,
-              variant: AppButtonVariant.secondary,
-              isFullWidth: true,
-              onTap: _callRider,
-            ),
         ],
       ),
     );

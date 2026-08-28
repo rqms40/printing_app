@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   GeoPoint,
@@ -50,6 +50,7 @@ function validateMatrix(
 
 export class OsrmRoutingProvider implements RoutingProvider {
   readonly name = 'osrm';
+  private readonly logger = new Logger(OsrmRoutingProvider.name);
   private readonly baseUrl: string;
   private readonly profile: string;
   private readonly timeoutMs: number;
@@ -95,7 +96,12 @@ export class OsrmRoutingProvider implements RoutingProvider {
     }>(
       `/table/v1/${encodeURIComponent(this.profile)}/${this.coordinates(points)}?annotations=duration%2Cdistance`,
     );
-    if (payload.code !== 'Ok') throw routingUnavailable();
+    if (payload.code !== 'Ok') {
+      this.logger.warn(
+        `OSRM table rejected (${this.baseUrl}): code=${String(payload.code)}`,
+      );
+      throw routingUnavailable();
+    }
     return {
       durationsSeconds: validateMatrix(payload.durations, points.length),
       distancesMeters: validateMatrix(payload.distances, points.length),
@@ -129,6 +135,9 @@ export class OsrmRoutingProvider implements RoutingProvider {
       !Array.isArray(route.geometry.coordinates) ||
       route.geometry.coordinates.length < 2
     ) {
+      this.logger.warn(
+        `OSRM route rejected (${this.baseUrl}): code=${String(payload.code)}`,
+      );
       throw routingUnavailable();
     }
     const coordinates = route.geometry.coordinates.map((coordinate) => {
@@ -165,16 +174,23 @@ export class OsrmRoutingProvider implements RoutingProvider {
   }
 
   private async request<T>(path: string): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      const response = await this.fetchImpl(url, {
         signal: controller.signal,
       });
-      if (!response.ok) throw routingUnavailable();
+      if (!response.ok) {
+        this.logger.warn(`OSRM request failed: HTTP ${response.status} (${url})`);
+        throw routingUnavailable();
+      }
       return (await response.json()) as T;
     } catch (error) {
       if (error instanceof ServiceUnavailableException) throw error;
+      const name = error instanceof Error ? error.name : 'Error';
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`OSRM request failed: ${name}: ${message} (${url})`);
       throw routingUnavailable();
     } finally {
       clearTimeout(timeout);

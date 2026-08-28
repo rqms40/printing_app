@@ -93,6 +93,42 @@ export class Payout {
   @Column({ name: 'released_at', type: 'timestamptz', nullable: true })
   releasedAt: Date | null;
 
+  /** Ops/super receipt proving GRIDGO paid this supplier. */
+  @Column({ name: 'admin_receipt_file_id', type: 'int', nullable: true })
+  adminReceiptFileId: number | null;
+
+  @Column({ name: 'authorized_at', type: 'timestamptz', nullable: true })
+  authorizedAt: Date | null;
+
+  @Column({ name: 'authorized_by_user_id', type: 'int', nullable: true })
+  authorizedByUserId: number | null;
+
+  /** First 50% paid to the supplier at production authorize (PHP minor units). */
+  @Column({ name: 'deposit_amount_minor', type: 'bigint', nullable: true })
+  depositAmountMinor: string | null;
+
+  /** Remaining 50% paid after order completion (PHP minor units). */
+  @Column({ name: 'completion_amount_minor', type: 'bigint', nullable: true })
+  completionAmountMinor: string | null;
+
+  /** Ops/super receipt for the remaining 50% after delivery/collection. */
+  @Column({ name: 'completion_receipt_file_id', type: 'int', nullable: true })
+  completionReceiptFileId: number | null;
+
+  @Column({
+    name: 'completion_authorized_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  completionAuthorizedAt: Date | null;
+
+  @Column({
+    name: 'completion_authorized_by_user_id',
+    type: 'int',
+    nullable: true,
+  })
+  completionAuthorizedByUserId: number | null;
+
   @Column({ name: 'settled_at', type: 'timestamptz', nullable: true })
   settledAt: Date | null;
 

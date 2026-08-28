@@ -52,7 +52,8 @@ import {
 } from '../delivery-slots/exceptions';
 import { BatchOrder } from './entities/batch-order.entity';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
-import { FileMetadata } from '../files/entities/file-metadata.entity';
+import { FileMetadata, FilePurpose } from '../files/entities/file-metadata.entity';
+import { PayoutsService } from '../payouts/payouts.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
@@ -261,6 +262,15 @@ describe('OrdersService', () => {
   let notificationsService: Partial<NotificationsService>;
   let catalogPricingService: { quote: jest.Mock };
   let fileMetadataRepo: jest.Mocked<Partial<Repository<FileMetadata>>>;
+  let supplierAssignmentRepo: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+  };
+  let payoutsService: {
+    recordOpsAuthorization: jest.Mock;
+    recordOpsCompletionAuthorization: jest.Mock;
+    findLatestByOrderIds: jest.Mock;
+  };
   let auditService: {
     recordOrderStatusTransition: jest.Mock;
     append: jest.Mock;
@@ -392,6 +402,21 @@ describe('OrdersService', () => {
         model3dHeightMm: null,
       })),
       findOneOrFail: jest.fn().mockResolvedValue({ model3dWidthMm: null }),
+    };
+    supplierAssignmentRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        orderId: 42,
+        supplierId: 3,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        supplier: { payoutQrFileId: 55, userId: 11 },
+      }),
+    };
+    payoutsService = {
+      recordOpsAuthorization: jest.fn().mockResolvedValue({ id: 1 }),
+      recordOpsCompletionAuthorization: jest.fn().mockResolvedValue({ id: 1 }),
+      findLatestByOrderIds: jest.fn().mockResolvedValue(new Map()),
     };
     addressRepo.findOne.mockResolvedValue({
       id: 9,
@@ -551,6 +576,13 @@ describe('OrdersService', () => {
                 create: jest.fn((d) => d),
                 save: jest.fn(async (d) => ({ id: 1, ...d })),
               };
+            if (entity?.name === 'FileMetadata') return fileMetadataRepo;
+            if (entity?.name === 'Payout')
+              return {
+                findOne: jest.fn().mockResolvedValue(null),
+                create: jest.fn((d) => d),
+                save: jest.fn(async (d) => ({ id: 1, ...d })),
+              };
             throw new Error(`Unexpected repository ${entity?.name}`);
           },
         }),
@@ -575,8 +607,9 @@ describe('OrdersService', () => {
         },
         {
           provide: getRepositoryToken(SupplierAssignment),
-          useValue: { find: jest.fn().mockResolvedValue([]) },
+          useValue: supplierAssignmentRepo,
         },
+        { provide: PayoutsService, useValue: payoutsService },
         {
           provide: getRepositoryToken(DispatchPlan),
           useValue: dispatchPlanRepo,
@@ -704,6 +737,24 @@ describe('OrdersService', () => {
       actorRole: 'ops_admin',
       reason: 'Ops payment authorization',
     };
+    const authorizeDto = { receiptFileId: 88 };
+
+    function stubAuthorizePrereqs(actorUserId = 7) {
+      fileMetadataRepo.findOne!.mockResolvedValue({
+        id: 88,
+        uploadedBy: actorUserId,
+        purpose: FilePurpose.PAYOUT_RECEIPT,
+        url: 'https://files/88',
+        originalName: 'receipt.jpg',
+      } as FileMetadata);
+      supplierAssignmentRepo.findOne.mockResolvedValue({
+        id: 1,
+        orderId: 42,
+        supplierId: 3,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        supplier: { payoutQrFileId: 55, userId: 11 },
+      });
+    }
 
     function awaitingPilotCreditOrder(overrides: Partial<Order> = {}): Order {
       return {
@@ -734,8 +785,13 @@ describe('OrdersService', () => {
       repo.findOneOrFail.mockResolvedValue(order);
       repo.save.mockImplementation(async (o) => o as Order);
       assignmentRepo.find!.mockResolvedValue([]);
+      stubAuthorizePrereqs();
 
-      const result = await service.authorizePayment(42, authContext);
+      const result = await service.authorizePayment(
+        42,
+        authContext,
+        authorizeDto,
+      );
 
       // Credits always settle against the order owner (userId), not the ops actor.
       expect(creditsService.reserveCredits).toHaveBeenCalledWith(
@@ -777,6 +833,13 @@ describe('OrdersService', () => {
           toStatus: OrderStatus.PAYMENT_AUTHORIZED,
         }),
       );
+      expect(payoutsService.recordOpsAuthorization).toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({
+          receiptFileId: 88,
+          actorUserId: 7,
+        }),
+      );
     });
 
     it('skips ledger when pilot credits already paid at create (no double spend)', async () => {
@@ -785,8 +848,9 @@ describe('OrdersService', () => {
       repo.findOneOrFail.mockResolvedValue(order);
       repo.save.mockImplementation(async (o) => o as Order);
       assignmentRepo.find!.mockResolvedValue([]);
+      stubAuthorizePrereqs();
 
-      await service.authorizePayment(42, authContext);
+      await service.authorizePayment(42, authContext, authorizeDto);
 
       expect(creditsService.reserveCredits).not.toHaveBeenCalled();
       expect(creditsService.spendCredits).not.toHaveBeenCalled();
@@ -807,6 +871,7 @@ describe('OrdersService', () => {
       repo.findOneOrFail.mockResolvedValue(order);
       repo.save.mockImplementation(async (o) => o as Order);
       assignmentRepo.find!.mockResolvedValue([]);
+      stubAuthorizePrereqs();
       paymentsService.assertCodEligibleForCheckout.mockResolvedValue({
         eligible: true,
         reasons: [],
@@ -815,7 +880,11 @@ describe('OrdersService', () => {
         maxAmountMinor: 150000,
       });
 
-      const result = await service.authorizePayment(42, authContext);
+      const result = await service.authorizePayment(
+        42,
+        authContext,
+        authorizeDto,
+      );
 
       expect(creditsService.reserveCredits).not.toHaveBeenCalled();
       expect(paymentsService.assertCodEligibleForCheckout).toHaveBeenCalled();
@@ -874,12 +943,17 @@ describe('OrdersService', () => {
       repo.findOneOrFail.mockResolvedValue(order);
       repo.save.mockImplementation(async (o) => o as Order);
       assignmentRepo.find!.mockResolvedValue([]);
+      stubAuthorizePrereqs(99);
 
-      const result = await service.authorizePayment(42, {
-        actorUserId: 99,
-        actorRole: 'super_admin',
-        reason: 'Super admin auth',
-      });
+      const result = await service.authorizePayment(
+        42,
+        {
+          actorUserId: 99,
+          actorRole: 'super_admin',
+          reason: 'Super admin auth',
+        },
+        authorizeDto,
+      );
 
       expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
       expect(result.paymentAuthorizationStatus).toBe(
@@ -901,6 +975,131 @@ describe('OrdersService', () => {
 
       expect(creditsService.reserveCredits).not.toHaveBeenCalled();
       expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
+    });
+
+    it('rejects authorization without a payout receipt', async () => {
+      const order = awaitingPilotCreditOrder();
+      repo.findOne.mockResolvedValue(order);
+
+      await expect(
+        service.authorizePayment(42, authContext),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'payout_receipt_required',
+        }),
+      });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+    });
+
+    it('rejects authorization when the supplier has no payout QR', async () => {
+      const order = awaitingPilotCreditOrder();
+      repo.findOne.mockResolvedValue(order);
+      stubAuthorizePrereqs();
+      supplierAssignmentRepo.findOne.mockResolvedValue({
+        id: 1,
+        orderId: 42,
+        supplierId: 3,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        supplier: { payoutQrFileId: null, userId: 11 },
+      });
+
+      await expect(
+        service.authorizePayment(42, authContext, authorizeDto),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'supplier_payout_qr_required',
+        }),
+      });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('authorizeCompletionPayment', () => {
+    const authContext = {
+      actorUserId: 7,
+      actorRole: 'ops_admin',
+      reason: 'Ops supplier completion payment',
+    };
+    const authorizeDto = { receiptFileId: 88 };
+
+    function stubAuthorizePrereqs() {
+      fileMetadataRepo.findOne!.mockResolvedValue({
+        id: 88,
+        uploadedBy: 7,
+        purpose: FilePurpose.PAYOUT_RECEIPT,
+        url: 'https://files/88',
+        originalName: 'receipt.jpg',
+      } as FileMetadata);
+      supplierAssignmentRepo.findOne.mockResolvedValue({
+        id: 1,
+        orderId: 42,
+        supplierId: 3,
+        decision: SupplierAssignmentDecision.ACCEPTED,
+        supplier: { payoutQrFileId: 55, userId: 11 },
+      });
+    }
+
+    it('records the remaining 50% without changing order status', async () => {
+      const order = {
+        id: 42,
+        orderStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+      } as Order;
+      repo.findOne.mockResolvedValue(order);
+      stubAuthorizePrereqs();
+
+      const result = await service.authorizeCompletionPayment(
+        42,
+        authContext,
+        authorizeDto,
+      );
+
+      expect(
+        payoutsService.recordOpsCompletionAuthorization,
+      ).toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({
+          receiptFileId: 88,
+          actorUserId: 7,
+        }),
+      );
+      expect(result.orderStatus).toBe(OrderStatus.ISSUE_WINDOW_OPEN);
+    });
+
+    it('rejects completion payment before delivery', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 42,
+        orderStatus: OrderStatus.PRODUCTION,
+      } as Order);
+
+      await expect(
+        service.authorizeCompletionPayment(42, authContext, authorizeDto),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'invalid_status_for_completion_payment',
+        }),
+      });
+      expect(
+        payoutsService.recordOpsCompletionAuthorization,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('rejects client completion authorization', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 42,
+        orderStatus: OrderStatus.DELIVERED,
+      } as Order);
+
+      await expect(
+        service.authorizeCompletionPayment(
+          42,
+          { actorUserId: 1, actorRole: 'client' },
+          authorizeDto,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'ops_only_payment_authorization',
+        }),
+      });
     });
   });
 

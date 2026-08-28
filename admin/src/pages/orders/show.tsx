@@ -14,12 +14,18 @@ import {
   Timeline,
   Spin,
   Tag,
+  Upload,
+  Alert,
+  Image,
 } from "antd";
 import {
+  CarOutlined,
   DollarOutlined,
+  DownloadOutlined,
   ExclamationCircleOutlined,
   EnvironmentOutlined,
   ShopOutlined,
+  UploadOutlined,
   UserSwitchOutlined,
 } from "@ant-design/icons";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
@@ -27,7 +33,7 @@ import { RiderLiveTrackingMap } from "./rider-live-map";
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useParams } from "react-router";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import type { OrderStatus } from "@/types/enums";
 import { ORDER_STATUS_LABELS } from "@/types/enums";
@@ -63,6 +69,17 @@ import {
 
 const { Text } = Typography;
 const { TextArea } = Input;
+
+const SUPPLIER_COMPLETION_PAYMENT_STATUSES = new Set<OrderStatus>([
+  "delivered",
+  "collected_by_customer",
+  "issue_window_open",
+  "completed",
+]);
+
+function minorToPesos(value: string | number | null | undefined): number {
+  return (Number(value) || 0) / 100;
+}
 
 const DESTINATION_PIN_ICON = new DivIcon({
   className: "order-destination-pin",
@@ -244,6 +261,7 @@ function getOrderTypeLabel(order: Order) {
 
 export function OrderShow() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { modal, message } = App.useApp();
   const [order, setOrder] = useState<
     (Order & { status_history?: OrderStatusHistory[] }) | null
@@ -285,6 +303,14 @@ export function OrderShow() {
   const [fileInspectorOpen, setFileInspectorOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<OrderFilePreview | null>(null);
   const [previewingFileId, setPreviewingFileId] = useState<string | null>(null);
+  const [authorizeOpen, setAuthorizeOpen] = useState(false);
+  const [authorizeKind, setAuthorizeKind] = useState<"deposit" | "completion">(
+    "deposit",
+  );
+  const [receiptFileId, setReceiptFileId] = useState<number | null>(null);
+  const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [authorizing, setAuthorizing] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -351,6 +377,17 @@ export function OrderShow() {
   const canAuthorizePayment =
     order.order_status === "supplier_accepted" ||
     order.order_status === "awaiting_payment";
+  const canAuthorizeCompletionPayment =
+    SUPPLIER_COMPLETION_PAYMENT_STATUSES.has(order.order_status) &&
+    Boolean(order.assigned_supplier_contact?.payout_deposit_authorized_at) &&
+    !order.assigned_supplier_contact?.payout_completion_authorized_at;
+  const assignedRiderProfileId = Number(
+    order.assigned_rider_contact?.rider_profile_id,
+  );
+  const canPayRider =
+    Boolean(order.assigned_supplier_contact?.payout_completion_authorized_at) &&
+    Number.isInteger(assignedRiderProfileId) &&
+    assignedRiderProfileId > 0;
   const assignedRiderName =
     order.assigned_rider_contact?.display_name ??
     order.assigned_rider_contact?.full_name ??
@@ -413,30 +450,72 @@ export function OrderShow() {
     }
   };
 
-  const handleAuthorizePayment = () => {
-    modal.confirm({
-      title: "Authorize payment",
-      icon: <DollarOutlined />,
-      content:
-        "Authorize Pilot Credits or eligible COD for this order? Production can start after authorization. Credits (if any) are charged to the customer.",
-      okText: "Authorize payment",
-      onOk: async () => {
-        try {
-          await apiClient.post(`/orders/${id}/authorize-payment`);
-          void message.success("Payment authorized — production can start");
-          const res = await apiClient.get(`/admin/orders/${id}`);
-          setOrder(normalizeOrder(res.data));
-        } catch (e: unknown) {
-          const msg =
-            (e as { response?: { data?: { message?: string | string[] } } })
-              ?.response?.data?.message ?? "Failed to authorize payment";
-          void message.error(
-            Array.isArray(msg) ? msg.join(", ") : String(msg),
-          );
-          throw e;
-        }
-      },
-    });
+  const openAuthorizePayment = (kind: "deposit" | "completion" = "deposit") => {
+    setAuthorizeKind(kind);
+    setReceiptFileId(null);
+    setReceiptFileName(null);
+    setAuthorizeOpen(true);
+  };
+
+  const uploadAuthorizeReceipt = async (options: any) => {
+    const { file, onSuccess, onError } = options;
+    setUploadingReceipt(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("purpose", "payout_receipt");
+    try {
+      const res = await apiClient.post("/files/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const uploadedId = Number(res.data?.id);
+      if (!Number.isInteger(uploadedId) || uploadedId <= 0) {
+        throw new Error("Upload did not return a file id");
+      }
+      setReceiptFileId(uploadedId);
+      setReceiptFileName(file.name || "receipt.jpg");
+      void message.success("Receipt uploaded");
+      onSuccess?.("ok");
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string | string[] } } })
+          ?.response?.data?.message ?? "Receipt upload failed";
+      void message.error(Array.isArray(msg) ? msg.join(", ") : String(msg));
+      onError?.(err);
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
+
+  const handleAuthorizePayment = async () => {
+    if (!receiptFileId) {
+      void message.error("Upload a payment receipt before authorizing");
+      return;
+    }
+    setAuthorizing(true);
+    try {
+      const path =
+        authorizeKind === "completion"
+          ? `/orders/${id}/authorize-completion-payment`
+          : `/orders/${id}/authorize-payment`;
+      await apiClient.post(path, {
+        receiptFileId,
+      });
+      void message.success(
+        authorizeKind === "completion"
+          ? "Final 50% authorized — supplier is fully paid"
+          : "Payment authorized — production can start",
+      );
+      setAuthorizeOpen(false);
+      const res = await apiClient.get(`/admin/orders/${id}`);
+      setOrder(normalizeOrder(res.data));
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string | string[] } } })
+          ?.response?.data?.message ?? "Failed to authorize payment";
+      void message.error(Array.isArray(msg) ? msg.join(", ") : String(msg));
+    } finally {
+      setAuthorizing(false);
+    }
   };
 
   const openSupplierAssign = async () => {
@@ -669,9 +748,33 @@ export function OrderShow() {
                     type="primary"
                     icon={<DollarOutlined />}
                     aria-label={`Authorize payment for ${order.order_id}`}
-                    onClick={handleAuthorizePayment}
+                    onClick={() => openAuthorizePayment("deposit")}
                   >
                     Authorize Payment
+                  </Button>
+                )}
+                {canAuthorizeCompletionPayment && (
+                  <Button
+                    type="primary"
+                    icon={<DollarOutlined />}
+                    aria-label={`Authorize remaining payment for ${order.order_id}`}
+                    onClick={() => openAuthorizePayment("completion")}
+                  >
+                    Authorize Payment
+                  </Button>
+                )}
+                {canPayRider && (
+                  <Button
+                    type="primary"
+                    icon={<CarOutlined />}
+                    aria-label={`Payment for rider on ${order.order_id}`}
+                    onClick={() =>
+                      navigate(
+                        `/riders/payouts?riderId=${assignedRiderProfileId}`,
+                      )
+                    }
+                  >
+                    Payment for Rider
                   </Button>
                 )}
                 {canAssignSupplier && (
@@ -957,8 +1060,8 @@ export function OrderShow() {
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {(order.assigned_rider_contact.delivery_status === "picked_up" ||
-                order.assigned_rider_contact.delivery_status === "on_the_way" ||
-                order.assigned_rider_contact.delivery_status === "arrived")
+                  order.assigned_rider_contact.delivery_status === "on_the_way" ||
+                  order.assigned_rider_contact.delivery_status === "arrived")
                   ? "Heading to customer"
                   : "Heading to supplier shop"}
               </Text>
@@ -981,8 +1084,8 @@ export function OrderShow() {
               customerLongitude={destinations[0]?.longitude}
               headingTo={
                 order.assigned_rider_contact.delivery_status === "picked_up" ||
-                order.assigned_rider_contact.delivery_status === "on_the_way" ||
-                order.assigned_rider_contact.delivery_status === "arrived"
+                  order.assigned_rider_contact.delivery_status === "on_the_way" ||
+                  order.assigned_rider_contact.delivery_status === "arrived"
                   ? "customer"
                   : "supplier"
               }
@@ -1062,7 +1165,7 @@ export function OrderShow() {
               </Descriptions.Item>
               <Descriptions.Item label="Proof">
                 {order.pickup_proof.type === "photo" &&
-                order.pickup_proof.file_id ? (
+                  order.pickup_proof.file_id ? (
                   <Button
                     size="small"
                     onClick={() =>
@@ -1114,7 +1217,7 @@ export function OrderShow() {
               </Descriptions.Item>
               <Descriptions.Item label="Proof">
                 {order.delivery_proof.type === "photo" &&
-                order.delivery_proof.file_id ? (
+                  order.delivery_proof.file_id ? (
                   <Button
                     size="small"
                     onClick={() =>
@@ -1245,7 +1348,7 @@ export function OrderShow() {
                           {isProduction ? " · Production" : ""}
                           {isLogistics ? " · Delivery process" : ""}
                           {step === "ready_for_dispatch" &&
-                          current === "ready_for_dispatch"
+                            current === "ready_for_dispatch"
                             ? " · Assign rider next"
                             : ""}
                         </Text>
@@ -1476,6 +1579,92 @@ export function OrderShow() {
           fileMetadataId={order.file_metadata_id ?? undefined}
         />
       )}
+
+      <Modal
+        title="Authorize payment"
+        open={authorizeOpen}
+        onCancel={() => setAuthorizeOpen(false)}
+        okText="Authorize payment"
+        okButtonProps={{
+          disabled:
+            !receiptFileId ||
+            !order.assigned_supplier_contact?.payout_qr_url ||
+            uploadingReceipt,
+          loading: authorizing,
+        }}
+        onOk={() => void handleAuthorizePayment()}
+        destroyOnClose
+        width={520}
+      >
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Text type="secondary">
+            {authorizeKind === "completion"
+              ? `Pay the remaining 50% (${formatCurrency(
+                  minorToPesos(
+                    order.assigned_supplier_contact
+                      ?.payout_completion_amount_minor,
+                  ),
+                )}) to the assigned supplier using their payout QR, then upload the GRIDGO receipt. This completes supplier payment.`
+              : `Pay 50% (${formatCurrency(
+                  minorToPesos(
+                    order.assigned_supplier_contact?.payout_deposit_amount_minor,
+                  ),
+                )}) of the total amount to the assigned supplier using their payout QR, then upload the GRIDGO receipt. Authorization starts production.`}
+          </Text>
+          {order.assigned_supplier_contact?.payout_qr_url ? (
+            <Card size="small" title="Supplier payout QR">
+              <Space direction="vertical" style={{ width: "100%" }}>
+                <Image
+                  src={order.assigned_supplier_contact.payout_qr_url}
+                  alt="Supplier payout QR"
+                  style={{ maxHeight: 280, objectFit: "contain" }}
+                />
+                <Button
+                  icon={<DownloadOutlined />}
+                  href={order.assigned_supplier_contact.payout_qr_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Download QR
+                </Button>
+              </Space>
+            </Card>
+          ) : (
+            <Alert
+              type="warning"
+              showIcon
+              message="Supplier payout QR missing"
+              description="The assigned supplier must upload a payout QR on Payouts before you can authorize payment."
+            />
+          )}
+          <div>
+            <Text strong>Payment receipt</Text>
+            <div style={{ marginTop: 8 }}>
+              <Upload
+                customRequest={uploadAuthorizeReceipt}
+                showUploadList={false}
+                accept="image/*"
+                disabled={uploadingReceipt}
+              >
+                <Button icon={<UploadOutlined />} loading={uploadingReceipt}>
+                  {receiptFileId ? "Replace receipt" : "Upload receipt"}
+                </Button>
+              </Upload>
+              {receiptFileName ? (
+                <div style={{ marginTop: 8 }}>
+                  <Text type="success">{receiptFileName} uploaded</Text>
+                </div>
+              ) : (
+                <div style={{ marginTop: 8 }}>
+                  <Text type="secondary">
+                    Required before Authorize payment
+                  </Text>
+                </div>
+              )}
+            </div>
+          </div>
+        </Space>
+      </Modal>
 
       {/* Per-item File Preview Modal */}
       <FilePreviewModal

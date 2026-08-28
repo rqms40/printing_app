@@ -21,6 +21,8 @@ import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.mod
 import { AuditModule } from '../audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { QualityModule } from '../quality/quality.module';
+import { RiderPayout } from './entities/rider-payout.entity';
+import { RiderPayoutsService } from './rider-payouts.service';
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { QualityModule } from '../quality/quality.module';
       DispatchPlan,
       DispatchPlanStop,
       Order,
+      RiderPayout,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -50,6 +53,7 @@ import { QualityModule } from '../quality/quality.module';
   controllers: [RidersController],
   providers: [
     RidersService,
+    RiderPayoutsService,
     DispatchPlanService,
     LocationGateway,
     {
@@ -58,6 +62,11 @@ import { QualityModule } from '../quality/quality.module';
       useFactory: (config: ConfigService) => new OsrmRoutingProvider(config),
     },
   ],
-  exports: [RidersService, DispatchPlanService, LocationGateway],
+  exports: [
+    RidersService,
+    RiderPayoutsService,
+    DispatchPlanService,
+    LocationGateway,
+  ],
 })
 export class RidersModule {}

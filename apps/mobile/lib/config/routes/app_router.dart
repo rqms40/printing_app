@@ -70,6 +70,7 @@ import 'package:printing_app/features/rider/deliveries/screens/deliveries_screen
 import 'package:printing_app/features/rider/deliveries/screens/delivery_detail_screen.dart';
 import 'package:printing_app/features/rider/active_delivery/screens/active_delivery_screen.dart';
 import 'package:printing_app/features/rider/history/screens/delivery_history_screen.dart';
+import 'package:printing_app/features/rider/history/screens/rider_payouts_screen.dart';
 import 'package:printing_app/features/rider/home/screens/rider_home_screen.dart';
 import 'package:printing_app/features/rider/profile/screens/rider_profile_screen.dart';
 
@@ -93,6 +94,7 @@ import 'package:printing_app/features/supplier/screens/supplier_catalog_screen.d
 import 'package:printing_app/features/admin/dashboard/screens/dashboard_screen.dart';
 import 'package:printing_app/features/admin/queue/screens/queue_screen.dart';
 import 'package:printing_app/features/admin/queue/screens/admin_order_detail_screen.dart';
+import 'package:printing_app/features/admin/rider_management/screens/admin_rider_payouts_screen.dart';
 import 'package:printing_app/features/admin/rider_management/screens/rider_assignment_screen.dart';
 import 'package:printing_app/features/admin/profile/screens/admin_profile_screen.dart';
 
@@ -850,6 +852,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideTransition(const DeliveryHistoryScreen(), state),
       ),
       GoRoute(
+        path: '/rider/payouts',
+        pageBuilder: (_, state) =>
+            slideTransition(const RiderPayoutsScreen(), state),
+      ),
+      GoRoute(
         path: '/rider/chat/:id',
         pageBuilder: (_, state) {
           final id = int.parse(state.pathParameters['id']!);
@@ -1036,6 +1043,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/admin/queue/:id',
         pageBuilder: (_, state) => scaleTransition(
           AdminOrderDetailScreen(orderId: state.pathParameters['id']!),
+          state,
+        ),
+      ),
+      GoRoute(
+        path: '/admin/riders/payouts',
+        pageBuilder: (_, state) => scaleTransition(
+          AdminRiderPayoutsScreen(
+            initialRiderId: state.uri.queryParameters['riderId'],
+          ),
           state,
         ),
       ),

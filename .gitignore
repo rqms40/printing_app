@@ -75,6 +75,9 @@ error.txt
 out.txt
 status.txt
 
+# Local OSRM city extracts (not the committed beta fixture)
+docker/osrm/davao/
+
 # === Vite dev cache ===
 **/.vite/
 

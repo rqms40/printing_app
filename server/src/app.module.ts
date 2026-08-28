@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -43,7 +44,14 @@ import {
 @Module({
   imports: [
     // Environment variables
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: [
+        join(__dirname, '../.env'),
+        join(process.cwd(), '.env'),
+        join(process.cwd(), 'server/.env'),
+      ],
+    }),
 
     // Rate limiting
     ThrottlerModule.forRoot([

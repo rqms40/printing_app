@@ -494,8 +494,8 @@ export const POLYMEDIA_CATALOG_TEXT = `Polymedia Printing Services Catalog
 File Requirements for All Orders Accepted formats: PDF, Canva Link, PSD, CorelDRAW
 1. Tarpaulin & Signage Printing
 Printer Options & Base Pricing
-Eco-solvent: ₱40.00 / sq. ft.
-UV Printer (Premium): ₱90.00 / sq. ft.
+Eco-solvent.
+UV Printer (Premium).
 Material Types & Thickness
 Regular Tarpaulin: 10oz, 13oz, 18oz
 Panaflex (for signages): 13oz, 18oz

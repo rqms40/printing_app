@@ -262,7 +262,14 @@ describe('FilesService', () => {
       );
     });
 
-    it.each(['proof_of_delivery', 'beta_testimonial'])(
+    it.each([
+      'proof_of_delivery',
+      'beta_testimonial',
+      'payment_receipt',
+      'supplier_payout_qr',
+      'rider_payout_qr',
+      'payout_receipt',
+    ])(
       'rejects undecodable %s image bytes before object storage',
       async (purpose) => {
         const file = makeFile({ buffer: Buffer.from('not-an-image') });

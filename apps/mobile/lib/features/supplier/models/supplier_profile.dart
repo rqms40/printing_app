@@ -12,6 +12,8 @@ class SupplierProfile {
     this.longitude,
     this.logoFileId,
     this.logoUrl,
+    this.payoutQrFileId,
+    this.payoutQrUrl,
     this.attributes = const {},
     this.serviceZones = const [],
     this.serviceFocusRanks = const [],
@@ -33,6 +35,8 @@ class SupplierProfile {
   final double? longitude;
   final int? logoFileId;
   final String? logoUrl;
+  final int? payoutQrFileId;
+  final String? payoutQrUrl;
   final Map<String, String> attributes;
   final List<String> serviceZones;
   /// Ordered service-focus keys (index 0 = highest priority).
@@ -105,6 +109,8 @@ class SupplierProfile {
       longitude: _asDoubleOrNull(json['longitude']),
       logoFileId: _asInt(json['logoFileId'] ?? json['logo_file_id']),
       logoUrl: (json['logoUrl'] ?? json['logo_url'])?.toString(),
+      payoutQrFileId: _asInt(json['payoutQrFileId'] ?? json['payout_qr_file_id']),
+      payoutQrUrl: (json['payoutQrUrl'] ?? json['payout_qr_url'])?.toString(),
       attributes: attrs,
       serviceZones: zones,
       serviceFocusRanks: focusRanks,
@@ -126,6 +132,8 @@ class SupplierProfile {
     double? longitude,
     int? logoFileId,
     String? logoUrl,
+    int? payoutQrFileId,
+    String? payoutQrUrl,
     Map<String, String>? attributes,
     List<String>? serviceZones,
     List<String>? serviceFocusRanks,
@@ -143,6 +151,8 @@ class SupplierProfile {
       longitude: longitude ?? this.longitude,
       logoFileId: logoFileId ?? this.logoFileId,
       logoUrl: logoUrl ?? this.logoUrl,
+      payoutQrFileId: payoutQrFileId ?? this.payoutQrFileId,
+      payoutQrUrl: payoutQrUrl ?? this.payoutQrUrl,
       attributes: attributes ?? this.attributes,
       serviceZones: serviceZones ?? this.serviceZones,
       serviceFocusRanks: serviceFocusRanks ?? this.serviceFocusRanks,

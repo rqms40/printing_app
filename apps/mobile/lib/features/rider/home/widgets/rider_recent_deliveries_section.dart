@@ -128,7 +128,7 @@ class _RecentRow extends StatelessWidget {
                 ),
               ),
               Text(
-                formatCurrency(order.deliveryFee),
+                formatCurrency(order.deliveryFeePesos),
                 style: AppTypography.bodyBold.copyWith(
                   color: colors.brand,
                   fontSize: 12,

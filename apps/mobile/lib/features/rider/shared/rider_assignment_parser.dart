@@ -177,6 +177,9 @@ RiderOrderContext _parseOrderContext(Map<String, dynamic>? json) {
     quantity: (json['quantity'] as num?)?.toInt() ?? 1,
     totalPrice: _readDouble(json['totalPrice'] ?? json['total_price']) ?? 0,
     deliveryFee: _readDouble(json['deliveryFee'] ?? json['delivery_fee']) ?? 0,
+    deliveryFeeMinor: _readString(
+      json['deliveryFeeMinor'] ?? json['delivery_fee_minor'],
+    ),
     customerName: _readString(customer?['fullName'] ?? customer?['full_name']),
     customerPhone: _readString(
       customer?['phoneNumber'] ?? customer?['phone_number'],

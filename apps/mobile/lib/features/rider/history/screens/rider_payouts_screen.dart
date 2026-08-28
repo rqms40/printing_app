@@ -6,22 +6,24 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/features/supplier/providers/supplier_payouts_provider.dart';
-import 'package:printing_app/features/supplier/providers/supplier_profile_provider.dart';
+import 'package:printing_app/features/rider/history/providers/rider_payouts_provider.dart';
+import 'package:printing_app/features/rider/profile/providers/rider_profile_provider.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
+import 'package:printing_app/utils/formatters.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Supplier payout notices — held during issue window, frozen on timely claims.
-class SupplierPayoutsScreen extends ConsumerWidget {
-  const SupplierPayoutsScreen({super.key});
+class RiderPayoutsScreen extends ConsumerWidget {
+  const RiderPayoutsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-    final state = ref.watch(supplierPayoutsProvider);
+    final state = ref.watch(riderPayoutsProvider);
+    final profile = ref.watch(riderProfileProvider);
+    final qrUrl = state.payoutQrUrl ?? profile.payoutQrUrl;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -34,17 +36,17 @@ class SupplierPayoutsScreen extends ConsumerWidget {
         actions: [
           IconButton(
             onPressed: () {
-              ref.read(supplierPayoutsProvider.notifier).refresh();
-              ref.read(supplierProfileProvider.notifier).refresh();
+              ref.read(riderPayoutsProvider.notifier).refresh();
+              ref.read(riderProfileProvider.notifier).refresh();
             },
             icon: Icon(Icons.refresh, color: colors.onBackground),
           ),
         ],
       ),
       body: SafeArea(
-        child: state.isLoading && state.payouts.isEmpty
+        child: state.isLoading && state.items.isEmpty
             ? const Center(child: CircularProgressIndicator())
-            : state.errorMessage != null && state.payouts.isEmpty
+            : state.errorMessage != null && state.items.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(AppSpacing.xl),
@@ -66,7 +68,7 @@ class SupplierPayoutsScreen extends ConsumerWidget {
                           const SizedBox(height: AppSpacing.lg),
                           FilledButton(
                             onPressed: () => ref
-                                .read(supplierPayoutsProvider.notifier)
+                                .read(riderPayoutsProvider.notifier)
                                 .refresh(),
                             child: const Text('Retry'),
                           ),
@@ -77,34 +79,30 @@ class SupplierPayoutsScreen extends ConsumerWidget {
                 : RefreshIndicator(
                     onRefresh: () async {
                       await Future.wait([
-                        ref.read(supplierPayoutsProvider.notifier).refresh(),
-                        ref.read(supplierProfileProvider.notifier).refresh(),
+                        ref.read(riderPayoutsProvider.notifier).refresh(),
+                        ref.read(riderProfileProvider.notifier).refresh(),
                       ]);
                     },
                     child: ListView(
                       padding: const EdgeInsets.all(AppSpacing.xl),
                       children: [
-                        _PayoutQrCard(colors: colors),
+                        _PayoutQrCard(colors: colors, qrUrl: qrUrl),
                         const SizedBox(height: AppSpacing.lg),
-                        if (state.payouts.isEmpty)
+                        if (state.items.isEmpty)
                           const EmptyState(
-                            heading: 'No payouts yet',
+                            heading: 'No completed deliveries yet',
                             body:
-                                'When GRIDGO authorizes payment, the receipt and '
-                                'amounts appear here. A 24-hour issue window hold '
-                                'starts after delivery.',
+                                'After you finish a delivery, ops pays this QR and '
+                                'the receipt appears here.',
                             icon: HugeIcons.strokeRoundedWallet01,
                           )
                         else
-                          ...[
-                            for (var i = 0; i < state.payouts.length; i++) ...[
-                              if (i > 0)
-                                const SizedBox(height: AppSpacing.md),
-                              _PayoutCard(
-                                payout: state.payouts[i],
-                                colors: colors,
-                              ),
-                            ],
+                          for (var i = 0; i < state.items.length; i++) ...[
+                            if (i > 0) const SizedBox(height: AppSpacing.md),
+                            _PayoutCard(
+                              item: state.items[i],
+                              colors: colors,
+                            ),
                           ],
                       ],
                     ),
@@ -115,9 +113,10 @@ class SupplierPayoutsScreen extends ConsumerWidget {
 }
 
 class _PayoutQrCard extends ConsumerWidget {
-  const _PayoutQrCard({required this.colors});
+  const _PayoutQrCard({required this.colors, required this.qrUrl});
 
   final AppColorSet colors;
+  final String? qrUrl;
 
   Future<void> _pickQr(BuildContext context, WidgetRef ref) async {
     final picked = await ImagePicker().pickImage(
@@ -126,21 +125,23 @@ class _PayoutQrCard extends ConsumerWidget {
       maxWidth: 1600,
     );
     if (picked == null) return;
-    final ok = await ref
-        .read(supplierProfileProvider.notifier)
-        .uploadAndSetPayoutQr(picked);
+    final ok =
+        await ref.read(riderProfileProvider.notifier).uploadAndSetPayoutQr(
+              picked,
+            );
     if (!context.mounted) return;
-    final profileState = ref.read(supplierProfileProvider);
+    await ref.read(riderPayoutsProvider.notifier).refresh();
+    if (!context.mounted) return;
+    final profile = ref.read(riderProfileProvider);
     final msg = ok
-        ? (profileState.successMessage ?? 'Payout QR updated')
-        : (profileState.errorMessage ?? 'Could not upload payout QR');
+        ? (profile.successMessage ?? 'Payout QR updated')
+        : (profile.errorMessage ?? 'Could not upload payout QR');
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profileState = ref.watch(supplierProfileProvider);
-    final qrUrl = profileState.profile?.payoutQrUrl;
+    final profile = ref.watch(riderProfileProvider);
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
@@ -157,15 +158,15 @@ class _PayoutQrCard extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Ops/super scans this QR to pay you 50% before production and the remaining 50% after the order is completed.',
+            'Ops/super scans this QR to pay your completed delivery fees.',
             style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
           ),
           const SizedBox(height: AppSpacing.md),
-          if (qrUrl != null && qrUrl.isNotEmpty) ...[
+          if (qrUrl != null && qrUrl!.isNotEmpty) ...[
             ClipRRect(
               borderRadius: AppRadius.borderMd,
               child: Image.network(
-                qrUrl,
+                qrUrl!,
                 height: 180,
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) => Text(
@@ -175,10 +176,9 @@ class _PayoutQrCard extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
             TextButton.icon(
               onPressed: () async {
-                final uri = Uri.tryParse(qrUrl);
+                final uri = Uri.tryParse(qrUrl!);
                 if (uri == null) return;
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               },
@@ -193,10 +193,9 @@ class _PayoutQrCard extends ConsumerWidget {
             ),
           const SizedBox(height: AppSpacing.sm),
           FilledButton.icon(
-            onPressed: profileState.isUploadingPayoutQr
-                ? null
-                : () => _pickQr(context, ref),
-            icon: profileState.isUploadingPayoutQr
+            onPressed:
+                profile.isUploadingPayoutQr ? null : () => _pickQr(context, ref),
+            icon: profile.isUploadingPayoutQr
                 ? const SizedBox(
                     width: 16,
                     height: 16,
@@ -212,9 +211,9 @@ class _PayoutQrCard extends ConsumerWidget {
 }
 
 class _PayoutCard extends StatelessWidget {
-  const _PayoutCard({required this.payout, required this.colors});
+  const _PayoutCard({required this.item, required this.colors});
 
-  final SupplierPayout payout;
+  final RiderPayoutItem item;
   final AppColorSet colors;
 
   @override
@@ -233,129 +232,65 @@ class _PayoutCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  payout.orderRef,
+                  item.orderRef,
                   style: AppTypography.bodyBold
                       .copyWith(color: colors.onBackground),
                 ),
               ),
               StatusBadge(
-                label: payout.displayStatus,
-                variant: _variantFor(payout.displayStatus),
+                label: item.isPaid ? 'Paid' : 'Unpaid',
+                variant: item.isPaid
+                    ? StatusBadgeVariant.success
+                    : StatusBadgeVariant.warning,
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            '₱${payout.grossPesos.toStringAsFixed(2)}',
+            formatCurrency(item.amountPesos),
             style: AppTypography.h3.copyWith(color: colors.onBackground),
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            'First 50%: ₱${payout.depositPesos.toStringAsFixed(2)}'
-            '${payout.authorizedAt != null ? ' · ${_fmt(payout.authorizedAt!)}' : ''}',
-            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
-          ),
-          Text(
-            'Final 50%: ₱${payout.completionPesos.toStringAsFixed(2)}'
-            '${payout.completionAuthorizedAt != null ? ' · ${_fmt(payout.completionAuthorizedAt!)}' : ' · unpaid'}',
-            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
-          ),
-          if (payout.adminReceiptUrl != null &&
-              payout.adminReceiptUrl!.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'First payment receipt',
-              style:
-                  AppTypography.caption.copyWith(color: colors.onBackground),
-            ),
+          if (item.paidAt != null) ...[
             const SizedBox(height: AppSpacing.xs),
-            GestureDetector(
-              onTap: () async {
-                final uri = Uri.tryParse(payout.adminReceiptUrl!);
-                if (uri == null) return;
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-              child: ClipRRect(
-                borderRadius: AppRadius.borderMd,
-                child: Image.network(
-                  payout.adminReceiptUrl!,
-                  height: 140,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Text(
-                    'Open receipt',
-                    style: AppTypography.caption.copyWith(color: colors.accent),
-                  ),
-                ),
-              ),
-            ),
-          ],
-          if (payout.completionReceiptUrl != null &&
-              payout.completionReceiptUrl!.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
             Text(
-              'Final payment receipt',
-              style:
-                  AppTypography.caption.copyWith(color: colors.onBackground),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            GestureDetector(
-              onTap: () async {
-                final uri = Uri.tryParse(payout.completionReceiptUrl!);
-                if (uri == null) return;
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-              child: ClipRRect(
-                borderRadius: AppRadius.borderMd,
-                child: Image.network(
-                  payout.completionReceiptUrl!,
-                  height: 140,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Text(
-                    'Open receipt',
-                    style: AppTypography.caption.copyWith(color: colors.accent),
-                  ),
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: AppSpacing.xs),
-          if (payout.holdReason != null) ...[
-            Text(
-              'Hold: ${payout.holdReason}',
-              style: AppTypography.caption.copyWith(color: colors.warning),
-            ),
-            if (payout.holdExpiresAt != null)
-              Text(
-                'Window ends ${_fmt(payout.holdExpiresAt!)}',
-                style: AppTypography.caption
-                    .copyWith(color: colors.onSurfaceDim),
-              ),
-          ] else
-            Text(
-              'No active hold',
+              'Paid ${_fmt(item.paidAt!)}',
               style:
                   AppTypography.caption.copyWith(color: colors.onSurfaceDim),
             ),
+          ],
+          if (item.adminReceiptUrl != null &&
+              item.adminReceiptUrl!.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Admin payment receipt',
+              style:
+                  AppTypography.caption.copyWith(color: colors.onBackground),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            GestureDetector(
+              onTap: () async {
+                final uri = Uri.tryParse(item.adminReceiptUrl!);
+                if (uri == null) return;
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              child: ClipRRect(
+                borderRadius: AppRadius.borderMd,
+                child: Image.network(
+                  item.adminReceiptUrl!,
+                  height: 140,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Text(
+                    'Open receipt',
+                    style: AppTypography.caption.copyWith(color: colors.accent),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
-  }
-
-  StatusBadgeVariant _variantFor(String state) {
-    switch (state) {
-      case 'Held':
-        return StatusBadgeVariant.warning;
-      case '50% paid':
-        return StatusBadgeVariant.info;
-      case 'Paid':
-        return StatusBadgeVariant.success;
-      case 'Cancelled':
-        return StatusBadgeVariant.error;
-      default:
-        return StatusBadgeVariant.info;
-    }
   }
 
   String _fmt(DateTime d) {

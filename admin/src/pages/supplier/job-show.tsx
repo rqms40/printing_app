@@ -273,6 +273,9 @@ export function SupplierJobShowPage() {
     !!detail?.assignment.quotedPriceMinor &&
     !detail.assignment.customerConfirmedQuoteAt &&
     !canAccept;
+  const hasCustomerPaid =
+    detail?.order.paymentAuthorizationStatus === 'authorized' ||
+    !!detail?.assignment.customerConfirmedQuoteAt;
 
   const pipeline = useMemo(() => {
     const status = detail?.order.orderStatus ?? '';
@@ -342,6 +345,7 @@ export function SupplierJobShowPage() {
             <strong>{promisedDate.format('YYYY-MM-DD HH:mm')}</strong>
           </p>
           <p>The customer must place the order again before you can accept.</p>
+          <p><strong>Are you sure you want to proceed?</strong></p>
         </div>
       ),
       okText: 'Send final price',
@@ -842,7 +846,7 @@ export function SupplierJobShowPage() {
                         block
                         size="large"
                         loading={submitting}
-                        disabled={acceptDeadlinePassed}
+                        disabled={acceptDeadlinePassed || awaitingCustomerConfirm || hasCustomerPaid}
                         onClick={handleQuote}
                       >
                         Send final price
@@ -928,6 +932,7 @@ export function SupplierJobShowPage() {
                   <Space direction="vertical" style={{ width: '100%' }}>
                     {MILESTONES.map((m) => {
                       const reached = reachedMilestoneKeys.has(m.value);
+                      const isNext = availableMilestones[0]?.value === m.value;
                       return (
                         <div
                           key={m.value}
@@ -939,7 +944,7 @@ export function SupplierJobShowPage() {
                             background: reached ? '#121212' : '#1A1A1A',
                           }}
                         >
-                          <Radio value={m.value} disabled={reached || submitting}>
+                          <Radio value={m.value} disabled={reached || !isNext || submitting}>
                             <span>
                               <Text
                                 strong
